@@ -1,0 +1,35 @@
+{
+  "Export": [
+    {
+      "ProjectCode": "91B-2023",
+      "Title": "Water Main Upgrades",
+      "Description": "Baseline description",
+      "BidStatus": "Open",
+      "BidType": "Construction",
+      "BidURL": "https://example.gov/bids/91b",
+      "PublishedDate": "2023-05-01",
+      "DueDate": "2023-06-01",
+      "AwardDate": "2023-07-01",
+      "BidDocuments": [
+        { "Title": "Spec.pdf", "URL": "https://docs/spec.pdf", "Hash": "HASH-A" },
+        { "Title": "Form.pdf", "URL": "https://docs/form.pdf", "Hash": "HASH-B" }
+      ],
+      "BidDocumentHashes": ["HASH-A", "HASH-B"]
+    },
+    {
+      "ProjectCode": "92C-2023",
+      "Title": "Bridge Repair",
+      "Description": "Bridge baseline",
+      "BidStatus": "Open",
+      "BidType": "Services",
+      "BidURL": "https://example.gov/bids/92c",
+      "PublishedDate": "2023-05-01",
+      "DueDate": "2023-06-15",
+      "AwardDate": "2023-07-15",
+      "BidDocuments": [
+        { "Title": "BridgeSpec.pdf", "URL": "https://docs/bridge-spec.pdf", "Hash": "HASH-C" }
+      ],
+      "BidDocumentHashes": ["HASH-C"]
+    }
+  ]
+}
