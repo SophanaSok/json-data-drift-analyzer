@@ -1,0 +1,37 @@
+{
+  "Export": [
+    {
+      "ProjectCode": "91B-2023",
+      "Title": "   ",
+      "Description": "Baseline description",
+      "BidStatus": "",
+      "BidType": "",
+      "BidURL": "https://example.gov/bids/91b",
+      "PublishedDate": "",
+      "DueDate": "",
+      "AwardDate": "",
+      "BidDocuments": [
+        { "Title": "Spec Updated.pdf", "URL": "https://docs/spec-updated.pdf", "Hash": "HASH-A" },
+        { "Title": "Form.pdf", "URL": "https://docs/form.pdf", "Hash": "HASH-B" },
+        { "Title": "NoHash.pdf", "URL": "https://docs/nohash.pdf", "Hash": "" },
+        { "Title": "Duplicate.pdf", "URL": "https://docs/dup.pdf", "Hash": "HASH-B" }
+      ],
+      "BidDocumentHashes": ["HASH-A", "HASH-X"]
+    },
+    {
+      "ProjectCode": "NEW-100",
+      "Title": "Added project",
+      "Description": "New",
+      "BidStatus": "Open",
+      "BidType": "Construction",
+      "BidURL": "https://example.gov/bids/new100",
+      "PublishedDate": "2023-08-01",
+      "DueDate": "2023-09-01",
+      "AwardDate": "",
+      "BidDocuments": [
+        { "Title": "NewDoc.pdf", "URL": "https://docs/newdoc.pdf", "Hash": "HASH-N" }
+      ],
+      "BidDocumentHashes": ["HASH-N"]
+    }
+  ]
+}
