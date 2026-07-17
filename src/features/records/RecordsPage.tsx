@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import MiniSearch from "minisearch";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { RecordDetail } from "../../components/records/RecordDetail";
 import { intersectSets } from "../../lib/sets";
 import { useUiStore } from "../../stores/ui-store";
 
@@ -9,6 +10,8 @@ const SEARCH_DEBOUNCE_MS = 120;
 
 export function RecordsPage() {
   const analysis = useUiStore((state) => state.analysis);
+  const selectedRecordId = useUiStore((state) => state.selectedRecordId);
+  const setSelectedRecordId = useUiStore((state) => state.setSelectedRecordId);
   const [params, setParams] = useSearchParams();
   const [searchDraft, setSearchDraft] = useState(params.get("q") ?? "");
   const [searchText, setSearchText] = useState(params.get("q") ?? "");
@@ -59,6 +62,24 @@ export function RecordsPage() {
     return analysis.sorts.byRecordKey.filter((id) => ids.has(id));
   }, [analysis, status, field, kind, severity, documentState, searchText]);
 
+  const recordKeyFromUrl = params.get("record");
+
+  useEffect(() => {
+    if (!analysis) return;
+    if (!recordKeyFromUrl) return;
+    const match = analysis.allRecordIds.find((id) => analysis.recordsById[id]?.recordKey === recordKeyFromUrl);
+    if (match && filteredIds.includes(match)) {
+      setSelectedRecordId(match);
+    }
+  }, [analysis, recordKeyFromUrl, filteredIds, setSelectedRecordId]);
+
+  useEffect(() => {
+    if (!selectedRecordId) return;
+    if (!filteredIds.includes(selectedRecordId)) {
+      setSelectedRecordId(null);
+    }
+  }, [filteredIds, selectedRecordId, setSelectedRecordId]);
+
   const rowVirtualizer = useVirtualizer({
     count: filteredIds.length,
     getScrollElement: () => parentRef.current,
@@ -75,6 +96,25 @@ export function RecordsPage() {
       next.set(key, value);
     }
     setParams(next);
+  };
+
+  const selectRecord = (id: string) => {
+    const nextSelected = selectedRecordId === id ? null : id;
+    setSelectedRecordId(nextSelected);
+    const next = new URLSearchParams(params);
+    if (nextSelected) {
+      next.set("record", analysis.recordsById[nextSelected].recordKey);
+    } else {
+      next.delete("record");
+    }
+    setParams(next, { replace: true });
+  };
+
+  const closeDetail = () => {
+    setSelectedRecordId(null);
+    const next = new URLSearchParams(params);
+    next.delete("record");
+    setParams(next, { replace: true });
   };
 
   return (
@@ -105,8 +145,16 @@ export function RecordsPage() {
               const id = filteredIds[virtualItem.index];
               const record = analysis.recordsById[id];
               const docSummary = record.documentDiffs.BidDocuments;
+              const isSelected = selectedRecordId === id;
               return (
-                <tr key={id} data-testid={`record-${id}`} style={{ position: "absolute", transform: `translateY(${virtualItem.start}px)`, width: "100%" }}>
+                <tr
+                  key={id}
+                  data-testid={`record-${id}`}
+                  data-selected={isSelected ? "true" : "false"}
+                  className={`cursor-pointer border-b border-slate-100 hover:bg-sky-50 ${isSelected ? "bg-sky-100 ring-1 ring-inset ring-sky-300" : ""}`}
+                  style={{ position: "absolute", transform: `translateY(${virtualItem.start}px)`, width: "100%" }}
+                  onClick={() => selectRecord(id)}
+                >
                   <td className="p-2">{record.status}</td>
                   <td className="p-2">{record.recordKey}</td>
                   <td className="p-2">{String((record.latest ?? record.baseline)?.Title ?? "")}</td>
@@ -119,49 +167,11 @@ export function RecordsPage() {
           </tbody>
         </table>
       </div>
-      {filteredIds[0] ? <RecordDetail recordId={filteredIds[0]} /> : null}
+      {selectedRecordId && filteredIds.includes(selectedRecordId) ? (
+        <RecordDetail recordId={selectedRecordId} onClose={closeDetail} />
+      ) : (
+        <p className="text-sm text-slate-500">Click a record to view expanded details with baseline vs latest highlighting.</p>
+      )}
     </div>
-  );
-}
-
-function RecordDetail({ recordId }: { recordId: string }) {
-  const analysis = useUiStore((state) => state.analysis);
-  const [showDocs, setShowDocs] = useState(false);
-
-  if (!analysis) return null;
-  const record = analysis.recordsById[recordId];
-  const bidDocs = record.documentDiffs.BidDocuments;
-
-  return (
-    <section className="rounded border bg-white p-4" data-testid="record-details">
-      <h3 className="font-medium">Expanded record details: {record.recordKey}</h3>
-      <div className="mt-3 grid gap-3 text-sm md:grid-cols-2">
-        <div><h4 className="font-medium">Baseline</h4><pre className="mt-2 max-h-56 overflow-auto rounded bg-slate-50 p-2">{JSON.stringify(record.baseline ?? {}, null, 2)}</pre></div>
-        <div><h4 className="font-medium">Latest</h4><pre className="mt-2 max-h-56 overflow-auto rounded bg-slate-50 p-2">{JSON.stringify(record.latest ?? {}, null, 2)}</pre></div>
-      </div>
-      {bidDocs ? (
-        <div className="mt-4 rounded border border-slate-200 p-3" data-testid="document-summary">
-          <p>Bid documents: {bidDocs.baselineCount} → {bidDocs.latestCount}</p>
-          <p>{bidDocs.removedCount} removed · {bidDocs.addedCount} added · {bidDocs.modifiedCount} modified · {bidDocs.unchangedCount} unchanged</p>
-          <button className="mt-2 rounded border px-3 py-1 text-sm" onClick={() => setShowDocs((state) => !state)}>View document comparison</button>
-          {showDocs ? (
-            <table className="mt-3 w-full text-left text-sm" data-testid="document-comparison">
-              <thead><tr><th>Status</th><th>Title</th><th>URL</th><th>Hash</th><th>Field changes</th></tr></thead>
-              <tbody>
-                {bidDocs.changes.map((change) => (
-                  <tr key={`${change.kind}-${change.documentId}`}>
-                    <td>{change.kind}</td>
-                    <td>{change.latest?.title ?? change.baseline?.title ?? ""}</td>
-                    <td>{change.latest?.url ?? change.baseline?.url ?? ""}</td>
-                    <td>{change.documentId}</td>
-                    <td>{change.changedFields.join(", ")}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : null}
-        </div>
-      ) : null}
-    </section>
   );
 }

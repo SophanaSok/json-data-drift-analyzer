@@ -17,7 +17,10 @@ test("smoke analysis flow", async ({ page }) => {
   await page.getByRole("combobox").nth(0).selectOption("Title");
   await page.getByRole("combobox").nth(1).selectOption("emptied");
 
+  await page.getByTestId("record-91B-2023").click();
   await expect(page.getByTestId("record-details")).toBeVisible();
+  await expect(page.getByTestId("field-changes")).toBeVisible();
+  await expect(page.getByTestId("field-change-Title")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Baseline", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Latest", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "View document comparison" }).click();
