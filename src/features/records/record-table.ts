@@ -33,6 +33,27 @@ export function formatDocumentSummary(record: DiffRecord): string {
   return `${docSummary.addedCount} added · ${docSummary.removedCount} removed · ${docSummary.modifiedCount} modified`;
 }
 
+export function getRecordColumnValue(record: DiffRecord, column: RecordSortColumn): string {
+  switch (column) {
+    case "status":
+      return record.status;
+    case "recordKey":
+      return record.recordKey;
+    case "title":
+      return getRecordFieldValue(record, "Title");
+    case "publishedDate":
+      return getRecordFieldValue(record, "PublishedDate") || "-";
+    case "dueDate":
+      return getRecordFieldValue(record, "DueDate") || "-";
+    case "changedFields":
+      return String(record.changedFieldCount);
+    case "documentChanges":
+      return formatDocumentSummary(record);
+    case "severity":
+      return record.severity;
+  }
+}
+
 function getDocumentChangeCount(record: DiffRecord): number {
   const docSummary = record.documentDiffs.BidDocuments;
   if (!docSummary) return -1;

@@ -1,19 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import MiniSearch from "minisearch";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import { RecordDetail } from "../../components/records/RecordDetail";
 import { intersectSets } from "../../lib/sets";
 import { useUiStore } from "../../stores/ui-store";
-import {
-  formatDocumentSummary,
-  getRecordFieldValue,
-  sortRecordIds,
-  type RecordSortColumn,
-  type SortDirection
-} from "./record-table";
-import { getTotalColumnWidth, RECORD_TABLE_COLUMNS } from "./record-column-widths";
-import { useRecordColumnResize } from "./use-record-column-resize";
+import { sortRecordIds, type RecordSortColumn, type SortDirection } from "./record-table";
+import { RecordsTable } from "./RecordsTable";
 
 const SEARCH_DEBOUNCE_MS = 120;
 
@@ -21,8 +13,6 @@ type SortState = {
   column: RecordSortColumn;
   direction: SortDirection;
 };
-
-const RECORD_CELL_CLASS = "break-words whitespace-normal p-2 align-top";
 
 export function RecordsPage() {
   const analysis = useUiStore((state) => state.analysis);
@@ -49,14 +39,6 @@ export function RecordsPage() {
   const kind = (params.get("kind") ?? "all") as "all" | "added" | "removed" | "modified" | "emptied" | "restored";
   const severity = (params.get("severity") ?? "all") as "all" | "pass" | "info" | "warning" | "high" | "critical";
   const documentState = (params.get("doc") ?? "all") as "all" | "added" | "removed" | "modified" | "incomplete" | "hashMismatch" | "decreasedCount";
-
-  const parentRef = useRef<HTMLDivElement | null>(null);
-  const remeasureRowsRef = useRef<(() => void) | null>(null);
-  const handleColumnWidthsChange = useCallback(() => {
-    remeasureRowsRef.current?.();
-  }, []);
-  const { columnWidths, beginResize } = useRecordColumnResize(handleColumnWidthsChange);
-  const tableWidth = useMemo(() => getTotalColumnWidth(columnWidths), [columnWidths]);
 
   const filteredIds = useMemo(() => {
     if (!analysis) return [];
@@ -90,6 +72,11 @@ export function RecordsPage() {
     return sortRecordIds(filteredIds, analysis.recordsById, sort.column, sort.direction);
   }, [analysis, filteredIds, sort.column, sort.direction]);
 
+  const sortedRecords = useMemo(() => {
+    if (!analysis) return [];
+    return sortedIds.map((id) => analysis.recordsById[id]).filter(Boolean);
+  }, [analysis, sortedIds]);
+
   const recordKeyFromUrl = params.get("record");
 
   useEffect(() => {
@@ -107,21 +94,6 @@ export function RecordsPage() {
       setSelectedRecordId(null);
     }
   }, [sortedIds, selectedRecordId, setSelectedRecordId]);
-
-  const rowVirtualizer = useVirtualizer({
-    count: sortedIds.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 44,
-    measureElement: (element) => element.getBoundingClientRect().height
-  });
-
-  useEffect(() => {
-    remeasureRowsRef.current = () => rowVirtualizer.measure();
-  }, [rowVirtualizer]);
-
-  useEffect(() => {
-    rowVirtualizer.measure();
-  }, [columnWidths, rowVirtualizer]);
 
   if (!analysis) return <p className="p-6">Run an analysis first.</p>;
 
@@ -162,11 +134,6 @@ export function RecordsPage() {
     );
   };
 
-  const sortIndicator = (column: RecordSortColumn) => {
-    if (sort.column !== column) return "↕";
-    return sort.direction === "asc" ? "↑" : "↓";
-  };
-
   return (
     <div className="space-y-4 p-6">
       <h2 className="text-xl font-semibold">Records</h2>
@@ -187,82 +154,13 @@ export function RecordsPage() {
         </select>
       </div>
       <p className="text-sm text-slate-600">Showing {filteredIds.length} of {analysis.allRecordIds.length} records</p>
-      <div id="records-scroll" ref={parentRef} className="max-h-[520px] overflow-auto rounded border bg-white">
-        <table className="table-fixed text-left text-sm" style={{ width: tableWidth, minWidth: "100%" }}>
-          <colgroup>
-            {RECORD_TABLE_COLUMNS.map((column) => (
-              <col key={column.id} style={{ width: `${columnWidths[column.id]}px` }} />
-            ))}
-          </colgroup>
-          <thead className="sticky top-0 z-10">
-            <tr className="border-b border-slate-200 bg-slate-100">
-              {RECORD_TABLE_COLUMNS.map((column) => (
-                <th key={column.id} className="relative bg-slate-100 p-2 align-top">
-                  <button
-                    type="button"
-                    className="inline-flex max-w-full items-center gap-1 truncate pr-2 font-medium hover:text-sky-700"
-                    aria-sort={sort.column === column.id ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
-                    data-testid={`sort-${column.id}`}
-                    onClick={() => toggleSort(column.id)}
-                  >
-                    <span className="truncate">{column.label}</span>
-                    <span className="shrink-0 text-xs text-slate-500" aria-hidden="true">{sortIndicator(column.id)}</span>
-                  </button>
-                  <div
-                    role="separator"
-                    aria-orientation="vertical"
-                    aria-label={`Resize ${column.label} column`}
-                    data-testid={`resize-${column.id}`}
-                    className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize touch-none select-none hover:bg-sky-300/60 active:bg-sky-400/70"
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      beginResize(column.id, event.clientX);
-                    }}
-                  />
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative" }}>
-            {rowVirtualizer.getVirtualItems().map((virtualItem) => {
-              const id = sortedIds[virtualItem.index];
-              const record = analysis.recordsById[id];
-              const docSummary = formatDocumentSummary(record);
-              const isSelected = selectedRecordId === id;
-              return (
-                <tr
-                  key={id}
-                  ref={rowVirtualizer.measureElement}
-                  data-index={virtualItem.index}
-                  data-testid={`record-${id}`}
-                  data-selected={isSelected ? "true" : "false"}
-                  className={`cursor-pointer border-b border-slate-100 hover:bg-sky-50 ${isSelected ? "bg-sky-100 ring-1 ring-inset ring-sky-300" : ""}`}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    transform: `translateY(${virtualItem.start}px)`,
-                    width: `${tableWidth}px`,
-                    display: "table",
-                    tableLayout: "fixed"
-                  }}
-                  onClick={() => selectRecord(id)}
-                >
-                  <td className={RECORD_CELL_CLASS} title={record.status}>{record.status}</td>
-                  <td className={RECORD_CELL_CLASS} title={record.recordKey}>{record.recordKey}</td>
-                  <td className={RECORD_CELL_CLASS} title={getRecordFieldValue(record, "Title")}>{getRecordFieldValue(record, "Title")}</td>
-                  <td className={RECORD_CELL_CLASS} title={getRecordFieldValue(record, "PublishedDate") || "-"}>{getRecordFieldValue(record, "PublishedDate") || "-"}</td>
-                  <td className={RECORD_CELL_CLASS} title={getRecordFieldValue(record, "DueDate") || "-"}>{getRecordFieldValue(record, "DueDate") || "-"}</td>
-                  <td className={RECORD_CELL_CLASS} title={String(record.changedFieldCount)}>{record.changedFieldCount}</td>
-                  <td className={RECORD_CELL_CLASS} title={docSummary}>{docSummary}</td>
-                  <td className={RECORD_CELL_CLASS} title={record.severity}>{record.severity}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <RecordsTable
+        records={sortedRecords}
+        selectedRecordId={selectedRecordId}
+        sort={sort}
+        onSort={toggleSort}
+        onSelectRecord={selectRecord}
+      />
       {selectedRecordId && sortedIds.includes(selectedRecordId) ? (
         <RecordDetail recordId={selectedRecordId} onClose={closeDetail} />
       ) : (

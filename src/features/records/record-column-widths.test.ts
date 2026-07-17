@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   clampColumnWidth,
   DEFAULT_RECORD_COLUMN_WIDTHS,
+  formatGridTemplateColumns,
   getTotalColumnWidth,
   loadRecordColumnWidths,
   MIN_RECORD_COLUMN_WIDTH,
@@ -24,6 +25,12 @@ describe("record column widths", () => {
 
   it("sums column widths for table layout", () => {
     expect(getTotalColumnWidth(DEFAULT_RECORD_COLUMN_WIDTHS)).toBe(1020);
+  });
+
+  it("formats grid template columns from widths", () => {
+    expect(formatGridTemplateColumns(DEFAULT_RECORD_COLUMN_WIDTHS)).toBe(
+      "80px 120px 240px 110px 110px 90px 180px 90px"
+    );
   });
 
   it("loads defaults when storage is empty", () => {
