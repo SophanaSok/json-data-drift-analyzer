@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import MiniSearch from "minisearch";
+import { loadSearchIndex, searchRecordIds } from "../../engine/search";
 import { RecordDetail } from "../../components/records/RecordDetail";
 import { intersectSets } from "../../lib/sets";
 import { useUiStore } from "../../stores/ui-store";
@@ -40,6 +40,11 @@ export function RecordsPage() {
   const severity = (params.get("severity") ?? "all") as "all" | "pass" | "info" | "warning" | "high" | "critical";
   const documentState = (params.get("doc") ?? "all") as "all" | "added" | "removed" | "modified" | "incomplete" | "hashMismatch" | "decreasedCount";
 
+  const searchIndex = useMemo(() => {
+    if (!analysis?.searchIndexJson) return null;
+    return loadSearchIndex(String(analysis.searchIndexJson));
+  }, [analysis?.searchIndexJson]);
+
   const filteredIds = useMemo(() => {
     if (!analysis) return [];
     const sets = [
@@ -55,22 +60,18 @@ export function RecordsPage() {
       ids = new Set(analysis.allRecordIds);
     }
 
-    if (searchText.trim()) {
-      const search = MiniSearch.loadJSON(String(analysis.searchIndexJson), {
-        fields: ["recordKey", "title", "bidStatus", "bidType", "bidUrl", "changedFields", "qualityText", "documentText"],
-        storeFields: ["id"]
-      });
-      const matches = new Set(search.search(searchText).map((item) => String(item.id)));
-      ids = intersectSets([ids, matches]);
+    if (searchText.trim() && searchIndex) {
+      return searchRecordIds(searchIndex, searchText, analysis.recordsById, ids);
     }
 
     return analysis.sorts.byRecordKey.filter((id) => ids.has(id));
-  }, [analysis, status, field, kind, severity, documentState, searchText]);
+  }, [analysis, searchIndex, status, field, kind, severity, documentState, searchText]);
 
   const sortedIds = useMemo(() => {
     if (!analysis) return filteredIds;
+    if (searchText.trim()) return filteredIds;
     return sortRecordIds(filteredIds, analysis.recordsById, sort.column, sort.direction);
-  }, [analysis, filteredIds, sort.column, sort.direction]);
+  }, [analysis, filteredIds, searchText, sort.column, sort.direction]);
 
   const sortedRecords = useMemo(() => {
     if (!analysis) return [];
