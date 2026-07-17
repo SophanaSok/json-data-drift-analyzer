@@ -5,8 +5,31 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { RecordDetail } from "../../components/records/RecordDetail";
 import { intersectSets } from "../../lib/sets";
 import { useUiStore } from "../../stores/ui-store";
+import {
+  formatDocumentSummary,
+  getRecordFieldValue,
+  sortRecordIds,
+  type RecordSortColumn,
+  type SortDirection
+} from "./record-table";
 
 const SEARCH_DEBOUNCE_MS = 120;
+
+type SortState = {
+  column: RecordSortColumn;
+  direction: SortDirection;
+};
+
+const SORT_COLUMNS: Array<{ id: RecordSortColumn; label: string }> = [
+  { id: "status", label: "Status" },
+  { id: "recordKey", label: "Record Key" },
+  { id: "title", label: "Title" },
+  { id: "publishedDate", label: "Published Date" },
+  { id: "dueDate", label: "Due Date" },
+  { id: "changedFields", label: "Changed fields" },
+  { id: "documentChanges", label: "Document changes" },
+  { id: "severity", label: "Severity" }
+];
 
 export function RecordsPage() {
   const analysis = useUiStore((state) => state.analysis);
@@ -15,6 +38,7 @@ export function RecordsPage() {
   const [params, setParams] = useSearchParams();
   const [searchDraft, setSearchDraft] = useState(params.get("q") ?? "");
   const [searchText, setSearchText] = useState(params.get("q") ?? "");
+  const [sort, setSort] = useState<SortState>({ column: "recordKey", direction: "asc" });
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -62,6 +86,11 @@ export function RecordsPage() {
     return analysis.sorts.byRecordKey.filter((id) => ids.has(id));
   }, [analysis, status, field, kind, severity, documentState, searchText]);
 
+  const sortedIds = useMemo(() => {
+    if (!analysis) return filteredIds;
+    return sortRecordIds(filteredIds, analysis.recordsById, sort.column, sort.direction);
+  }, [analysis, filteredIds, sort.column, sort.direction]);
+
   const recordKeyFromUrl = params.get("record");
 
   useEffect(() => {
@@ -75,13 +104,13 @@ export function RecordsPage() {
 
   useEffect(() => {
     if (!selectedRecordId) return;
-    if (!filteredIds.includes(selectedRecordId)) {
+    if (!sortedIds.includes(selectedRecordId)) {
       setSelectedRecordId(null);
     }
-  }, [filteredIds, selectedRecordId, setSelectedRecordId]);
+  }, [sortedIds, selectedRecordId, setSelectedRecordId]);
 
   const rowVirtualizer = useVirtualizer({
-    count: filteredIds.length,
+    count: sortedIds.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 44
   });
@@ -117,6 +146,19 @@ export function RecordsPage() {
     setParams(next, { replace: true });
   };
 
+  const toggleSort = (column: RecordSortColumn) => {
+    setSort((current) =>
+      current.column === column
+        ? { column, direction: current.direction === "asc" ? "desc" : "asc" }
+        : { column, direction: "asc" }
+    );
+  };
+
+  const sortIndicator = (column: RecordSortColumn) => {
+    if (sort.column !== column) return "↕";
+    return sort.direction === "asc" ? "↑" : "↓";
+  };
+
   return (
     <div className="space-y-4 p-6">
       <h2 className="text-xl font-semibold">Records</h2>
@@ -139,12 +181,29 @@ export function RecordsPage() {
       <p className="text-sm text-slate-600">Showing {filteredIds.length} of {analysis.allRecordIds.length} records</p>
       <div id="records-scroll" ref={parentRef} className="max-h-[520px] overflow-auto rounded border bg-white">
         <table className="w-full text-left text-sm">
-          <thead className="sticky top-0 bg-slate-100"><tr><th className="p-2">Status</th><th className="p-2">Record Key</th><th className="p-2">Title</th><th className="p-2">Changed fields</th><th className="p-2">Document changes</th><th className="p-2">Severity</th></tr></thead>
+          <thead className="sticky top-0 bg-slate-100">
+            <tr>
+              {SORT_COLUMNS.map((column) => (
+                <th key={column.id} className="p-2">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 font-medium hover:text-sky-700"
+                    aria-sort={sort.column === column.id ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
+                    data-testid={`sort-${column.id}`}
+                    onClick={() => toggleSort(column.id)}
+                  >
+                    <span>{column.label}</span>
+                    <span className="text-xs text-slate-500" aria-hidden="true">{sortIndicator(column.id)}</span>
+                  </button>
+                </th>
+              ))}
+            </tr>
+          </thead>
           <tbody style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative" }}>
             {rowVirtualizer.getVirtualItems().map((virtualItem) => {
-              const id = filteredIds[virtualItem.index];
+              const id = sortedIds[virtualItem.index];
               const record = analysis.recordsById[id];
-              const docSummary = record.documentDiffs.BidDocuments;
+              const docSummary = formatDocumentSummary(record);
               const isSelected = selectedRecordId === id;
               return (
                 <tr
@@ -157,9 +216,11 @@ export function RecordsPage() {
                 >
                   <td className="p-2">{record.status}</td>
                   <td className="p-2">{record.recordKey}</td>
-                  <td className="p-2">{String((record.latest ?? record.baseline)?.Title ?? "")}</td>
+                  <td className="p-2">{getRecordFieldValue(record, "Title")}</td>
+                  <td className="p-2">{getRecordFieldValue(record, "PublishedDate") || "-"}</td>
+                  <td className="p-2">{getRecordFieldValue(record, "DueDate") || "-"}</td>
                   <td className="p-2">{record.changedFieldCount}</td>
-                  <td className="p-2">{docSummary ? `${docSummary.addedCount} added · ${docSummary.removedCount} removed · ${docSummary.modifiedCount} modified` : "-"}</td>
+                  <td className="p-2">{docSummary}</td>
                   <td className="p-2">{record.severity}</td>
                 </tr>
               );
@@ -167,7 +228,7 @@ export function RecordsPage() {
           </tbody>
         </table>
       </div>
-      {selectedRecordId && filteredIds.includes(selectedRecordId) ? (
+      {selectedRecordId && sortedIds.includes(selectedRecordId) ? (
         <RecordDetail recordId={selectedRecordId} onClose={closeDetail} />
       ) : (
         <p className="text-sm text-slate-500">Click a record to view expanded details with baseline vs latest highlighting.</p>
