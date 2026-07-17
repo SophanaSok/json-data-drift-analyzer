@@ -33,6 +33,10 @@ export function getTotalColumnWidth(widths: Record<RecordSortColumn, number>): n
   return RECORD_TABLE_COLUMNS.reduce((total, column) => total + widths[column.id], 0);
 }
 
+export function formatGridTemplateColumns(widths: Record<RecordSortColumn, number>): string {
+  return RECORD_TABLE_COLUMNS.map((column) => `${widths[column.id]}px`).join(" ");
+}
+
 export function loadRecordColumnWidths(): Record<RecordSortColumn, number> {
   if (typeof window === "undefined") {
     return { ...DEFAULT_RECORD_COLUMN_WIDTHS };
