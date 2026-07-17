@@ -61,6 +61,39 @@ describe("analysis engine", () => {
     expect(resultA.analysisKey).toBe(resultB.analysisKey);
   });
 
+  it("stores export date metadata and ordering issues", () => {
+    const result = getAnalysis();
+    expect(result.metadata.baselineExportDates.Refreshed).toBe("2024-01-10T08:00:00Z");
+    expect(result.metadata.latestExportDates.Refreshed).toBe("2024-02-15T08:00:00Z");
+    expect(result.metadata.dateOrderingIssues).toEqual([]);
+  });
+
+  it("records date ordering issues when baseline export dates are newer", () => {
+    const reversedBaseline = {
+      Refreshed: "2024-03-01",
+      Created: "2024-02-01",
+      Export: baseline.Export
+    };
+    const result = runAnalysis({
+      baselineData: reversedBaseline,
+      latestData: latest,
+      baselineFileName: "baseline.json",
+      latestFileName: "latest.json",
+      analysisKey: "reversed-key",
+      config: {
+        collectionPath: "Export",
+        identityFields: ["ProjectCode"],
+        ignoredFields: [],
+        profileId: "default-government-bids"
+      }
+    });
+
+    expect(result.metadata.dateOrderingIssues).toEqual([
+      { field: "Refreshed", baseline: "2024-03-01", latest: "2024-02-15T08:00:00Z" },
+      { field: "Created", baseline: "2024-02-01", latest: "2024-01-20T08:00:00Z" }
+    ]);
+  });
+
   it("treats document reordering as unchanged", () => {
     const reorderBaseline = { Export: [{ ProjectCode: "R1", BidDocuments: [{ Title: "A", URL: "u1", Hash: "h1" }, { Title: "B", URL: "u2", Hash: "h2" }], BidDocumentHashes: ["h1", "h2"] }] };
     const reorderLatest = { Export: [{ ProjectCode: "R1", BidDocuments: [{ Title: "B", URL: "u2", Hash: "h2" }, { Title: "A", URL: "u1", Hash: "h1" }], BidDocumentHashes: ["h1", "h2"] }] };

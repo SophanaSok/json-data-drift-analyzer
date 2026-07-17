@@ -1,8 +1,10 @@
 import { Link, useSearchParams } from "react-router-dom";
+import { ExportDateBanner } from "./ExportDateBanner";
 import { DataHealthPage } from "../../features/data-health/DataHealthPage";
 import { FieldChangesPage } from "../../features/field-changes/FieldChangesPage";
 import { OverviewPage } from "../../features/overview/OverviewPage";
 import { RecordsPage } from "../../features/records/RecordsPage";
+import { useUiStore } from "../../stores/ui-store";
 
 const tabs = [
   { id: "overview", label: "Overview" },
@@ -14,9 +16,11 @@ const tabs = [
 export function ResultsShell() {
   const [params] = useSearchParams();
   const tab = params.get("tab") ?? "overview";
+  const analysis = useUiStore((state) => state.analysis);
 
   return (
     <div className="mx-auto max-w-7xl">
+      {analysis ? <ExportDateBanner metadata={analysis.metadata} /> : null}
       <nav className="flex gap-2 border-b bg-white px-6 py-3 text-sm">
         {tabs.map((item) => (
           <Link key={item.id} className={`rounded px-3 py-1 ${tab === item.id ? "bg-sky-100" : "hover:bg-slate-100"}`} to={`/results?${new URLSearchParams({ ...Object.fromEntries(params), tab: item.id }).toString()}`}>
