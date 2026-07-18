@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useToastStore, type Toast, type ToastVariant } from "../../stores/toast-store";
 
 const TOAST_DURATION_MS = 6000;
@@ -42,11 +43,14 @@ export function Toaster() {
 
   if (toasts.length === 0) return null;
 
-  return (
-    <div className="fixed bottom-4 right-4 z-50 flex w-full max-w-sm flex-col gap-2" aria-live="polite">
+  return createPortal(
+    <div className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-full max-w-sm flex-col gap-2" aria-live="polite">
       {toasts.map((toast) => (
-        <ToastItem key={toast.id} toast={toast} />
+        <div key={toast.id} className="pointer-events-auto">
+          <ToastItem toast={toast} />
+        </div>
       ))}
-    </div>
+    </div>,
+    document.body
   );
 }

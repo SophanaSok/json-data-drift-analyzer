@@ -1,4 +1,4 @@
-import type { DateOrderingIssue, ExportDateField, ExportDates } from "./types";
+import type { AnalysisMetadata, DateOrderingIssue, ExportDateField, ExportDates } from "./types";
 
 export type { DateOrderingIssue, ExportDateField, ExportDates };
 
@@ -57,6 +57,14 @@ export function formatExportDates(dates: ExportDates): string {
 
 export function hasDateOrderingIssue(issues: DateOrderingIssue[]): boolean {
   return issues.length > 0;
+}
+
+export function getAnalysisDateOrderingIssues(metadata: AnalysisMetadata): DateOrderingIssue[] {
+  if (metadata.dateOrderingIssues) {
+    return metadata.dateOrderingIssues;
+  }
+
+  return findDateOrderingIssues(metadata.baselineExportDates ?? {}, metadata.latestExportDates ?? {});
 }
 
 export const BASELINE_DATE_NEWER_TOAST_MESSAGE =

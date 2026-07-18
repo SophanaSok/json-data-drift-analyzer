@@ -3,6 +3,7 @@ import {
   extractExportDates,
   findDateOrderingIssues,
   formatExportDates,
+  getAnalysisDateOrderingIssues,
   hasDateOrderingIssue
 } from "./export-metadata";
 
@@ -65,5 +66,38 @@ describe("export metadata", () => {
     expect(hasDateOrderingIssue([{ field: "Created", baseline: "2024-02-01", latest: "2024-01-01" }])).toBe(true);
     expect(hasDateOrderingIssue([{ field: "Refreshed", baseline: "2024-03-01", latest: "2024-02-01" }])).toBe(true);
     expect(hasDateOrderingIssue([])).toBe(false);
+  });
+
+  it("reads date ordering issues from analysis metadata", () => {
+    const issues = [{ field: "Refreshed" as const, baseline: "2024-03-01", latest: "2024-02-01" }];
+    expect(
+      getAnalysisDateOrderingIssues({
+        baselineFileName: "baseline.json",
+        latestFileName: "latest.json",
+        collectionPath: "Export",
+        identityFields: ["ProjectCode"],
+        ignoredFields: [],
+        generatedAt: "2024-01-01T00:00:00Z",
+        baselineExportDates: { Refreshed: "2024-03-01" },
+        latestExportDates: { Refreshed: "2024-02-01" },
+        dateOrderingIssues: issues
+      })
+    ).toEqual(issues);
+  });
+
+  it("derives date ordering issues from export dates when metadata issues are missing", () => {
+    expect(
+      getAnalysisDateOrderingIssues({
+        baselineFileName: "baseline.json",
+        latestFileName: "latest.json",
+        collectionPath: "Export",
+        identityFields: ["ProjectCode"],
+        ignoredFields: [],
+        generatedAt: "2024-01-01T00:00:00Z",
+        baselineExportDates: { Created: "2024-03-01" },
+        latestExportDates: { Created: "2024-01-01" },
+        dateOrderingIssues: undefined as unknown as []
+      })
+    ).toEqual([{ field: "Created", baseline: "2024-03-01", latest: "2024-01-01" }]);
   });
 });
