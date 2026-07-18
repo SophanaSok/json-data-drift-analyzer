@@ -55,9 +55,9 @@ export function formatExportDates(dates: ExportDates): string {
   return parts.length > 0 ? parts.join(" · ") : "No export dates found";
 }
 
-export function hasCreatedDateOrderingIssue(issues: DateOrderingIssue[]): boolean {
-  return issues.some((issue) => issue.field === "Created");
+export function hasDateOrderingIssue(issues: DateOrderingIssue[]): boolean {
+  return issues.length > 0;
 }
 
-export const BASELINE_CREATED_NEWER_TOAST_MESSAGE =
-  "Baseline Created date is newer than the latest export. Review the date warning for details.";
+export const BASELINE_DATE_NEWER_TOAST_MESSAGE =
+  "Baseline export dates are newer than or equal to the latest export. Review the date warning for details.";
