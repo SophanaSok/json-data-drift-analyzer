@@ -54,3 +54,10 @@ export function formatExportDates(dates: ExportDates): string {
   const parts = EXPORT_DATE_FIELDS.flatMap((field) => (dates[field] ? [`${field}: ${dates[field]}`] : []));
   return parts.length > 0 ? parts.join(" · ") : "No export dates found";
 }
+
+export function hasCreatedDateOrderingIssue(issues: DateOrderingIssue[]): boolean {
+  return issues.some((issue) => issue.field === "Created");
+}
+
+export const BASELINE_CREATED_NEWER_TOAST_MESSAGE =
+  "Baseline Created date is newer than the latest export. Review the date warning for details.";
