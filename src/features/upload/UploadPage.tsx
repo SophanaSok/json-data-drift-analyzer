@@ -3,11 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { DateOrderingAlert } from "../../components/upload/DateOrderingAlert";
 import { ExportDateIndicators } from "../../components/upload/ExportDateIndicators";
 import { db } from "../../db";
-import { extractExportDates, findDateOrderingIssues, hasDateOrderingIssue, BASELINE_DATE_NEWER_TOAST_MESSAGE } from "../../engine/export-metadata";
+import { extractExportDates, findDateOrderingIssues } from "../../engine/export-metadata";
 import type { ExportDates } from "../../engine/types";
 import { defaultProfile } from "../../engine/profile";
 import { hashText } from "../../lib/hash";
-import { useToastStore } from "../../stores/toast-store";
 import { useUiStore } from "../../stores/ui-store";
 import type { AnalyzeRequest, WorkerMessage } from "../../workers/protocol";
 
@@ -44,8 +43,6 @@ export function UploadPage() {
   const step = useUiStore((state) => state.workerStep);
   const setStep = useUiStore((state) => state.setWorkerStep);
   const setAnalysis = useUiStore((state) => state.setAnalysis);
-  const showToast = useToastStore((state) => state.showToast);
-
   const disabled = useMemo(() => !baselineFile || !latestFile, [baselineFile, latestFile]);
   const dateOrderingIssues = useMemo(
     () => findDateOrderingIssues(baselineExportDates, latestExportDates),
@@ -59,12 +56,6 @@ export function UploadPage() {
   useEffect(() => {
     void readExportDates(latestFile).then(setLatestExportDates);
   }, [latestFile]);
-
-  const notifyDateOrderingIssue = () => {
-    if (hasDateOrderingIssue(dateOrderingIssues)) {
-      showToast(BASELINE_DATE_NEWER_TOAST_MESSAGE, "warning");
-    }
-  };
 
   const runAnalysis = async () => {
     if (!baselineFile || !latestFile) return;
@@ -89,7 +80,6 @@ export function UploadPage() {
       const cached = await db.analyses.get(analysisKey);
       if (cached) {
         setAnalysis(cached.result);
-        notifyDateOrderingIssue();
         navigate(`/results?tab=${cached.result.qualityIssues.some((issue) => ["critical", "high"].includes(issue.severity)) ? "overview" : "records"}`);
         return;
       }
@@ -124,7 +114,6 @@ export function UploadPage() {
         }
         setStep("Ready");
         setAnalysis(event.data.payload);
-        notifyDateOrderingIssue();
         await db.analyses.put({ analysisKey, createdAt: new Date().toISOString(), result: event.data.payload });
         navigate(`/results?tab=${event.data.payload.qualityIssues.some((issue) => ["critical", "high"].includes(issue.severity)) ? "overview" : "records"}`);
       };

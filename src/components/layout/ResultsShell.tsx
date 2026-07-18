@@ -1,9 +1,12 @@
+import { useEffect, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ExportDateBanner } from "./ExportDateBanner";
 import { DataHealthPage } from "../../features/data-health/DataHealthPage";
 import { FieldChangesPage } from "../../features/field-changes/FieldChangesPage";
 import { OverviewPage } from "../../features/overview/OverviewPage";
 import { RecordsPage } from "../../features/records/RecordsPage";
+import { BASELINE_DATE_NEWER_TOAST_MESSAGE, getAnalysisDateOrderingIssues, hasDateOrderingIssue } from "../../engine/export-metadata";
+import { useToastStore } from "../../stores/toast-store";
 import { useUiStore } from "../../stores/ui-store";
 
 const tabs = [
@@ -17,6 +20,19 @@ export function ResultsShell() {
   const [params] = useSearchParams();
   const tab = params.get("tab") ?? "overview";
   const analysis = useUiStore((state) => state.analysis);
+  const showToast = useToastStore((state) => state.showToast);
+  const lastToastedAnalysisKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!analysis) return;
+    if (lastToastedAnalysisKey.current === analysis.analysisKey) return;
+
+    const issues = getAnalysisDateOrderingIssues(analysis.metadata);
+    if (!hasDateOrderingIssue(issues)) return;
+
+    lastToastedAnalysisKey.current = analysis.analysisKey;
+    showToast(BASELINE_DATE_NEWER_TOAST_MESSAGE, "warning");
+  }, [analysis, showToast]);
 
   return (
     <div className="mx-auto max-w-7xl">
