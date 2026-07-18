@@ -20,7 +20,7 @@ export const DEFAULT_FIELD_CHANGES_COLUMN_WIDTHS: Record<FieldSortColumn, number
   modified: 80,
   baseline: 90,
   latest: 90,
-  change: 90,
+  change: 120,
   severity: 90
 };
 

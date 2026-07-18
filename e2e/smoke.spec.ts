@@ -26,3 +26,20 @@ test("smoke analysis flow", async ({ page }) => {
   await page.getByRole("button", { name: "View document comparison" }).click();
   await expect(page.getByTestId("document-comparison")).toBeVisible();
 });
+
+test("explains percentage-point field changes", async ({ page }) => {
+  await page.goto("");
+  await page.getByTestId("baseline-input").setInputFiles(path.join(root, "src/test/fixtures/baseline.json"));
+  await page.getByTestId("latest-input").setInputFiles(path.join(root, "src/test/fixtures/latest.json"));
+  await page.getByTestId("analyze-button").click();
+
+  await page.getByRole("link", { name: "Field Changes", exact: true }).click();
+  await expect(page.getByTestId("sort-change")).toContainText("Change (pp)");
+
+  const help = page.getByRole("button", { name: "What does pp mean?" });
+  await help.focus();
+  await expect(page.getByRole("tooltip")).toContainText(
+    "Percentage-point change in field fill rate, calculated as Latest − Baseline."
+  );
+  await expect(page.getByRole("cell", { name: /Field fill rate: \d+\.\d% → \d+\.\d%/ }).first()).toBeVisible();
+});
