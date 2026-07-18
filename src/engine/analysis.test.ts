@@ -65,10 +65,13 @@ describe("analysis engine", () => {
     const result = getAnalysis();
     expect(result.metadata.baselineExportDates.Refreshed).toBe("2024-01-10T08:00:00Z");
     expect(result.metadata.latestExportDates.Refreshed).toBe("2024-02-15T08:00:00Z");
-    expect(result.metadata.dateOrderingIssues).toEqual([]);
+    expect(result.metadata.dateOrderingIssues).toEqual([
+      { field: "Refreshed", baseline: "2024-01-10T08:00:00Z", latest: "2024-02-15T08:00:00Z" },
+      { field: "Created", baseline: "2023-12-01T08:00:00Z", latest: "2024-01-20T08:00:00Z" }
+    ]);
   });
 
-  it("records date ordering issues when baseline export dates are newer", () => {
+  it("does not record date ordering issues when baseline export dates are newer", () => {
     const reversedBaseline = {
       Refreshed: "2024-03-01",
       Created: "2024-02-01",
@@ -88,10 +91,7 @@ describe("analysis engine", () => {
       }
     });
 
-    expect(result.metadata.dateOrderingIssues).toEqual([
-      { field: "Refreshed", baseline: "2024-03-01", latest: "2024-02-15T08:00:00Z" },
-      { field: "Created", baseline: "2024-02-01", latest: "2024-01-20T08:00:00Z" }
-    ]);
+    expect(result.metadata.dateOrderingIssues).toEqual([]);
   });
 
   it("treats document reordering as unchanged", () => {

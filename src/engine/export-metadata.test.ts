@@ -20,32 +20,31 @@ describe("export metadata", () => {
     expect(extractExportDates(null)).toEqual({});
   });
 
-  it("flags baseline dates that are newer than or equal to latest dates", () => {
+  it("flags baseline dates that are older than latest dates", () => {
     const issues = findDateOrderingIssues(
-      { Refreshed: "2024-03-01", Created: "2024-01-15" },
-      { Refreshed: "2024-02-01", Created: "2024-01-20" }
+      { Refreshed: "2024-01-01", Created: "2023-12-01" },
+      { Refreshed: "2024-02-01", Created: "2024-01-01" }
     );
 
     expect(issues).toEqual([
-      { field: "Refreshed", baseline: "2024-03-01", latest: "2024-02-01" }
+      { field: "Refreshed", baseline: "2024-01-01", latest: "2024-02-01" },
+      { field: "Created", baseline: "2023-12-01", latest: "2024-01-01" }
     ]);
   });
 
-  it("flags equal baseline and latest dates", () => {
+  it("does not flag equal baseline and latest dates", () => {
     const issues = findDateOrderingIssues(
       { Created: "2024-01-01" },
       { Created: "2024-01-01" }
     );
 
-    expect(issues).toEqual([
-      { field: "Created", baseline: "2024-01-01", latest: "2024-01-01" }
-    ]);
+    expect(issues).toEqual([]);
   });
 
-  it("does not flag correctly ordered baseline dates", () => {
+  it("does not flag baseline dates that are newer than latest dates", () => {
     const issues = findDateOrderingIssues(
-      { Refreshed: "2024-01-01", Created: "2023-12-01" },
-      { Refreshed: "2024-02-01", Created: "2024-01-01" }
+      { Refreshed: "2024-03-01", Created: "2024-02-01" },
+      { Refreshed: "2024-02-01", Created: "2024-01-20" }
     );
 
     expect(issues).toEqual([]);

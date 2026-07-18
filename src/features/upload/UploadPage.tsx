@@ -154,7 +154,7 @@ export function UploadPage() {
       ) : null}
       {dateOrderingIssues.length > 0 ? (
         <p className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" data-testid="date-ordering-warning">
-          Baseline Refreshed/Created dates should be older than the latest export. Review the highlighted dates before analyzing.
+          Baseline Refreshed/Created dates are older than the latest export. Review the highlighted dates before analyzing.
         </p>
       ) : null}
       <section className="grid gap-4 md:grid-cols-3">

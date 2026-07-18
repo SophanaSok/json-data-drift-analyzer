@@ -42,7 +42,7 @@ export function findDateOrderingIssues(baseline: ExportDates, latest: ExportDate
     const latestTimestamp = parseExportDate(latestValue);
     if (baselineTimestamp === null || latestTimestamp === null) continue;
 
-    if (baselineTimestamp >= latestTimestamp) {
+    if (baselineTimestamp < latestTimestamp) {
       issues.push({ field, baseline: baselineValue, latest: latestValue });
     }
   }

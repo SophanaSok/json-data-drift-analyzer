@@ -17,9 +17,9 @@ export function ExportDateBanner({ metadata }: ExportDateBannerProps) {
     <div className="border-b bg-white px-6 py-4">
       {dateOrderingIssues.length > 0 ? (
         <div className="mb-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" data-testid="results-date-ordering-warning">
-          <p className="font-medium">Baseline export dates are not older than latest</p>
+          <p className="font-medium">Comparing older baseline against newer latest export</p>
           <p className="mt-1">
-            This comparison may be misleading because baseline Refreshed/Created dates are newer than or equal to the latest export.
+            Baseline Refreshed/Created dates are older than the latest export. Review the highlighted dates to confirm this comparison is intentional.
           </p>
           <ul className="mt-2 list-disc space-y-1 pl-5">
             {dateOrderingIssues.map((issue) => (
