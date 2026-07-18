@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { DateOrderingAlert } from "../../components/upload/DateOrderingAlert";
 import { ExportDateIndicators } from "../../components/upload/ExportDateIndicators";
 import { db } from "../../db";
-import { extractExportDates, findDateOrderingIssues, hasCreatedDateOrderingIssue, BASELINE_CREATED_NEWER_TOAST_MESSAGE } from "../../engine/export-metadata";
+import { extractExportDates, findDateOrderingIssues, hasDateOrderingIssue, BASELINE_DATE_NEWER_TOAST_MESSAGE } from "../../engine/export-metadata";
 import type { ExportDates } from "../../engine/types";
 import { defaultProfile } from "../../engine/profile";
 import { hashText } from "../../lib/hash";
@@ -60,9 +60,9 @@ export function UploadPage() {
     void readExportDates(latestFile).then(setLatestExportDates);
   }, [latestFile]);
 
-  const notifyCreatedDateIssue = (dateOrderingIssues: ReturnType<typeof findDateOrderingIssues>) => {
-    if (hasCreatedDateOrderingIssue(dateOrderingIssues)) {
-      showToast(BASELINE_CREATED_NEWER_TOAST_MESSAGE, "warning");
+  const notifyDateOrderingIssue = () => {
+    if (hasDateOrderingIssue(dateOrderingIssues)) {
+      showToast(BASELINE_DATE_NEWER_TOAST_MESSAGE, "warning");
     }
   };
 
@@ -89,7 +89,7 @@ export function UploadPage() {
       const cached = await db.analyses.get(analysisKey);
       if (cached) {
         setAnalysis(cached.result);
-        notifyCreatedDateIssue(cached.result.metadata.dateOrderingIssues ?? []);
+        notifyDateOrderingIssue();
         navigate(`/results?tab=${cached.result.qualityIssues.some((issue) => ["critical", "high"].includes(issue.severity)) ? "overview" : "records"}`);
         return;
       }
@@ -124,7 +124,7 @@ export function UploadPage() {
         }
         setStep("Ready");
         setAnalysis(event.data.payload);
-        notifyCreatedDateIssue(event.data.payload.metadata.dateOrderingIssues ?? []);
+        notifyDateOrderingIssue();
         await db.analyses.put({ analysisKey, createdAt: new Date().toISOString(), result: event.data.payload });
         navigate(`/results?tab=${event.data.payload.qualityIssues.some((issue) => ["critical", "high"].includes(issue.severity)) ? "overview" : "records"}`);
       };
