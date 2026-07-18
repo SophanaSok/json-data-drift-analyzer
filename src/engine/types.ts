@@ -122,6 +122,16 @@ export type AnalysisSummary = {
   qualityGate: "Pass" | "Warning" | "Failed" | "Quarantined";
 };
 
+export type ExportDateField = "Refreshed" | "Created";
+
+export type ExportDates = Partial<Record<ExportDateField, string>>;
+
+export type DateOrderingIssue = {
+  field: ExportDateField;
+  baseline: string;
+  latest: string;
+};
+
 export type AnalysisMetadata = {
   baselineFileName: string;
   latestFileName: string;
@@ -129,6 +139,9 @@ export type AnalysisMetadata = {
   identityFields: string[];
   ignoredFields: string[];
   generatedAt: string;
+  baselineExportDates: ExportDates;
+  latestExportDates: ExportDates;
+  dateOrderingIssues: DateOrderingIssue[];
 };
 
 export type AnalysisResult = {

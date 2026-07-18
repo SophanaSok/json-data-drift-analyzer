@@ -1,6 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { DateOrderingAlert } from "../../components/upload/DateOrderingAlert";
+import { ExportDateIndicators } from "../../components/upload/ExportDateIndicators";
 import { db } from "../../db";
+import { extractExportDates, findDateOrderingIssues } from "../../engine/export-metadata";
+import type { ExportDates } from "../../engine/types";
 import { defaultProfile } from "../../engine/profile";
 import { hashText } from "../../lib/hash";
 import { useUiStore } from "../../stores/ui-store";
@@ -15,21 +19,46 @@ function parseCsvInput(value: string): string[] {
     .filter(Boolean);
 }
 
+async function readExportDates(file: File | null) {
+  if (!file) return {};
+  try {
+    const data = JSON.parse(await file.text()) as unknown;
+    return extractExportDates(data);
+  } catch {
+    return {};
+  }
+}
+
 export function UploadPage() {
   const navigate = useNavigate();
   const [baselineFile, setBaselineFile] = useState<File | null>(null);
   const [latestFile, setLatestFile] = useState<File | null>(null);
+  const [baselineExportDates, setBaselineExportDates] = useState<ExportDates>({});
+  const [latestExportDates, setLatestExportDates] = useState<ExportDates>({});
   const [collectionPath, setCollectionPath] = useState("Export");
   const [identityKeys, setIdentityKeys] = useState(defaultProfile.identityDefault.join(","));
   const [ignoredFields, setIgnoredFields] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [pendingAlert, setPendingAlert] = useState(false);
   const step = useUiStore((state) => state.workerStep);
   const setStep = useUiStore((state) => state.setWorkerStep);
   const setAnalysis = useUiStore((state) => state.setAnalysis);
 
   const disabled = useMemo(() => !baselineFile || !latestFile, [baselineFile, latestFile]);
+  const dateOrderingIssues = useMemo(
+    () => findDateOrderingIssues(baselineExportDates, latestExportDates),
+    [baselineExportDates, latestExportDates]
+  );
 
-  const onAnalyze = async () => {
+  useEffect(() => {
+    void readExportDates(baselineFile).then(setBaselineExportDates);
+  }, [baselineFile]);
+
+  useEffect(() => {
+    void readExportDates(latestFile).then(setLatestExportDates);
+  }, [latestFile]);
+
+  const runAnalysis = async () => {
     if (!baselineFile || !latestFile) return;
     setError(null);
     try {
@@ -94,6 +123,14 @@ export function UploadPage() {
     }
   };
 
+  const onAnalyze = () => {
+    if (dateOrderingIssues.length > 0) {
+      setPendingAlert(true);
+      return;
+    }
+    void runAnalysis();
+  };
+
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-6">
       <header>
@@ -112,6 +149,14 @@ export function UploadPage() {
           {latestFile ? <p className="mt-2 text-xs text-slate-600">{latestFile.name} ({latestFile.size} bytes)</p> : null}
         </label>
       </section>
+      {baselineFile && latestFile ? (
+        <ExportDateIndicators baselineDates={baselineExportDates} latestDates={latestExportDates} issues={dateOrderingIssues} />
+      ) : null}
+      {dateOrderingIssues.length > 0 ? (
+        <p className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" data-testid="date-ordering-warning">
+          Baseline Refreshed/Created dates should be older than the latest export. Review the highlighted dates before analyzing.
+        </p>
+      ) : null}
       <section className="grid gap-4 md:grid-cols-3">
         <label className="text-sm">
           <span className="mb-1 block font-medium">Collection path</span>
@@ -133,6 +178,18 @@ export function UploadPage() {
         <div className="text-sm text-slate-600" aria-live="polite">{step ? `Progress: ${step}` : ""}</div>
       </div>
       {error ? <p className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+      {pendingAlert ? (
+        <DateOrderingAlert
+          baselineDates={baselineExportDates}
+          issues={dateOrderingIssues}
+          latestDates={latestExportDates}
+          onCancel={() => setPendingAlert(false)}
+          onContinue={() => {
+            setPendingAlert(false);
+            void runAnalysis();
+          }}
+        />
+      ) : null}
     </main>
   );
 }

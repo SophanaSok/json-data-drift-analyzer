@@ -1,3 +1,4 @@
+import { extractExportDates, findDateOrderingIssues } from "./export-metadata";
 import { buildRecordKey, collectDuplicateKeys } from "./identity";
 import { buildIndexes, buildSorts, mergeQualityIssueIndexes } from "./indexes";
 import { compareDocuments } from "./documents";
@@ -83,6 +84,9 @@ export function runAnalysis(input: {
   profile?: QualityProfile;
 }): AnalysisResult {
   const profile = input.profile ?? defaultProfile;
+  const baselineExportDates = extractExportDates(input.baselineData);
+  const latestExportDates = extractExportDates(input.latestData);
+  const dateOrderingIssues = findDateOrderingIssues(baselineExportDates, latestExportDates);
   const baselineRecords = getCollection(input.baselineData, input.config.collectionPath).map((record) => normalizeRecord(record, input.config.ignoredFields));
   const latestRecords = getCollection(input.latestData, input.config.collectionPath).map((record) => normalizeRecord(record, input.config.ignoredFields));
 
@@ -189,7 +193,10 @@ export function runAnalysis(input: {
       collectionPath: input.config.collectionPath,
       identityFields: input.config.identityFields,
       ignoredFields: input.config.ignoredFields,
-      generatedAt: new Date().toISOString()
+      generatedAt: new Date().toISOString(),
+      baselineExportDates,
+      latestExportDates,
+      dateOrderingIssues
     },
     recordsById,
     allRecordIds,
