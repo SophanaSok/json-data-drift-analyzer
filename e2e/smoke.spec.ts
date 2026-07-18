@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import path from "node:path";
 
-const root = "/home/runner/work/json-data-drift-analyzer/json-data-drift-analyzer";
+const root = process.cwd();
 
 test("smoke analysis flow", async ({ page }) => {
   await page.goto("");

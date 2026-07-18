@@ -3,11 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { DateOrderingAlert } from "../../components/upload/DateOrderingAlert";
 import { ExportDateIndicators } from "../../components/upload/ExportDateIndicators";
 import { db } from "../../db";
-import { extractExportDates, findDateOrderingIssues } from "../../engine/export-metadata";
-import type { ExportDates } from "../../engine/types";
 import { defaultProfile } from "../../engine/profile";
 import { hashText } from "../../lib/hash";
-import { findDateOrderingIssuesFromJson } from "../../lib/date-ordering-toast";
+import { assessFileOrderFromJson } from "../../lib/file-order";
 import { useUiStore } from "../../stores/ui-store";
 import type { AnalyzeRequest, WorkerMessage } from "../../workers/protocol";
 
@@ -20,22 +18,10 @@ function parseCsvInput(value: string): string[] {
     .filter(Boolean);
 }
 
-async function readExportDates(file: File | null) {
-  if (!file) return {};
-  try {
-    const data = JSON.parse(await file.text()) as unknown;
-    return extractExportDates(data);
-  } catch {
-    return {};
-  }
-}
-
 export function UploadPage() {
   const navigate = useNavigate();
   const [baselineFile, setBaselineFile] = useState<File | null>(null);
   const [latestFile, setLatestFile] = useState<File | null>(null);
-  const [baselineExportDates, setBaselineExportDates] = useState<ExportDates>({});
-  const [latestExportDates, setLatestExportDates] = useState<ExportDates>({});
   const [collectionPath, setCollectionPath] = useState("Export");
   const [identityKeys, setIdentityKeys] = useState(defaultProfile.identityDefault.join(","));
   const [ignoredFields, setIgnoredFields] = useState("");
@@ -44,20 +30,45 @@ export function UploadPage() {
   const step = useUiStore((state) => state.workerStep);
   const setStep = useUiStore((state) => state.setWorkerStep);
   const setAnalysis = useUiStore((state) => state.setAnalysis);
-  const setPendingDateOrderingIssues = useUiStore((state) => state.setPendingDateOrderingIssues);
-  const disabled = useMemo(() => !baselineFile || !latestFile, [baselineFile, latestFile]);
-  const dateOrderingIssues = useMemo(
-    () => findDateOrderingIssues(baselineExportDates, latestExportDates),
-    [baselineExportDates, latestExportDates]
+  const fileOrderAssessment = useUiStore((state) => state.fileOrderAssessment);
+  const setFileOrderAssessment = useUiStore((state) => state.setFileOrderAssessment);
+  const disabled = useMemo(
+    () => !baselineFile || !latestFile || !fileOrderAssessment,
+    [baselineFile, fileOrderAssessment, latestFile]
   );
+  const dateOrderingIssues = fileOrderAssessment?.issues ?? [];
+  const baselineExportDates = fileOrderAssessment?.baseline.dates ?? {};
+  const latestExportDates = fileOrderAssessment?.latest.dates ?? {};
 
   useEffect(() => {
-    void readExportDates(baselineFile).then(setBaselineExportDates);
-  }, [baselineFile]);
+    let cancelled = false;
+    setFileOrderAssessment(null);
+    if (!baselineFile || !latestFile) return;
 
-  useEffect(() => {
-    void readExportDates(latestFile).then(setLatestExportDates);
-  }, [latestFile]);
+    void Promise.all([baselineFile.text(), latestFile.text()])
+      .then(([baselineText, latestText]) => {
+        if (cancelled) return;
+        setFileOrderAssessment(
+          assessFileOrderFromJson(
+            baselineText,
+            latestText,
+            baselineFile.name,
+            latestFile.name,
+            collectionPath
+          )
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFileOrderAssessment(null);
+          setError("Could not read export dates because one of the selected files is not valid JSON.");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [baselineFile, collectionPath, latestFile, setFileOrderAssessment]);
 
   const runAnalysis = async () => {
     if (!baselineFile || !latestFile) return;
@@ -65,7 +76,14 @@ export function UploadPage() {
     try {
       const baselineText = await baselineFile.text();
       const latestText = await latestFile.text();
-      const orderingIssues = findDateOrderingIssuesFromJson(baselineText, latestText);
+      const assessment = assessFileOrderFromJson(
+        baselineText,
+        latestText,
+        baselineFile.name,
+        latestFile.name,
+        collectionPath
+      );
+      setFileOrderAssessment(assessment);
       const identityFields = parseCsvInput(identityKeys);
       const ignored = parseCsvInput(ignoredFields);
       const analysisKey = await hashText(
@@ -82,7 +100,6 @@ export function UploadPage() {
 
       const cached = await db.analyses.get(analysisKey);
       if (cached) {
-        setPendingDateOrderingIssues(orderingIssues);
         setAnalysis(cached.result);
         navigate(`/results?tab=${cached.result.qualityIssues.some((issue) => ["critical", "high"].includes(issue.severity)) ? "overview" : "records"}`);
         return;
@@ -117,11 +134,6 @@ export function UploadPage() {
           return;
         }
         setStep("Ready");
-        setPendingDateOrderingIssues(
-          (event.data.payload.metadata.dateOrderingIssues?.length ?? 0) > 0
-            ? event.data.payload.metadata.dateOrderingIssues
-            : orderingIssues
-        );
         setAnalysis(event.data.payload);
         await db.analyses.put({ analysisKey, createdAt: new Date().toISOString(), result: event.data.payload });
         navigate(`/results?tab=${event.data.payload.qualityIssues.some((issue) => ["critical", "high"].includes(issue.severity)) ? "overview" : "records"}`);
@@ -148,12 +160,32 @@ export function UploadPage() {
       <section className="grid gap-4 md:grid-cols-2">
         <label className="rounded border border-slate-300 bg-white p-4">
           <span className="text-sm font-medium">Baseline JSON</span>
-          <input data-testid="baseline-input" className="mt-2 block w-full text-sm" type="file" accept="application/json" onChange={(event) => setBaselineFile(event.target.files?.[0] ?? null)} />
+          <input
+            data-testid="baseline-input"
+            className="mt-2 block w-full text-sm"
+            type="file"
+            accept="application/json"
+            onChange={(event) => {
+              setError(null);
+              setFileOrderAssessment(null);
+              setBaselineFile(event.target.files?.[0] ?? null);
+            }}
+          />
           {baselineFile ? <p className="mt-2 text-xs text-slate-600">{baselineFile.name} ({baselineFile.size} bytes)</p> : null}
         </label>
         <label className="rounded border border-slate-300 bg-white p-4">
           <span className="text-sm font-medium">Latest JSON</span>
-          <input data-testid="latest-input" className="mt-2 block w-full text-sm" type="file" accept="application/json" onChange={(event) => setLatestFile(event.target.files?.[0] ?? null)} />
+          <input
+            data-testid="latest-input"
+            className="mt-2 block w-full text-sm"
+            type="file"
+            accept="application/json"
+            onChange={(event) => {
+              setError(null);
+              setFileOrderAssessment(null);
+              setLatestFile(event.target.files?.[0] ?? null);
+            }}
+          />
           {latestFile ? <p className="mt-2 text-xs text-slate-600">{latestFile.name} ({latestFile.size} bytes)</p> : null}
         </label>
       </section>

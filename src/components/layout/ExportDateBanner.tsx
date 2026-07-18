@@ -1,4 +1,6 @@
 import type { AnalysisMetadata } from "../../engine/types";
+import { getAnalysisDateOrderingIssues } from "../../engine/export-metadata";
+import { useUiStore } from "../../stores/ui-store";
 import { ExportDateIndicators } from "../upload/ExportDateIndicators";
 
 type ExportDateBannerProps = {
@@ -6,9 +8,19 @@ type ExportDateBannerProps = {
 };
 
 export function ExportDateBanner({ metadata }: ExportDateBannerProps) {
-  const baselineExportDates = metadata.baselineExportDates ?? {};
-  const latestExportDates = metadata.latestExportDates ?? {};
-  const dateOrderingIssues = metadata.dateOrderingIssues ?? [];
+  const fileOrderAssessment = useUiStore((state) => state.fileOrderAssessment);
+  const matchesSelectedFiles =
+    fileOrderAssessment?.baselineFileName === metadata.baselineFileName &&
+    fileOrderAssessment.latestFileName === metadata.latestFileName;
+  const baselineExportDates = matchesSelectedFiles
+    ? fileOrderAssessment.baseline.dates
+    : metadata.baselineExportDates ?? {};
+  const latestExportDates = matchesSelectedFiles
+    ? fileOrderAssessment.latest.dates
+    : metadata.latestExportDates ?? {};
+  const dateOrderingIssues = matchesSelectedFiles
+    ? fileOrderAssessment.issues
+    : getAnalysisDateOrderingIssues(metadata);
   const hasDates = Object.keys(baselineExportDates).length > 0 || Object.keys(latestExportDates).length > 0;
 
   if (!hasDates && dateOrderingIssues.length === 0) return null;
