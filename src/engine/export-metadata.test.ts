@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { extractExportDates, findDateOrderingIssues, formatExportDates } from "./export-metadata";
+import {
+  extractExportDates,
+  findDateOrderingIssues,
+  formatExportDates,
+  hasCreatedDateOrderingIssue
+} from "./export-metadata";
 
 describe("export metadata", () => {
   it("extracts Refreshed and Created from root export JSON", () => {
@@ -54,5 +59,11 @@ describe("export metadata", () => {
   it("formats export dates for display", () => {
     expect(formatExportDates({ Refreshed: "2024-01-01" })).toBe("Refreshed: 2024-01-01");
     expect(formatExportDates({})).toBe("No export dates found");
+  });
+
+  it("detects Created date ordering issues for toast notifications", () => {
+    expect(hasCreatedDateOrderingIssue([{ field: "Created", baseline: "2024-02-01", latest: "2024-01-01" }])).toBe(true);
+    expect(hasCreatedDateOrderingIssue([{ field: "Refreshed", baseline: "2024-03-01", latest: "2024-02-01" }])).toBe(false);
+    expect(hasCreatedDateOrderingIssue([])).toBe(false);
   });
 });
