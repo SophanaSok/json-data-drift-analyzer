@@ -1,16 +1,18 @@
 import { create } from "zustand";
-import type { AnalysisResult, FilterState } from "../engine/types";
+import type { AnalysisResult, DateOrderingIssue, FilterState } from "../engine/types";
 
 type UiState = {
   analysis: AnalysisResult | null;
   filter: FilterState;
   selectedRecordId: string | null;
   workerStep: string | null;
+  pendingDateOrderingIssues: DateOrderingIssue[] | null;
   setAnalysis: (analysis: AnalysisResult | null) => void;
   setFilter: (update: Partial<FilterState>) => void;
   resetFilter: () => void;
   setSelectedRecordId: (recordId: string | null) => void;
   setWorkerStep: (step: string | null) => void;
+  setPendingDateOrderingIssues: (issues: DateOrderingIssue[] | null) => void;
 };
 
 const defaultFilter: FilterState = {
@@ -30,9 +32,11 @@ export const useUiStore = create<UiState>((set) => ({
   filter: defaultFilter,
   selectedRecordId: null,
   workerStep: null,
+  pendingDateOrderingIssues: null,
   setAnalysis: (analysis) => set({ analysis }),
   setFilter: (update) => set((state) => ({ filter: { ...state.filter, ...update } })),
   resetFilter: () => set({ filter: defaultFilter }),
   setSelectedRecordId: (selectedRecordId) => set({ selectedRecordId }),
-  setWorkerStep: (workerStep) => set({ workerStep })
+  setWorkerStep: (workerStep) => set({ workerStep }),
+  setPendingDateOrderingIssues: (pendingDateOrderingIssues) => set({ pendingDateOrderingIssues })
 }));
