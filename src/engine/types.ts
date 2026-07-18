@@ -126,10 +126,29 @@ export type ExportDateField = "Refreshed" | "Created";
 
 export type ExportDates = Partial<Record<ExportDateField, string>>;
 
+export type ExportDateSource = "root" | "metadata" | "first-record";
+
+export type ExportDateInspection = {
+  dates: ExportDates;
+  sources: Partial<Record<ExportDateField, ExportDateSource>>;
+};
+
 export type DateOrderingIssue = {
   field: ExportDateField;
   baseline: string;
   latest: string;
+};
+
+export type FileOrderStatus = "reversed" | "correct" | "unverified";
+
+export type FileOrderAssessment = {
+  baselineFileName: string;
+  latestFileName: string;
+  baseline: ExportDateInspection;
+  latest: ExportDateInspection;
+  issues: DateOrderingIssue[];
+  comparableFields: ExportDateField[];
+  status: FileOrderStatus;
 };
 
 export type AnalysisMetadata = {

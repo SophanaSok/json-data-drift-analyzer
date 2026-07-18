@@ -18,6 +18,7 @@ async function analyzeWithDateOrderingWarning(page: import("@playwright/test").P
   await page.goto("");
   await page.getByTestId("baseline-input").setInputFiles(baselinePath);
   await page.getByTestId("latest-input").setInputFiles(latestPath);
+  await expect(page.getByTestId("global-file-order-warning")).toBeVisible();
   await expect(page.getByTestId("date-ordering-warning")).toBeVisible();
   await page.getByTestId("analyze-button").click();
   await page.getByRole("button", { name: "Continue anyway" }).click();
@@ -31,10 +32,18 @@ test("shows toast when baseline Created date is newer than latest", async ({ pag
   latest.Created = "2024-01-20T08:00:00Z";
 
   const { baselinePath, latestPath } = writeTempExports(baseline, latest);
+  await page.goto("");
+  await page.getByTestId("baseline-input").setInputFiles(baselinePath);
+  await page.getByTestId("latest-input").setInputFiles(latestPath);
+
+  await expect(page.getByTestId("global-file-order-warning")).toContainText(
+    "Created: baseline 2024-03-01T08:00:00Z is newer than latest 2024-01-20T08:00:00Z"
+  );
+  await expect(page.getByTestId("toast")).toBeVisible();
+
   await analyzeWithDateOrderingWarning(page, baselinePath, latestPath);
 
-  await expect(page.getByTestId("toast")).toBeVisible({ timeout: 10000 });
-  await expect(page.getByTestId("toast")).toContainText("Baseline export dates are newer than or equal to the latest export");
+  await expect(page.getByTestId("global-file-order-warning")).toBeVisible();
 });
 
 test("shows toast when only baseline Refreshed date is newer than latest", async ({ page }) => {
@@ -65,43 +74,39 @@ test("shows toast when reusing cached analysis with newer baseline dates", async
   await expect(page.getByTestId("toast")).toBeVisible({ timeout: 10000 });
 });
 
-test("shows toast when cached analysis is missing date metadata", async ({ page }) => {
-  const baseline = JSON.parse(fs.readFileSync(path.join(fixturesDir, "baseline.json"), "utf8")) as Record<string, unknown>;
-  const latest = JSON.parse(fs.readFileSync(path.join(fixturesDir, "latest.json"), "utf8")) as Record<string, unknown>;
-
-  baseline.Created = "2024-03-01T08:00:00Z";
-  latest.Created = "2024-01-20T08:00:00Z";
-
+test("detects Created dates on the first record before analysis", async ({ page }) => {
+  const baseline = {
+    Export: [{ ProjectCode: "A", Created: "2024-03-01T08:00:00Z" }]
+  };
+  const latest = {
+    Export: [{ ProjectCode: "A", Created: "2024-01-20T08:00:00Z" }]
+  };
   const { baselinePath, latestPath } = writeTempExports(baseline, latest);
-  await analyzeWithDateOrderingWarning(page, baselinePath, latestPath);
-  await expect(page.getByTestId("toast")).toBeVisible({ timeout: 10000 });
 
-  await page.evaluate(async () => {
-    const dbRequest = indexedDB.open("json-data-drift-analyzer");
-    await new Promise<void>((resolve, reject) => {
-      dbRequest.onerror = () => reject(dbRequest.error);
-      dbRequest.onsuccess = () => {
-        const db = dbRequest.result;
-        const tx = db.transaction("analyses", "readwrite");
-        const store = tx.objectStore("analyses");
-        const allRequest = store.getAll();
-        allRequest.onsuccess = () => {
-          for (const entry of allRequest.result as Array<{ analysisKey: string; result: { metadata: Record<string, unknown> } }>) {
-            entry.result.metadata = {
-              ...entry.result.metadata,
-              baselineExportDates: {},
-              latestExportDates: {},
-              dateOrderingIssues: []
-            };
-            store.put(entry);
-          }
-        };
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-      };
-    });
-  });
+  await page.goto("");
+  await page.getByTestId("baseline-input").setInputFiles(baselinePath);
+  await page.getByTestId("latest-input").setInputFiles(latestPath);
 
-  await analyzeWithDateOrderingWarning(page, baselinePath, latestPath);
-  await expect(page.getByTestId("toast")).toBeVisible({ timeout: 10000 });
+  await expect(page.getByTestId("global-file-order-warning")).toContainText("These files may be reversed");
+  await expect(page.getByTestId("global-file-order-warning")).toContainText("read from first record");
+  await expect(page.getByTestId("date-ordering-warning")).toBeVisible();
+  await expect(page.getByTestId("toast")).toBeVisible();
+});
+
+test("confirms correct file order before analysis", async ({ page }) => {
+  const baseline = {
+    Export: [{ ProjectCode: "A", CreatedDate: "2024-01-01T08:00:00Z" }]
+  };
+  const latest = {
+    Export: [{ ProjectCode: "A", CreatedDate: "2024-02-01T08:00:00Z" }]
+  };
+  const { baselinePath, latestPath } = writeTempExports(baseline, latest);
+
+  await page.goto("");
+  await page.getByTestId("baseline-input").setInputFiles(baselinePath);
+  await page.getByTestId("latest-input").setInputFiles(latestPath);
+
+  await expect(page.getByTestId("global-file-order-correct")).toContainText("File order looks correct");
+  await expect(page.getByTestId("global-file-order-warning")).toHaveCount(0);
+  await expect(page.getByTestId("toast")).toHaveCount(0);
 });

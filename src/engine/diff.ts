@@ -84,8 +84,8 @@ export function runAnalysis(input: {
   profile?: QualityProfile;
 }): AnalysisResult {
   const profile = input.profile ?? defaultProfile;
-  const baselineExportDates = extractExportDates(input.baselineData);
-  const latestExportDates = extractExportDates(input.latestData);
+  const baselineExportDates = extractExportDates(input.baselineData, input.config.collectionPath);
+  const latestExportDates = extractExportDates(input.latestData, input.config.collectionPath);
   const dateOrderingIssues = findDateOrderingIssues(baselineExportDates, latestExportDates);
   const baselineRecords = getCollection(input.baselineData, input.config.collectionPath).map((record) => normalizeRecord(record, input.config.ignoredFields));
   const latestRecords = getCollection(input.latestData, input.config.collectionPath).map((record) => normalizeRecord(record, input.config.ignoredFields));

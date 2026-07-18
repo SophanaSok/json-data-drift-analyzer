@@ -1,16 +1,27 @@
-import { useEffect } from "react";
-import { notifyDateOrderingIssues } from "../../lib/date-ordering-toast";
+import { useEffect, useRef } from "react";
+import { notifyReversedFileOrder } from "../../lib/file-order";
 import { useUiStore } from "../../stores/ui-store";
 
 export function DateOrderingToastListener() {
-  const pendingDateOrderingIssues = useUiStore((state) => state.pendingDateOrderingIssues);
-  const clearPendingDateOrderingIssues = useUiStore((state) => state.setPendingDateOrderingIssues);
+  const assessment = useUiStore((state) => state.fileOrderAssessment);
+  const lastNotification = useRef<string | null>(null);
 
   useEffect(() => {
-    if (pendingDateOrderingIssues === null) return;
-    notifyDateOrderingIssues(pendingDateOrderingIssues);
-    clearPendingDateOrderingIssues(null);
-  }, [clearPendingDateOrderingIssues, pendingDateOrderingIssues]);
+    if (!assessment || assessment.status !== "reversed") {
+      lastNotification.current = null;
+      return;
+    }
+
+    const fingerprint = JSON.stringify([
+      assessment.baselineFileName,
+      assessment.latestFileName,
+      assessment.issues
+    ]);
+    if (lastNotification.current === fingerprint) return;
+
+    lastNotification.current = fingerprint;
+    notifyReversedFileOrder(assessment);
+  }, [assessment]);
 
   return null;
 }

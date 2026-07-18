@@ -1,18 +1,18 @@
 import { create } from "zustand";
-import type { AnalysisResult, DateOrderingIssue, FilterState } from "../engine/types";
+import type { AnalysisResult, FileOrderAssessment, FilterState } from "../engine/types";
 
 type UiState = {
   analysis: AnalysisResult | null;
   filter: FilterState;
   selectedRecordId: string | null;
   workerStep: string | null;
-  pendingDateOrderingIssues: DateOrderingIssue[] | null;
+  fileOrderAssessment: FileOrderAssessment | null;
   setAnalysis: (analysis: AnalysisResult | null) => void;
   setFilter: (update: Partial<FilterState>) => void;
   resetFilter: () => void;
   setSelectedRecordId: (recordId: string | null) => void;
   setWorkerStep: (step: string | null) => void;
-  setPendingDateOrderingIssues: (issues: DateOrderingIssue[] | null) => void;
+  setFileOrderAssessment: (assessment: FileOrderAssessment | null) => void;
 };
 
 const defaultFilter: FilterState = {
@@ -32,11 +32,11 @@ export const useUiStore = create<UiState>((set) => ({
   filter: defaultFilter,
   selectedRecordId: null,
   workerStep: null,
-  pendingDateOrderingIssues: null,
+  fileOrderAssessment: null,
   setAnalysis: (analysis) => set({ analysis }),
   setFilter: (update) => set((state) => ({ filter: { ...state.filter, ...update } })),
   resetFilter: () => set({ filter: defaultFilter }),
   setSelectedRecordId: (selectedRecordId) => set({ selectedRecordId }),
   setWorkerStep: (workerStep) => set({ workerStep }),
-  setPendingDateOrderingIssues: (pendingDateOrderingIssues) => set({ pendingDateOrderingIssues })
+  setFileOrderAssessment: (fileOrderAssessment) => set({ fileOrderAssessment })
 }));

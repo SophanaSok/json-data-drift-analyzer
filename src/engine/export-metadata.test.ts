@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  assessFileOrder,
   extractExportDates,
   findDateOrderingIssues,
   formatExportDates,
   getAnalysisDateOrderingIssues,
-  hasDateOrderingIssue
+  hasDateOrderingIssue,
+  inspectExportDates
 } from "./export-metadata";
 
 describe("export metadata", () => {
@@ -24,6 +26,51 @@ describe("export metadata", () => {
   it("ignores empty or missing export date fields", () => {
     expect(extractExportDates({ Refreshed: "  ", Export: [] })).toEqual({});
     expect(extractExportDates(null)).toEqual({});
+  });
+
+  it("falls back to metadata and then the first collection record", () => {
+    expect(
+      inspectExportDates({
+        metadata: { CreatedDate: "2024-01-01" },
+        Export: [{ RefreshedDate: "2024-01-02" }]
+      })
+    ).toEqual({
+      dates: { Refreshed: "2024-01-02", Created: "2024-01-01" },
+      sources: { Refreshed: "first-record", Created: "metadata" }
+    });
+  });
+
+  it("prefers root dates over metadata and first-record dates", () => {
+    expect(
+      inspectExportDates({
+        Created: "2024-01-03",
+        metadata: { Created: "2024-01-02" },
+        Export: [{ Created: "2024-01-01" }]
+      })
+    ).toEqual({
+      dates: { Created: "2024-01-03" },
+      sources: { Created: "root" }
+    });
+  });
+
+  it("assesses reversed, correct, and unverifiable file order", () => {
+    expect(
+      assessFileOrder(
+        { Export: [{ Created: "2024-03-01" }] },
+        { Export: [{ Created: "2024-02-01" }] },
+        "baseline.json",
+        "latest.json"
+      ).status
+    ).toBe("reversed");
+    expect(
+      assessFileOrder(
+        { Export: [{ Created: "2024-01-01" }] },
+        { Export: [{ Created: "2024-02-01" }] },
+        "baseline.json",
+        "latest.json"
+      ).status
+    ).toBe("correct");
+    expect(assessFileOrder({}, {}, "baseline.json", "latest.json").status).toBe("unverified");
   });
 
   it("flags baseline dates that are newer than or equal to latest dates", () => {
