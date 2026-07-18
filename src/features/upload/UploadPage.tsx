@@ -4,7 +4,7 @@ import { DateOrderingAlert } from "../../components/upload/DateOrderingAlert";
 import { ExportDateIndicators } from "../../components/upload/ExportDateIndicators";
 import { db } from "../../db";
 import { extractExportDates, findDateOrderingIssues } from "../../engine/export-metadata";
-import type { ExportDates } from "../../engine/types";
+import type { DateOrderingIssue, ExportDates } from "../../engine/types";
 import { defaultProfile } from "../../engine/profile";
 import { hashText } from "../../lib/hash";
 import { useUiStore } from "../../stores/ui-store";
@@ -40,6 +40,7 @@ export function UploadPage() {
   const [ignoredFields, setIgnoredFields] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pendingAlert, setPendingAlert] = useState(false);
+  const [pendingDateOrderingIssues, setPendingDateOrderingIssues] = useState<DateOrderingIssue[]>([]);
   const step = useUiStore((state) => state.workerStep);
   const setStep = useUiStore((state) => state.setWorkerStep);
   const setAnalysis = useUiStore((state) => state.setAnalysis);
@@ -123,11 +124,23 @@ export function UploadPage() {
     }
   };
 
-  const onAnalyze = () => {
-    if (dateOrderingIssues.length > 0) {
+  const onAnalyze = async () => {
+    if (!baselineFile || !latestFile) return;
+
+    const [baselineDates, latestDates] = await Promise.all([
+      readExportDates(baselineFile),
+      readExportDates(latestFile)
+    ]);
+    setBaselineExportDates(baselineDates);
+    setLatestExportDates(latestDates);
+
+    const issues = findDateOrderingIssues(baselineDates, latestDates);
+    if (issues.length > 0) {
+      setPendingDateOrderingIssues(issues);
       setPendingAlert(true);
       return;
     }
+
     void runAnalysis();
   };
 
@@ -154,7 +167,7 @@ export function UploadPage() {
       ) : null}
       {dateOrderingIssues.length > 0 ? (
         <p className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" data-testid="date-ordering-warning">
-          Baseline Refreshed/Created dates should be older than the latest export. Review the highlighted dates before analyzing.
+          Baseline Refreshed/Created dates are older than the latest export. Review the highlighted dates before analyzing.
         </p>
       ) : null}
       <section className="grid gap-4 md:grid-cols-3">
@@ -181,7 +194,7 @@ export function UploadPage() {
       {pendingAlert ? (
         <DateOrderingAlert
           baselineDates={baselineExportDates}
-          issues={dateOrderingIssues}
+          issues={pendingDateOrderingIssues}
           latestDates={latestExportDates}
           onCancel={() => setPendingAlert(false)}
           onContinue={() => {

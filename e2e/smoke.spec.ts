@@ -8,6 +8,7 @@ test("smoke analysis flow", async ({ page }) => {
   await page.getByTestId("baseline-input").setInputFiles(path.join(root, "src/test/fixtures/baseline.json"));
   await page.getByTestId("latest-input").setInputFiles(path.join(root, "src/test/fixtures/latest.json"));
   await page.getByTestId("analyze-button").click();
+  await page.getByTestId("date-ordering-continue").click();
   await expect(page.getByText("Deterministic incident narrative")).toBeVisible();
 
   await page.getByRole("link", { name: "Records", exact: true }).click();

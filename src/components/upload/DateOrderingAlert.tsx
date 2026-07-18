@@ -20,15 +20,15 @@ export function DateOrderingAlert({ issues, baselineDates, latestDates, onContin
         aria-describedby="date-ordering-alert-description"
       >
         <h2 id="date-ordering-alert-title" className="text-lg font-semibold text-amber-900">
-          Baseline export dates look newer than latest
+          Baseline export is older than latest
         </h2>
         <p id="date-ordering-alert-description" className="mt-2 text-sm text-slate-700">
-          Baseline exports are usually older than later JSON files. The selected files have one or more Refreshed or Created dates that are newer than or equal to the latest export, which can make drift results misleading.
+          You are comparing an older baseline JSON export against a newer latest export. Confirm these Refreshed and Created dates look correct before continuing.
         </p>
         <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-700">
           {issues.map((issue) => (
             <li key={issue.field}>
-              {issue.field}: baseline <span className="font-medium">{issue.baseline}</span> is not older than latest <span className="font-medium">{issue.latest}</span>
+              {issue.field}: baseline <span className="font-medium">{issue.baseline}</span> is older than latest <span className="font-medium">{issue.latest}</span>
             </li>
           ))}
         </ul>
