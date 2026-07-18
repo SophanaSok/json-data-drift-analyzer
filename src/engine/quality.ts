@@ -111,7 +111,7 @@ export function buildQualityIssues(
       kind: "field-population",
       severity: stat.severity,
       title: `${stat.field} population regression`,
-      description: `${stat.field} population changed by ${(stat.populationChange * 100).toFixed(1)}pp`,
+      description: `${stat.field} fill rate changed from ${(stat.baselinePresentRate * 100).toFixed(1)}% to ${(stat.latestPresentRate * 100).toFixed(1)}% (${(stat.populationChange * 100).toFixed(1)}pp)`,
       relatedFields: [stat.field],
       relatedRecordIds: Object.values(recordsById)
         .filter((record) => record.changedFields.some((change) => change.path === stat.field))

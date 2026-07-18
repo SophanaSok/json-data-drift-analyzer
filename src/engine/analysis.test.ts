@@ -49,6 +49,12 @@ describe("analysis engine", () => {
     expect(result.narrative).toContain("Bid header metadata");
   });
 
+  it("explains field population issues with both rates and percentage-point change", () => {
+    const result = getAnalysis();
+    const issue = result.qualityIssues.find((item) => item.kind === "field-population");
+    expect(issue?.description).toMatch(/fill rate changed from \d+\.\d% to \d+\.\d% \(-?\d+\.\dpp\)/);
+  });
+
   it("builds set-based filter indexes", () => {
     const result = getAnalysis();
     const ids = intersectSets([result.indexes.byStatus.changed, result.indexes.byChangeKind.emptied]);

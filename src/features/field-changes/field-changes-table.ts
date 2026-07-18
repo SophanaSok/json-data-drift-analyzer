@@ -13,6 +13,9 @@ export type FieldSortColumn =
 
 export type SortDirection = "asc" | "desc";
 
+export const POPULATION_CHANGE_EXPLANATION =
+  "Percentage-point change in field fill rate, calculated as Latest − Baseline. Example: 95% → 30% = −65pp.";
+
 export type FieldChangeRow = {
   field: string;
   changedRecords: number;
@@ -24,6 +27,17 @@ export type FieldChangeRow = {
   populationChange: number;
   severity: Severity;
 };
+
+export function formatPopulationChange(value: number): string {
+  return `${(value * 100).toFixed(1)}pp`;
+}
+
+export function describePopulationChange(row: FieldChangeRow): string {
+  const baseline = `${(row.baselinePresentRate * 100).toFixed(1)}%`;
+  const latest = `${(row.latestPresentRate * 100).toFixed(1)}%`;
+  const change = `${(row.populationChange * 100).toFixed(1)} percentage points`;
+  return `Field fill rate: ${baseline} → ${latest} (${change})`;
+}
 
 const SEVERITY_RANK: Record<Severity, number> = {
   pass: 0,

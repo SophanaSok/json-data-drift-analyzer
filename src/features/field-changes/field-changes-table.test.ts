@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import baseline from "../../test/fixtures/baseline.json";
 import latest from "../../test/fixtures/latest.json";
 import { runAnalysis } from "../../engine/diff";
-import { sortFieldChangeRows } from "./field-changes-table";
+import {
+  describePopulationChange,
+  formatPopulationChange,
+  POPULATION_CHANGE_EXPLANATION,
+  sortFieldChangeRows,
+  type FieldChangeRow
+} from "./field-changes-table";
 
 function getAnalysis() {
   return runAnalysis({
@@ -56,5 +62,34 @@ describe("field-changes-table sorting", () => {
         severityOrder.indexOf(sorted[index + 1].severity)
       );
     }
+  });
+});
+
+describe("field population change labels", () => {
+  const row: FieldChangeRow = {
+    field: "status",
+    changedRecords: 65,
+    emptied: 65,
+    restored: 0,
+    modified: 0,
+    baselinePresentRate: 0.95,
+    latestPresentRate: 0.3,
+    populationChange: -0.65,
+    severity: "high"
+  };
+
+  it("keeps the compact analyst-facing pp notation", () => {
+    expect(formatPopulationChange(row.populationChange)).toBe("-65.0pp");
+  });
+
+  it("describes the baseline-to-latest movement in full", () => {
+    expect(describePopulationChange(row)).toBe(
+      "Field fill rate: 95.0% → 30.0% (-65.0 percentage points)"
+    );
+  });
+
+  it("defines pp with its calculation and an example", () => {
+    expect(POPULATION_CHANGE_EXPLANATION).toContain("Latest − Baseline");
+    expect(POPULATION_CHANGE_EXPLANATION).toContain("95% → 30% = −65pp");
   });
 });
