@@ -1,17 +1,6 @@
 /// <reference lib="webworker" />
 import { runAnalysis } from "../engine/diff";
-import type { AnalyzeRequest, WorkerStep, WorkerMessage } from "./protocol";
-
-const steps: WorkerStep[] = [
-  "Parsing files",
-  "Detecting record collection",
-  "Matching records",
-  "Comparing fields",
-  "Comparing documents",
-  "Profiling field health",
-  "Building fast indexes",
-  "Ready"
-];
+import type { AnalyzeRequest, WorkerMessage } from "./protocol";
 
 function post(message: WorkerMessage): void {
   self.postMessage(message);
@@ -21,10 +10,6 @@ self.onmessage = (event: MessageEvent<AnalyzeRequest>) => {
   try {
     if (event.data.type !== "analyze") {
       return;
-    }
-
-    for (const step of steps.slice(0, -1)) {
-      post({ type: "progress", payload: { step } });
     }
 
     const baselineData = JSON.parse(event.data.payload.baselineText) as unknown;
@@ -37,7 +22,8 @@ self.onmessage = (event: MessageEvent<AnalyzeRequest>) => {
       baselineFileName: event.data.payload.baselineFileName,
       latestFileName: event.data.payload.latestFileName,
       analysisKey: event.data.payload.analysisKey,
-      profile: event.data.payload.profile
+      profile: event.data.payload.profile,
+      onProgress: (step) => post({ type: "progress", payload: { step } })
     });
 
     post({ type: "progress", payload: { step: "Ready" } });

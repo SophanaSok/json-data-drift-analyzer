@@ -9,6 +9,7 @@ import { defaultProfile } from "./profile";
 import { buildQualityIssues, computeFieldStats } from "./quality";
 import { buildSearchIndex } from "./search";
 import type { AnalysisResult, ChangeKind, ComparisonConfig, DiffRecord, FieldChange, QualityProfile, RecordStatus, Severity } from "./types";
+import type { WorkerStep } from "../workers/protocol";
 
 const DOCUMENT_FIELDS: Array<{ docs: string; hashes: string }> = [
   { docs: "BidDocuments", hashes: "BidDocumentHashes" },
@@ -82,20 +83,26 @@ export function runAnalysis(input: {
   latestFileName: string;
   analysisKey: string;
   profile?: QualityProfile;
+  onProgress?: (step: WorkerStep) => void;
 }): AnalysisResult {
   const profile = input.profile ?? defaultProfile;
+  const onProgress = input.onProgress ?? (() => {});
+  onProgress("Parsing files");
   const baselineExportDates = extractExportDates(input.baselineData, input.config.collectionPath);
   const latestExportDates = extractExportDates(input.latestData, input.config.collectionPath);
   const dateOrderingIssues = findDateOrderingIssues(baselineExportDates, latestExportDates);
+  onProgress("Detecting record collection");
   const baselineRecords = getCollection(input.baselineData, input.config.collectionPath).map((record) => normalizeRecord(record, input.config.ignoredFields));
   const latestRecords = getCollection(input.latestData, input.config.collectionPath).map((record) => normalizeRecord(record, input.config.ignoredFields));
 
+  onProgress("Matching records");
   const baselineByKey = new Map(baselineRecords.map((record) => [buildRecordKey(record, input.config.identityFields), record]));
   const latestByKey = new Map(latestRecords.map((record) => [buildRecordKey(record, input.config.identityFields), record]));
   const allKeys = new Set([...baselineByKey.keys(), ...latestByKey.keys()]);
 
   const recordsById: Record<string, DiffRecord> = {};
 
+  onProgress("Comparing fields");
   for (const key of allKeys) {
     const baseline = baselineByKey.get(key);
     const latest = latestByKey.get(key);
@@ -153,6 +160,7 @@ export function runAnalysis(input: {
   const duplicateLatest = collectDuplicateKeys(latestRecords, input.config.identityFields).duplicates;
   const duplicateKeys = [...new Set([...duplicateBaseline, ...duplicateLatest])];
 
+  onProgress("Profiling field health");
   const fieldStats = computeFieldStats(baselineRecords, latestRecords, profile);
   const qualityIssues = buildQualityIssues(fieldStats, recordsById, profile, duplicateKeys, baselineRecords.length, latestRecords.length);
 
@@ -165,6 +173,7 @@ export function runAnalysis(input: {
     }
   }
 
+  onProgress("Building fast indexes");
   const indexes = buildIndexes(recordsById);
   const sorts = buildSorts(recordsById);
   const allRecordIds = sorts.byRecordKey;

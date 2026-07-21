@@ -1,5 +1,5 @@
 import Dexie, { type Table } from "dexie";
-import type { AnalysisResult, QualityProfile } from "../engine/types";
+import type { AnalysisResult } from "../engine/types";
 
 export type SavedAnalysis = {
   analysisKey: string;
@@ -15,7 +15,6 @@ export type TextDiffCache = {
 
 class DriftDatabase extends Dexie {
   analyses!: Table<SavedAnalysis, string>;
-  profiles!: Table<QualityProfile, string>;
   textDiffs!: Table<TextDiffCache, string>;
 
   constructor() {
@@ -23,6 +22,10 @@ class DriftDatabase extends Dexie {
     this.version(1).stores({
       analyses: "analysisKey, createdAt",
       profiles: "id",
+      textDiffs: "id"
+    });
+    this.version(2).stores({
+      analyses: "analysisKey, createdAt",
       textDiffs: "id"
     });
   }

@@ -1,19 +1,3 @@
-export function detectCollectionPaths(input: unknown): string[] {
-  if (Array.isArray(input)) {
-    return ["$"];
-  }
-  if (input && typeof input === "object") {
-    const output: string[] = [];
-    for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
-      if (Array.isArray(value)) {
-        output.push(key);
-      }
-    }
-    return output;
-  }
-  return [];
-}
-
 export function getCollection(input: unknown, path: string): Array<Record<string, unknown>> {
   const source = path === "$" ? input : (input as Record<string, unknown> | undefined)?.[path];
   if (!Array.isArray(source)) {

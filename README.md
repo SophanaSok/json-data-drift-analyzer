@@ -45,10 +45,9 @@ json-data-drift-analyzer/
 - `vite`: fast browser-first build tooling.
 - `tailwindcss`: dense readable UI styling.
 - `zustand`: minimal local UI/view state.
-- `@tanstack/react-table`, `@tanstack/react-virtual`: large records table + virtualization.
+- `@tanstack/react-virtual`: virtualization for large records and field-changes tables.
 - `minisearch`: in-browser search index built once in worker.
-- `dexie`: IndexedDB persistence for analysis cache/profile data.
-- `ajv`: JSON schema validation foundation.
+- `dexie`: IndexedDB persistence for analysis cache.
 - `vitest`: engine unit tests.
 - `@playwright/test`: end-to-end browser smoke test.
 

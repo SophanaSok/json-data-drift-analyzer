@@ -7,6 +7,7 @@ import { defaultProfile } from "../../engine/profile";
 import { hashText } from "../../lib/hash";
 import { assessFileOrderFromJson } from "../../lib/file-order";
 import { useUiStore } from "../../stores/ui-store";
+import { useToastStore } from "../../stores/toast-store";
 import type { AnalyzeRequest, WorkerMessage } from "../../workers/protocol";
 
 const worker = new Worker(new URL("../../workers/analysis.worker.ts", import.meta.url), { type: "module" });
@@ -30,6 +31,7 @@ export function UploadPage() {
   const step = useUiStore((state) => state.workerStep);
   const setStep = useUiStore((state) => state.setWorkerStep);
   const setAnalysis = useUiStore((state) => state.setAnalysis);
+  const showToast = useToastStore((state) => state.showToast);
   const fileOrderAssessment = useUiStore((state) => state.fileOrderAssessment);
   const setFileOrderAssessment = useUiStore((state) => state.setFileOrderAssessment);
   const disabled = useMemo(
@@ -135,7 +137,11 @@ export function UploadPage() {
         }
         setStep("Ready");
         setAnalysis(event.data.payload);
-        await db.analyses.put({ analysisKey, createdAt: new Date().toISOString(), result: event.data.payload });
+        try {
+          await db.analyses.put({ analysisKey, createdAt: new Date().toISOString(), result: event.data.payload });
+        } catch {
+          showToast("Result saved in this session but not cached in browser storage.", "warning");
+        }
         navigate(`/results?tab=${event.data.payload.qualityIssues.some((issue) => ["critical", "high"].includes(issue.severity)) ? "overview" : "records"}`);
       };
     } catch (analysisError) {
