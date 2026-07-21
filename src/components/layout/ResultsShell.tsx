@@ -17,16 +17,22 @@ export function ResultsShell() {
   const [params] = useSearchParams();
   const tab = params.get("tab") ?? "overview";
   const analysis = useUiStore((state) => state.analysis);
+  const reset = useUiStore((state) => state.reset);
 
   return (
     <div className="mx-auto max-w-7xl">
       {analysis ? <ExportDateBanner metadata={analysis.metadata} /> : null}
-      <nav className="flex gap-2 border-b bg-white px-6 py-3 text-sm">
-        {tabs.map((item) => (
-          <Link key={item.id} className={`rounded px-3 py-1 ${tab === item.id ? "bg-sky-100" : "hover:bg-slate-100"}`} to={`/results?${new URLSearchParams({ ...Object.fromEntries(params), tab: item.id }).toString()}`}>
-            {item.label}
-          </Link>
-        ))}
+      <nav className="flex items-center justify-between border-b bg-white px-6 py-3 text-sm">
+        <div className="flex gap-2">
+          {tabs.map((item) => (
+            <Link key={item.id} className={`rounded px-3 py-1 ${tab === item.id ? "bg-sky-100" : "hover:bg-slate-100"}`} to={`/results?${new URLSearchParams({ ...Object.fromEntries(params), tab: item.id }).toString()}`}>
+              {item.label}
+            </Link>
+          ))}
+        </div>
+        <Link to="/" onClick={reset} className="rounded px-3 py-1 text-sky-700 hover:bg-slate-100" data-testid="start-new-analysis-link">
+          Start new analysis
+        </Link>
       </nav>
       {tab === "overview" ? <OverviewPage /> : null}
       {tab === "records" ? <RecordsPage /> : null}

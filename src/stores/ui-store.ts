@@ -13,6 +13,7 @@ type UiState = {
   setSelectedRecordId: (recordId: string | null) => void;
   setWorkerStep: (step: string | null) => void;
   setFileOrderAssessment: (assessment: FileOrderAssessment | null) => void;
+  reset: () => void;
 };
 
 const defaultFilter: FilterState = {
@@ -38,5 +39,6 @@ export const useUiStore = create<UiState>((set) => ({
   resetFilter: () => set({ filter: defaultFilter }),
   setSelectedRecordId: (selectedRecordId) => set({ selectedRecordId }),
   setWorkerStep: (workerStep) => set({ workerStep }),
-  setFileOrderAssessment: (fileOrderAssessment) => set({ fileOrderAssessment })
+  setFileOrderAssessment: (fileOrderAssessment) => set({ fileOrderAssessment }),
+  reset: () => set({ analysis: null, filter: defaultFilter, selectedRecordId: null, workerStep: null, fileOrderAssessment: null })
 }));
