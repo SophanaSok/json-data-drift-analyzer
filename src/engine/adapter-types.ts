@@ -92,6 +92,18 @@ export type SourceProfile = {
    */
   candidateOnlyPolicy?: "keep" | "exclude";
 
+  /**
+   * Optional safety gate governing whether a recovered data artifact may be
+   * exported. Reports and audits are always exportable — withholding the evidence
+   * of a problem helps nobody. Both checks default to enabled.
+   */
+  exportGate?: {
+    /** Block the recovered artifact when the match rate is below minimumMatchRate. */
+    blockOnBelowMinimumMatchRate?: boolean;
+    /** Block the recovered artifact when any critical QA finding exists. */
+    blockOnCriticalFindings?: boolean;
+  };
+
   /** Optional notes documenting profile decisions and assumptions */
   notes?: string[];
 };
