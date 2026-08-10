@@ -21,7 +21,7 @@ import {
   stripBOM,
   validateIdentityFields,
   verifyIdentityFieldsExist
-} from "./fixture-loader";
+} from "./source-loader";
 import type { SourceProfile } from "./adapter-types";
 import referenceData from "../test/fixtures/bellingham-reference.json";
 import candidateData from "../test/fixtures/bellingham-candidate.json";
@@ -61,7 +61,7 @@ const bellinghamProfile: SourceProfile = {
   minimumMatchRate: 0.95
 };
 
-describe("fixture-loader: BOM handling", () => {
+describe("source-loader: BOM handling", () => {
   it("detects and strips UTF-8 BOM", () => {
     const contentWithBOM = '﻿{"Export": []}';
     const result = stripBOM(contentWithBOM);
@@ -105,7 +105,7 @@ describe("fixture-loader: BOM handling", () => {
   });
 });
 
-describe("fixture-loader: real source files carry a BOM", () => {
+describe("source-loader: real source files carry a BOM", () => {
   // Regression guard: both real exports begin with U+FEFF, which is why a bare
   // JSON.parse on the uploaded text fails. See docs/forensic-bellingham-report.md.
   it("both fixture files start with a UTF-8 BOM", () => {
@@ -132,7 +132,7 @@ describe("fixture-loader: real source files carry a BOM", () => {
   });
 });
 
-describe("fixture-loader: Bellingham fixtures parse", () => {
+describe("source-loader: Bellingham fixtures parse", () => {
   it("parses bellingham-reference.json fixture", () => {
     expect(reference.Export).toBeDefined();
     expect(Array.isArray(reference.Export)).toBe(true);
@@ -151,7 +151,7 @@ describe("fixture-loader: Bellingham fixtures parse", () => {
   });
 });
 
-describe("fixture-loader: record path location", () => {
+describe("source-loader: record path location", () => {
   it("locates $.Export path in Bellingham reference data", () => {
     const result = inspectRecordsPath(reference, bellinghamProfile);
 
@@ -228,7 +228,7 @@ describe("fixture-loader: record path location", () => {
   });
 });
 
-describe("fixture-loader: identity fields", () => {
+describe("source-loader: identity fields", () => {
   it("verifies AgentID and BidURL exist in all Bellingham reference records", () => {
     const result = verifyIdentityFieldsExist(referenceRecords, bellinghamProfile);
 
@@ -285,7 +285,7 @@ describe("fixture-loader: identity fields", () => {
   });
 });
 
-describe("fixture-loader: blankness policies diverge as documented", () => {
+describe("source-loader: blankness policies diverge as documented", () => {
   const placeholderRecord = { Title: "N/A" };
   const emptyArrayRecord = { Documents: [] };
 
@@ -315,7 +315,7 @@ describe("fixture-loader: blankness policies diverge as documented", () => {
   });
 });
 
-describe("fixture-loader: rule 4 backfill eligibility gate", () => {
+describe("source-loader: rule 4 backfill eligibility gate", () => {
   it("treats null, undefined, empty, and whitespace-only as eligible", () => {
     expect(isBackfillEligibleValue(null)).toBe(true);
     expect(isBackfillEligibleValue(undefined)).toBe(true);
@@ -381,7 +381,7 @@ describe("fixture-loader: rule 4 backfill eligibility gate", () => {
   });
 });
 
-describe("fixture-loader: field value state classification", () => {
+describe("source-loader: field value state classification", () => {
   it("classifies present values correctly", () => {
     const record = { Title: "Test Project", BidStatus: "Open" };
 
@@ -438,7 +438,7 @@ describe("fixture-loader: field value state classification", () => {
   });
 });
 
-describe("fixture-loader: blank value subtype analysis", () => {
+describe("source-loader: blank value subtype analysis", () => {
   it("distinguishes null from undefined", () => {
     expect(analyzeBlankValue(null)).toEqual({ isBlank: true, subtype: "null" });
     expect(analyzeBlankValue(undefined)).toEqual({ isBlank: true, subtype: "undefined" });
@@ -469,7 +469,7 @@ describe("fixture-loader: blank value subtype analysis", () => {
   });
 });
 
-describe("fixture-loader: Bellingham fixture field states", () => {
+describe("source-loader: Bellingham fixture field states", () => {
   it("confirms Title is blank in all candidate records (regression evidence)", () => {
     const blankTitles = candidateRecords.filter((r) => classifyFieldValue(r, "Title") === "blank");
     expect(blankTitles).toHaveLength(500);

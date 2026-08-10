@@ -5,8 +5,6 @@
  * Each source (e.g., bellingham-procureware) defines its own profile.
  */
 
-import type { Severity } from "./types";
-
 // ============================================================================
 // Source Profile Types
 // ============================================================================
@@ -60,6 +58,20 @@ export type SourceProfile = {
 
   /** Minimum match rate threshold (0.0-1.0) for accepting the comparison */
   minimumMatchRate: number;
+
+  /**
+   * Optional per-field validation rules. The QA engine validates only what is
+   * configured here — it never infers which fields are dates, URLs, or JSON from
+   * their names (AGENTS.md rule 1).
+   */
+  validation?: FieldValidationRules;
+
+  /**
+   * Optional tolerance for record-count drift against the reference, as a fraction
+   * of the reference count (0.05 = 5%). Absent, count differences are reported at
+   * informational severity rather than judged against an invented threshold.
+   */
+  recordCountTolerance?: number;
 
   /** Optional notes documenting profile decisions and assumptions */
   notes?: string[];
@@ -161,98 +173,13 @@ export type FieldState = {
 };
 
 // ============================================================================
-// Finding Severity and Category Types
+// Findings
 // ============================================================================
-
-/**
- * Categories for classifying findings during analysis.
- */
-export type FindingCategory =
-  | "identity-mismatch"
-  | "field-regression"
-  | "field-restored"
-  | "document-added"
-  | "document-removed"
-  | "document-modified"
-  | "document-incomplete"
-  | "duplicate-record"
-  | "profile-violation"
-  | "parse-error"
-  | "path-not-found"
-  | "backfill-candidate"
-  | "review-required"
-  | "date-ordering-issue";
-
-/**
- * A finding represents a specific issue or observation during analysis.
- * Findings are auditable and drive recovery decisions.
- */
-export type Finding = {
-  /** Unique finding identifier */
-  id: string;
-
-  /** Category of the finding */
-  category: FindingCategory;
-
-  /** Severity level */
-  severity: Severity;
-
-  /** Title/summary of the finding */
-  title: string;
-
-  /** Detailed description */
-  description: string;
-
-  /** Fields related to this finding */
-  relatedFields: string[];
-
-  /** Record keys affected by this finding */
-  affectedRecordKeys: string[];
-
-  /** Source profile id that governed this finding */
-  profileId: string;
-
-  /** Profile version at time of finding */
-  profileVersion: number;
-
-  /** Timestamp when finding was recorded (ISO 8601) */
-  timestamp: string;
-
-  /** Original value (for audit) */
-  originalValue?: unknown;
-
-  /** Output/recovered value (for audit) */
-  outputValue?: unknown;
-
-  /** Reason for the finding/action */
-  reason: string;
-
-  /** Reference to source run (file name or run id) */
-  sourceRun?: string;
-
-  /** Reference to reference run (file name or run id) */
-  referenceRun?: string;
-
-  /** Matching key used for record pairing */
-  matchingKey?: string;
-};
-
-/**
- * Summary of findings grouped by category and severity.
- */
-export type FindingsSummary = {
-  /** Total number of findings */
-  totalCount: number;
-
-  /** Findings grouped by category */
-  byCategory: Record<FindingCategory, number>;
-
-  /** Findings grouped by severity */
-  bySeverity: Record<Severity, number>;
-
-  /** All findings (may be large) */
-  findings: Finding[];
-};
+//
+// The Finding vocabulary lives in ./findings.ts. Earlier drafts of Finding,
+// FindingCategory, and FindingsSummary lived here, were referenced by nothing, and
+// used a different shape and severity scale than the QA engine produces. They were
+// removed rather than left to collide with the real ones.
 
 // ============================================================================
 // Adapter and Loader Types

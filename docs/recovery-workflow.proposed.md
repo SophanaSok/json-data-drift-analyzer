@@ -154,7 +154,7 @@ Verified against the tree as of this proposal. Nothing below has been changed.
 |---|---|---|
 | `src/engine/` | Pure, framework-agnostic, Vitest-covered | New modules: `recovery.ts` (lane classification), `decisions.ts` (log + apply), `export-artifact.ts` (serializer). All pure. |
 | `src/engine/types.ts` | `QualityProfile` has `requiredFields`, `optionalEmptyFields`, `emptyRules`, `identityDefault`, `fieldGroups` — **no backfill concept at all** | **Partly done:** `SourceProfile` now exists in `src/engine/adapter-types.ts` with `id`, `version`, `collectionPath`, `primaryKey`, `fallbackKeys`, `dedupeKey`, `hardRequiredFields`, `safeBackfillFields`, `manualReviewFields`, `excludedFields`, `minimumMatchRate`. Still to decide: whether it replaces or composes with `QualityProfile` |
-| `src/engine/fixture-loader.ts` | **Exists.** BOM-safe parsing, profile-declared records-path resolution, rule-4 backfill gate, two named blankness policies | Rename off the `fixture-` prefix once it is used at runtime as well as in tests |
+| `src/engine/source-loader.ts` | **Exists and is wired in.** BOM-safe parsing, profile-declared records-path resolution, rule-4 backfill gate, two named blankness policies. Used by `analysis.worker.ts` and `lib/file-order.ts` | — |
 | `src/db/index.ts` | Dexie at `version(2)`. **`version(1)` declared a `profiles: "id"` store that `version(2)` dropped.** | `version(3)` re-adding `profiles`, plus a `decisions` table keyed by analysis + matchKey + field |
 | `src/workers/protocol.ts` | `AnalyzeRequest` already accepts optional `profile?: QualityProfile` | Lane classification can ride the existing worker pass; add a `WorkerStep` for it |
 | `src/engine/empty.ts` | `isEmpty` handles null/undefined, whitespace, placeholders, empty arrays | **Reuse as-is.** Note it treats `n/a`, `na`, `none`, `unknown`, `-` as empty; rule 4's precondition is strictly null/absent/empty/whitespace. Decide whether placeholder values count as "blank" for backfill eligibility — see §9. |
@@ -251,7 +251,7 @@ artifact can be trusted.
    Two named policies now exist. `isBlankStrict` in `src/engine/empty.ts` implements rule 4's
    reading (null, absent, empty, whitespace-only); `isEmpty` keeps the broader reporting reading
    that also covers placeholders and empty arrays. `isBackfillEligibleValue` /
-   `isBackfillEligibleField` in `src/engine/fixture-loader.ts` are the rule-4 gate and take **no
+   `isBackfillEligibleField` in `src/engine/source-loader.ts` are the rule-4 gate and take **no
    policy argument**, so no call site can opt into placeholder semantics for backfill. A candidate
    `"N/A"` therefore routes to REVIEW rather than being overwritten. The asymmetry decided it:
    treating a placeholder as blank silently destroys a published value, while treating it as
