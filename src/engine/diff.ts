@@ -87,7 +87,10 @@ export function runAnalysis(input: {
 }): AnalysisResult {
   const profile = input.profile ?? defaultProfile;
   const onProgress = input.onProgress ?? (() => {});
-  onProgress("Parsing files");
+  // No "Parsing files" step here: this function receives already-parsed data. The
+  // caller that actually parses reports that step, so a parse failure surfaces
+  // under the right label instead of after it.
+  onProgress("Reading export metadata");
   const baselineExportDates = extractExportDates(input.baselineData, input.config.collectionPath);
   const latestExportDates = extractExportDates(input.latestData, input.config.collectionPath);
   const dateOrderingIssues = findDateOrderingIssues(baselineExportDates, latestExportDates);
@@ -102,7 +105,10 @@ export function runAnalysis(input: {
 
   const recordsById: Record<string, DiffRecord> = {};
 
-  onProgress("Comparing fields");
+  // Fields and documents are compared in this single pass, so one honest label
+  // covers both. A separate "Comparing documents" step would either fire once per
+  // record or announce a phase that does not exist.
+  onProgress("Comparing fields and documents");
   for (const key of allKeys) {
     const baseline = baselineByKey.get(key);
     const latest = latestByKey.get(key);

@@ -20,6 +20,53 @@ function getAnalysis() {
   });
 }
 
+describe("analysis engine progress reporting", () => {
+  function collectSteps() {
+    const steps: string[] = [];
+    runAnalysis({
+      baselineData: baseline,
+      latestData: latest,
+      baselineFileName: "baseline.json",
+      latestFileName: "latest.json",
+      analysisKey: "progress-key",
+      config: {
+        collectionPath: "Export",
+        identityFields: ["ProjectCode"],
+        ignoredFields: [],
+        profileId: "default-government-bids"
+      },
+      onProgress: (step) => steps.push(step)
+    });
+    return steps;
+  }
+
+  it("does not claim to parse — it receives already-parsed data", () => {
+    // The worker parses before calling runAnalysis, so reporting "Parsing files"
+    // here mislabelled the work and left parse failures with no progress update.
+    expect(collectSteps()).not.toContain("Parsing files");
+  });
+
+  it("reports reading export metadata as its first step", () => {
+    expect(collectSteps()[0]).toBe("Reading export metadata");
+  });
+
+  it("emits each step exactly once, never once per record", () => {
+    const steps = collectSteps();
+    expect(new Set(steps).size).toBe(steps.length);
+  });
+
+  it("reports every step it performs, in order", () => {
+    expect(collectSteps()).toEqual([
+      "Reading export metadata",
+      "Detecting record collection",
+      "Matching records",
+      "Comparing fields and documents",
+      "Profiling field health",
+      "Building fast indexes"
+    ]);
+  });
+});
+
 describe("analysis engine", () => {
   it("matches by ProjectCode and classifies record statuses", () => {
     const result = getAnalysis();

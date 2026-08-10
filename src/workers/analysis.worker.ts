@@ -13,6 +13,10 @@ self.onmessage = (event: MessageEvent<AnalyzeRequest>) => {
       return;
     }
 
+    // Reported before the work, so a parse failure is attributed to parsing rather
+    // than arriving with no progress update at all.
+    post({ type: "progress", payload: { step: "Parsing files" } });
+
     // Strips a UTF-8 BOM before parsing. Real scraper exports ship with one, and a
     // bare JSON.parse rejects them outright.
     const baseline = parseJSON(event.data.payload.baselineText, event.data.payload.baselineFileName);
