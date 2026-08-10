@@ -395,7 +395,18 @@ describe("export: contractor ticket", () => {
 
     expect(content).toContain(`bellingham-procureware\` v${bellinghamProfile.version}`);
     expect(content).toContain(FIXED_NOW);
-    expect(content).toContain("candidate SHA-256");
+    // Both runs appear in the compared-runs table with their hashes.
+    expect(content).toContain("| Role | File | Export timestamp | SHA-256 |");
+    expect(content).toContain("a".repeat(64));
+    expect(content).toContain("b".repeat(64));
+  });
+
+  it("leads with the ticket title, severity, and labels", () => {
+    const content = buildContractorTicketArtifact(bellinghamInputs()).content;
+
+    expect(content.startsWith("# [bellingham-procureware]")).toBe(true);
+    expect(content).toContain("**Severity:**");
+    expect(content).toContain("source:bellingham-procureware");
   });
 
   it("reports an unavailable hash instead of omitting the row", () => {
@@ -407,18 +418,33 @@ describe("export: contractor ticket", () => {
       })
     ).content;
 
-    expect(content).toContain("unavailable (insecure context)");
+    expect(content).toContain("unavailable — insecure context");
   });
 
-  it("counts every finding in a group even when it shows only examples", () => {
+  it("reports every finding group with counts and percentages", () => {
     const content = buildContractorTicketArtifact(bellinghamInputs()).content;
-    expect(content).toMatch(/…and \d+ more of this kind/);
+
+    expect(content).toContain("| Field | Records affected | Share of matched records | Issue |");
+    expect(content).toContain("| `Title` | 499 | 100.0% |");
+  });
+
+  it("caps evidence at three examples and says what it omitted", () => {
+    const content = buildContractorTicketArtifact(bellinghamInputs()).content;
+    expect(content).toMatch(/further example\(s\) omitted/);
+  });
+
+  it("hedges on root cause rather than naming a selector", () => {
+    const content = buildContractorTicketArtifact(bellinghamInputs()).content;
+
+    expect(content).toContain("Observed behaviour suggests");
+    expect(content).toContain("The cause is not established from this data.");
+    expect(content).not.toMatch(/querySelector|getElementsBy/);
   });
 
   it("lists blocking issues when the gate withholds the data export", () => {
     const content = buildContractorTicketArtifact(inputs([], [{ Other: "x" }])).content;
 
-    expect(content).toContain("Blocking issues");
+    expect(content).toContain("## Export gate");
     expect(content).toContain("recovered data export is withheld");
   });
 

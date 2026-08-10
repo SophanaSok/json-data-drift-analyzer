@@ -14,11 +14,12 @@
  */
 
 import { hashText } from "../lib/hash";
-import type { Finding, FindingSeverity } from "./findings";
+import type { FindingSeverity } from "./findings";
 import type { QaReport } from "./qa";
 import type { RecoveryResult } from "./recovery";
 import type { DedupeResult } from "./dedupe";
 import type { SourceProfile } from "./adapter-types";
+import { buildTicketDraft, type TicketFindingGroup, type TicketInput } from "./ticketTemplate";
 
 export type ExportArtifactKind =
   | "recovered"
@@ -61,6 +62,10 @@ export type ExportInputs = {
   inputHashes: InputFileHash[];
   sourceRun?: string | null;
   referenceRun?: string | null;
+  /** Rows identifying the source and bot, passed through to the ticket. */
+  sourceIdentification?: Array<{ label: string; value: string }>;
+  /** Root-cause evidence someone actually has; quoted verbatim, never invented. */
+  suppliedRootCauseEvidence?: string[];
 };
 
 export type ExportBundle = {
@@ -440,103 +445,136 @@ export function buildFindingsCsvArtifact(inputs: ExportInputs): ExportArtifact {
 // Contractor ticket
 // ---------------------------------------------------------------------------
 
-const SEVERITY_ORDER: FindingSeverity[] = ["critical", "high", "medium", "low", "info"];
-const TICKET_EXAMPLES_PER_GROUP = 3;
-
-function groupFindings(findings: Finding[]): Array<{ category: string; severity: FindingSeverity; count: number; examples: Finding[] }> {
-  const groups = new Map<string, { category: string; severity: FindingSeverity; items: Finding[] }>();
-
-  for (const finding of findings) {
-    const key = `${finding.severity}|${finding.category}|${finding.fieldPath ?? ""}`;
-    const bucket = groups.get(key);
-    if (bucket) bucket.items.push(finding);
-    else groups.set(key, { category: `${finding.category}${finding.fieldPath ? ` (${finding.fieldPath})` : ""}`, severity: finding.severity, items: [finding] });
-  }
-
-  return [...groups.values()]
-    .map((group) => ({
-      category: group.category,
-      severity: group.severity,
-      count: group.items.length,
-      examples: group.items.slice(0, TICKET_EXAMPLES_PER_GROUP)
-    }))
-    .sort((left, right) => {
-      const bySeverity = SEVERITY_ORDER.indexOf(left.severity) - SEVERITY_ORDER.indexOf(right.severity);
-      if (bySeverity !== 0) return bySeverity;
-      if (right.count !== left.count) return right.count - left.count;
-      return left.category < right.category ? -1 : left.category > right.category ? 1 : 0;
-    });
-}
+const TICKET_EXAMPLE_LIMIT = 3;
 
 /**
- * A Trello-ready Markdown draft. Deterministic: no wall-clock reads, stable ordering,
- * and every truncation states what it dropped.
+ * Derive the ticket template's inputs from an export run.
  *
- * This produces text only. Creating a card is a network write and needs a user-facing
+ * The ticket's content lives in ./ticketTemplate.ts. This function only translates
+ * what an export already knows into that shape — deriving it in two places is how
+ * two tickets end up disagreeing about the same run.
+ */
+function ticketInputFromExport(inputs: ExportInputs): TicketInput {
+  const matchedCount = inputs.qa.matchReport.counts.matched_primary + inputs.qa.matchReport.counts.matched_fallback;
+
+  const groups = new Map<string, TicketFindingGroup>();
+  for (const finding of inputs.qa.findings) {
+    const key = `${finding.category}|${finding.fieldPath ?? ""}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.count += 1;
+      // A group takes the most severe finding it contains.
+      if (SEVERITY_RANK[finding.severity] < SEVERITY_RANK[existing.severity]) {
+        existing.severity = finding.severity;
+      }
+      continue;
+    }
+    groups.set(key, {
+      category: finding.category,
+      severity: finding.severity,
+      field: finding.fieldPath,
+      count: 1,
+      outOf: matchedCount
+    });
+  }
+
+  // Evidence comes from findings that actually carry both sides of the comparison.
+  const evidenceFindings = inputs.qa.findings.filter(
+    (finding) => finding.recordKey !== null && finding.fieldPath !== null && finding.referenceValue !== undefined
+  );
+  const examples = evidenceFindings
+    .slice(0, TICKET_EXAMPLE_LIMIT)
+    .map((finding) => ({
+      recordKey: finding.recordKey as string,
+      field: finding.fieldPath as string,
+      expected: finding.referenceValue,
+      actual: finding.candidateValue
+    }));
+
+  const hashFor = (role: "candidate" | "reference") => {
+    const hash = inputs.inputHashes.find((entry) => entry.role === role);
+    return {
+      name: hash?.fileName ?? (role === "candidate" ? inputs.sourceRun ?? null : inputs.referenceRun ?? null),
+      // An export run does not carry the exports' own timestamps; the template
+      // renders "not reported" rather than inventing one.
+      timestamp: null,
+      sha256: hash?.sha256 ?? null,
+      hashUnavailableReason: hash?.unavailableReason ?? "no hash was computed for this run"
+    };
+  };
+
+  return {
+    profile: inputs.profile,
+    run: {
+      generatedAt: inputs.generatedAt,
+      candidate: hashFor("candidate"),
+      reference: hashFor("reference"),
+      sourceIdentification: inputs.sourceIdentification ?? [],
+      candidateRecordCount: inputs.qa.matchReport.candidateCount,
+      referenceRecordCount: inputs.qa.matchReport.referenceCount,
+      matchedRecordCount: matchedCount,
+      matchRate: inputs.qa.matchReport.matchRate
+    },
+    findingGroups: [...groups.values()],
+    examples,
+    // The true total, so the ticket reports what it left out rather than implying
+    // these three are all there was.
+    totalExamplesAvailable: evidenceFindings.length,
+    recovery: {
+      performed: inputs.recovery.summary.backfilledFieldCount > 0,
+      backfilledFieldCount: inputs.recovery.summary.backfilledFieldCount,
+      recordsWithBackfill: inputs.recovery.summary.recordsWithBackfill,
+      backfillableFields: inputs.recovery.summary.backfillableFields,
+      withheldFields: inputs.recovery.summary.dateSensitiveFieldsWithheld,
+      notPerformedReason:
+        inputs.recovery.summary.backfillableFields.length === 0
+          ? "No field is approved for automatic backfill for this source."
+          : "No candidate record met the conditions for backfill."
+    },
+    suppliedRootCauseEvidence: inputs.suppliedRootCauseEvidence
+  };
+}
+
+const SEVERITY_RANK: Record<FindingSeverity, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+  info: 4
+};
+
+/**
+ * A Trello-ready Markdown draft.
+ *
+ * The ticket body comes from `buildTicketDraft`, which owns the wording and the
+ * safety rules. This function adds only what belongs to the export rather than the
+ * ticket: the artifact framing, the export gate's verdict, and the attachment list.
+ *
+ * Produces text. Creating a card is a network write needing a user-facing
  * confirmation step (AGENTS.md rule 11); nothing here talks to Trello.
  */
 export function buildContractorTicketArtifact(inputs: ExportInputs): ExportArtifact {
-  const metadata = buildRunMetadata(inputs);
+  const draft = buildTicketDraft(ticketInputFromExport(inputs));
   const gate = evaluateExportGate(inputs.profile, inputs.qa, inputs.qa.matchReport.matchRate);
-  const groups = groupFindings(inputs.qa.findings);
 
   const lines: string[] = [];
-  lines.push(`# Scraper data quality report — ${inputs.profile.id}`);
+  lines.push(`# ${draft.title}`);
+  lines.push("");
+  lines.push(`**Severity:** ${draft.severity} · **Labels:** ${draft.suggestedLabels.join(", ")}`);
   lines.push("");
   lines.push("**This is a draft for review. No card has been created and no external system has been contacted.**");
   lines.push("");
-  lines.push("## Run");
-  lines.push("");
-  lines.push(`| Field | Value |`);
-  lines.push(`| --- | --- |`);
-  lines.push(`| Generated | ${metadata.generatedAt} |`);
-  lines.push(`| Source profile | \`${metadata.profileId}\` v${metadata.profileVersion} |`);
-  lines.push(`| Candidate run | ${metadata.sourceRun ?? "(unnamed)"} |`);
-  lines.push(`| Reference run | ${metadata.referenceRun ?? "(unnamed)"} |`);
-  lines.push(`| Matching key | ${metadata.matchingKey.join(" + ")} |`);
-  for (const file of metadata.inputFiles) {
-    lines.push(`| ${file.role} SHA-256 | ${file.sha256 ?? `unavailable (${file.hashUnavailableReason})`} |`);
-  }
-  lines.push("");
-
-  lines.push("## Summary");
-  lines.push("");
-  lines.push(`- Candidate records: ${inputs.qa.matchReport.candidateCount}`);
-  lines.push(`- Reference records: ${inputs.qa.matchReport.referenceCount}`);
-  lines.push(`- Match rate: ${(inputs.qa.matchReport.matchRate * 100).toFixed(2)}% (minimum ${(inputs.profile.minimumMatchRate * 100).toFixed(2)}%)`);
-  lines.push(`- Findings: ${inputs.qa.counts.total} (${inputs.qa.counts.bySeverity.critical} critical, ${inputs.qa.counts.bySeverity.high} high, ${inputs.qa.counts.bySeverity.medium} medium)`);
-  lines.push(`- Records excluded by recovery: ${inputs.recovery.summary.excludedCount}`);
-  lines.push(`- Duplicates removed: ${inputs.dedupe.summary.removedCount}`);
+  lines.push(draft.markdownDescription);
   lines.push("");
 
   if (gate.blockingReasons.length > 0) {
-    lines.push("## ⚠️ Blocking issues");
+    lines.push("## Export gate");
     lines.push("");
     for (const reason of gate.blockingReasons) {
       lines.push(`- ${reason}`);
     }
     lines.push("");
     lines.push("The recovered data export is withheld until these are resolved.");
-    lines.push("");
-  }
-
-  lines.push("## Findings by group");
-  lines.push("");
-  if (groups.length === 0) {
-    lines.push("No findings.");
-    lines.push("");
-  }
-  for (const group of groups) {
-    lines.push(`### ${group.severity.toUpperCase()} — ${group.category} (${group.count})`);
-    lines.push("");
-    for (const example of group.examples) {
-      const reference = example.referenceValue === null || example.referenceValue === undefined ? "—" : JSON.stringify(example.referenceValue);
-      const candidate = example.candidateValue === null || example.candidateValue === undefined ? "—" : JSON.stringify(example.candidateValue);
-      lines.push(`- \`${example.recordKey ?? "(dataset)"}\` — reference ${truncateForTicket(reference)} → candidate ${truncateForTicket(candidate)}`);
-    }
-    if (group.count > group.examples.length) {
-      lines.push(`- …and ${group.count - group.examples.length} more of this kind (see the attached CSV)`);
-    }
     lines.push("");
   }
 
@@ -547,16 +585,11 @@ export function buildContractorTicketArtifact(inputs: ExportInputs): ExportArtif
   lines.push(`- \`${buildFileName("recovery-audit", inputs.profile.id, inputs.generatedAt)}\` — field-level provenance and exclusion reasons`);
   lines.push("");
 
-  const content = `${lines.join("\n")}`;
+  const content = lines.join("\n");
   const fileName = buildFileName("contractor-ticket", inputs.profile.id, inputs.generatedAt);
   assertNoSecrets(content, fileName);
 
   return { kind: "contractor-ticket", fileName, contentType: "text/markdown", content };
-}
-
-function truncateForTicket(value: string): string {
-  const limit = 120;
-  return value.length > limit ? `${value.slice(0, limit)}…[+${value.length - limit}]` : value;
 }
 
 // ---------------------------------------------------------------------------
