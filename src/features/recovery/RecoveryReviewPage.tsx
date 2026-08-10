@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   buildSummaryTiles,
@@ -9,9 +9,12 @@ import {
 } from "./recovery-review-table";
 import { FindingsExplorer } from "./FindingsExplorer";
 import { RecordInspector } from "./RecordInspector";
+import { DecisionQueue } from "./DecisionQueue";
 import { buildExportBundle, downloadArtifact, type ExportArtifact } from "../../engine/export";
 import { getProfile } from "../../profiles";
 import { useUiStore } from "../../stores/ui-store";
+import { db } from "../../db";
+import type { RecoveryDecision } from "../../engine/decisions";
 import { useToastStore } from "../../stores/toast-store";
 
 const TONE_CLASS = {
@@ -25,6 +28,35 @@ export function RecoveryReviewPage() {
   const review = useUiStore((state) => state.review);
   const showToast = useToastStore((state) => state.showToast);
   const [openRecordKey, setOpenRecordKey] = useState<string | null>(null);
+  const [decisionLog, setDecisionLog] = useState<RecoveryDecision[]>([]);
+
+  const analysisKey = review?.generatedAt ?? "";
+  useEffect(() => {
+    if (!review) return;
+    let cancelled = false;
+    void db.decisions
+      .where("analysisKey")
+      .equals(analysisKey)
+      .sortBy("timestamp")
+      .then((rows) => {
+        if (!cancelled) setDecisionLog(rows);
+      })
+      .catch(() => {
+        // A cache read failure must not hide the review; the log simply starts empty.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [review, analysisKey]);
+
+  const onRecordDecisions = (next: RecoveryDecision[]) => {
+    setDecisionLog(next);
+    const appended = next[next.length - 1];
+    if (!appended) return;
+    void db.decisions.put({ ...appended, analysisKey }).catch(() => {
+      showToast("Decision recorded for this session but not saved in browser storage.", "warning");
+    });
+  };
 
   const model = useMemo(() => {
     if (!review) return null;
@@ -147,6 +179,16 @@ export function RecoveryReviewPage() {
             : "No field is approved for automatic backfill under this profile."}
         </p>
       </section>
+
+      {model.profile ? (
+        <DecisionQueue
+          review={review}
+          profile={model.profile}
+          log={decisionLog}
+          onRecord={onRecordDecisions}
+          timestamp={review.generatedAt}
+        />
+      ) : null}
 
       <FindingsExplorer findings={review.qa.findings} />
 

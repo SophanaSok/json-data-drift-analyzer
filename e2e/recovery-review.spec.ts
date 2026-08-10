@@ -141,3 +141,81 @@ test("source profile is selectable and governs the review", async ({ page }) => 
   await expect(select).toHaveValue("bellingham-procureware");
   await expect(page.getByText("Approved fields:")).toContainText("ContactPhone");
 });
+
+test.describe("recovery review: decision log", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("");
+    await page
+      .getByTestId("baseline-input")
+      .setInputFiles(path.join(root, "src/test/fixtures/bellingham-reference.json"));
+    await page
+      .getByTestId("latest-input")
+      .setInputFiles(path.join(root, "src/test/fixtures/bellingham-candidate.json"));
+    await page.getByTestId("analyze-button").click();
+    await page.getByRole("link", { name: "Recovery", exact: true }).click();
+    await expect(page.getByTestId("decision-queue")).toBeVisible({ timeout: 30000 });
+  });
+
+  test("reports the lane split between automatic and awaiting review", async ({ page }) => {
+    await expect(page.getByTestId("lane-counts")).toContainText("1407 applied automatically");
+    await expect(page.getByTestId("lane-counts")).toContainText("1992 awaiting a decision");
+  });
+
+  test("refuses a decision with no reason", async ({ page }) => {
+    await page.getByTestId("decide-0").click();
+    await page.getByTestId("decision-backfill").click();
+
+    await expect(page.getByTestId("decision-error")).toContainText("reason is required");
+    await expect(page.getByTestId("decision-log")).toHaveCount(0);
+  });
+
+  test("records a decision and shows it in the append-only log", async ({ page }) => {
+    await page.getByTestId("decide-0").click();
+    await page.getByTestId("decision-reason").fill("confirmed with the city");
+    await page.getByTestId("decision-backfill").click();
+
+    const log = page.getByTestId("decision-log");
+    await expect(log).toContainText("1 entries");
+    await expect(log).toContainText("confirmed with the city");
+    await expect(log).toContainText("Append-only");
+    await expect(page.getByTestId("lane-counts")).toContainText("1 decided");
+  });
+
+  test("keeps the superseded entry when a decision is revised", async ({ page }) => {
+    await page.getByTestId("decide-0").click();
+    await page.getByTestId("decision-reason").fill("first call");
+    await page.getByTestId("decision-backfill").click();
+
+    await page.getByTestId("decide-0").click();
+    await page.getByTestId("decision-reason").fill("changed my mind");
+    await page.getByTestId("decision-keep").click();
+
+    const log = page.getByTestId("decision-log");
+    await expect(log).toContainText("2 entries");
+    await expect(log).toContainText("first call");
+    await expect(log).toContainText("changed my mind");
+    // One cell, decided twice.
+    await expect(page.getByTestId("lane-counts")).toContainText("1 decided");
+    await expect(page.getByTestId("lane-counts")).toContainText("1 revised");
+  });
+
+  test("survives a reload, because decisions are persisted", async ({ page }) => {
+    await page.getByTestId("decide-0").click();
+    await page.getByTestId("decision-reason").fill("persisted decision");
+    await page.getByTestId("decision-backfill").click();
+    await expect(page.getByTestId("decision-log")).toContainText("persisted decision");
+
+    // A reload lands back on /results, where the upload inputs do not exist.
+    await page.goto("");
+    await page
+      .getByTestId("baseline-input")
+      .setInputFiles(path.join(root, "src/test/fixtures/bellingham-reference.json"));
+    await page
+      .getByTestId("latest-input")
+      .setInputFiles(path.join(root, "src/test/fixtures/bellingham-candidate.json"));
+    await page.getByTestId("analyze-button").click();
+    await page.getByRole("link", { name: "Recovery", exact: true }).click();
+
+    await expect(page.getByTestId("decision-log")).toContainText("persisted decision", { timeout: 30000 });
+  });
+})
