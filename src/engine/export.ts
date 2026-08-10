@@ -454,7 +454,7 @@ const TICKET_EXAMPLE_LIMIT = 3;
  * what an export already knows into that shape — deriving it in two places is how
  * two tickets end up disagreeing about the same run.
  */
-function ticketInputFromExport(inputs: ExportInputs): TicketInput {
+export function buildTicketInputFromExport(inputs: ExportInputs): TicketInput {
   const matchedCount = inputs.qa.matchReport.counts.matched_primary + inputs.qa.matchReport.counts.matched_fallback;
 
   const groups = new Map<string, TicketFindingGroup>();
@@ -554,7 +554,7 @@ const SEVERITY_RANK: Record<FindingSeverity, number> = {
  * confirmation step (AGENTS.md rule 11); nothing here talks to Trello.
  */
 export function buildContractorTicketArtifact(inputs: ExportInputs): ExportArtifact {
-  const draft = buildTicketDraft(ticketInputFromExport(inputs));
+  const draft = buildTicketDraft(buildTicketInputFromExport(inputs));
   const gate = evaluateExportGate(inputs.profile, inputs.qa, inputs.qa.matchReport.matchRate);
 
   const lines: string[] = [];

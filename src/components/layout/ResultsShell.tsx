@@ -14,12 +14,17 @@ const RecoveryReviewPage = lazy(() =>
   import("../../features/recovery/RecoveryReviewPage").then((module) => ({ default: module.RecoveryReviewPage }))
 );
 
+const ContractorTicketPage = lazy(() =>
+  import("../../features/ticket/ContractorTicketPage").then((module) => ({ default: module.ContractorTicketPage }))
+);
+
 const tabs = [
   { id: "overview", label: "Overview" },
   { id: "records", label: "Records" },
   { id: "field-changes", label: "Field Changes" },
   { id: "data-health", label: "Data Health" },
-  { id: "recovery", label: "Recovery" }
+  { id: "recovery", label: "Recovery" },
+  { id: "ticket", label: "Ticket" }
 ] as const;
 
 export function ResultsShell() {
@@ -50,6 +55,11 @@ export function ResultsShell() {
       {tab === "recovery" ? (
         <Suspense fallback={<p className="p-6 text-sm text-slate-600">Loading recovery review…</p>}>
           <RecoveryReviewPage />
+        </Suspense>
+      ) : null}
+      {tab === "ticket" ? (
+        <Suspense fallback={<p className="p-6 text-sm text-slate-600">Loading ticket draft…</p>}>
+          <ContractorTicketPage />
         </Suspense>
       ) : null}
     </div>
