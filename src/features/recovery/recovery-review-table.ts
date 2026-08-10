@@ -9,6 +9,7 @@
 
 import type { RecoveryReview } from "../../engine/review";
 import type { ProvenanceSource } from "../../engine/provenance";
+import type { Finding, FindingCategory, FindingSeverity, RecommendedAction } from "../../engine/findings";
 
 export type BackfillGroup = {
   field: string;
@@ -195,4 +196,166 @@ export function changedRecords(review: RecoveryReview): Array<{
         ? right.changedFieldCount - left.changedFieldCount
         : left.candidateIndex - right.candidateIndex
     );
+}
+
+// ---------------------------------------------------------------------------
+// Findings explorer
+// ---------------------------------------------------------------------------
+
+export type FindingFilter = {
+  severity: FindingSeverity | "all";
+  category: FindingCategory | "all";
+  field: string | "all";
+  action: RecommendedAction | "all";
+  /** Free text matched against message and record key. */
+  search: string;
+};
+
+export const DEFAULT_FINDING_FILTER: FindingFilter = {
+  severity: "all",
+  category: "all",
+  field: "all",
+  action: "all",
+  search: ""
+};
+
+export type FindingFilterOptions = {
+  severities: FindingSeverity[];
+  categories: FindingCategory[];
+  fields: string[];
+  actions: RecommendedAction[];
+};
+
+const SEVERITY_SORT: FindingSeverity[] = ["critical", "high", "medium", "low", "info"];
+
+/**
+ * Options actually present in this run, not every value the type allows.
+ *
+ * A filter offering "critical" on a run with no critical findings invites the user to
+ * select it and conclude the data is missing.
+ */
+export function deriveFilterOptions(findings: Finding[]): FindingFilterOptions {
+  const severities = new Set<FindingSeverity>();
+  const categories = new Set<FindingCategory>();
+  const fields = new Set<string>();
+  const actions = new Set<RecommendedAction>();
+
+  for (const finding of findings) {
+    severities.add(finding.severity);
+    categories.add(finding.category);
+    actions.add(finding.recommendedAction);
+    if (finding.fieldPath !== null) fields.add(finding.fieldPath);
+  }
+
+  return {
+    severities: [...severities].sort((left, right) => SEVERITY_SORT.indexOf(left) - SEVERITY_SORT.indexOf(right)),
+    categories: [...categories].sort(),
+    fields: [...fields].sort(),
+    actions: [...actions].sort()
+  };
+}
+
+/** Every filter is an AND; "all" means the dimension is not constrained. */
+export function applyFindingFilters(findings: Finding[], filter: FindingFilter): Finding[] {
+  const search = filter.search.trim().toLowerCase();
+
+  return findings.filter((finding) => {
+    if (filter.severity !== "all" && finding.severity !== filter.severity) return false;
+    if (filter.category !== "all" && finding.category !== filter.category) return false;
+    if (filter.action !== "all" && finding.recommendedAction !== filter.action) return false;
+    if (filter.field !== "all" && finding.fieldPath !== filter.field) return false;
+    if (search.length > 0) {
+      const haystack = `${finding.message} ${finding.recordKey ?? ""} ${finding.fieldPath ?? ""}`.toLowerCase();
+      if (!haystack.includes(search)) return false;
+    }
+    return true;
+  });
+}
+
+export function isFilterActive(filter: FindingFilter): boolean {
+  return (
+    filter.severity !== "all" ||
+    filter.category !== "all" ||
+    filter.field !== "all" ||
+    filter.action !== "all" ||
+    filter.search.trim().length > 0
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Record inspector
+// ---------------------------------------------------------------------------
+
+export type RecordInspectionRow = {
+  field: string;
+  /** Value in the candidate export, before any recovery. */
+  candidateValue: string;
+  /**
+   * Value in the matched reference export. Null when this run never recorded one —
+   * only fields a finding compared have a known reference value, and saying "unknown"
+   * is honest where guessing would not be.
+   */
+  referenceValue: string | null;
+  /** Value in the recovered artifact. */
+  outputValue: string;
+  source: ProvenanceSource;
+  changed: boolean;
+};
+
+export type RecordInspection = {
+  recordKey: string;
+  candidateIndex: number;
+  referenceIndex: number | null;
+  matchStatus: string;
+  rows: RecordInspectionRow[];
+  changedFieldCount: number;
+};
+
+/**
+ * Candidate, reference, and output side by side for one recovered record.
+ *
+ * Reference values come from QA findings, which are the only place this pipeline
+ * records both sides of a comparison; fields no finding covered show reference as
+ * unknown rather than implying it matched.
+ */
+export function buildRecordInspection(review: RecoveryReview, recordKey: string): RecordInspection | null {
+  const record = review.recovery.recovered.find((entry) => entry.recordKey === recordKey);
+  if (!record) return null;
+
+  const provenanceByField = new Map(
+    review.recovery.provenance.filter((entry) => entry.recordKey === recordKey).map((entry) => [entry.field, entry])
+  );
+  const referenceByField = new Map<string, unknown>();
+  for (const finding of review.qa.findings) {
+    if (finding.recordKey !== recordKey || finding.fieldPath === null) continue;
+    if (finding.referenceValue !== undefined) referenceByField.set(finding.fieldPath, finding.referenceValue);
+  }
+
+  const rows: RecordInspectionRow[] = Object.keys(record.record)
+    .sort()
+    .map((field) => {
+      const entry = provenanceByField.get(field);
+      const outputValue = asText(record.record[field]);
+      // Where a value changed, provenance holds what the candidate had before it.
+      const candidateValue = entry ? asText(entry.originalValue) : outputValue;
+      const reference = referenceByField.has(field) ? asText(referenceByField.get(field)) : null;
+
+      return {
+        field,
+        candidateValue,
+        referenceValue: reference,
+        outputValue,
+        source: entry?.source ?? "candidate",
+        changed: entry !== undefined
+      };
+    });
+
+  return {
+    recordKey,
+    candidateIndex: record.candidateIndex,
+    referenceIndex: record.referenceIndex,
+    matchStatus: record.matchStatus,
+    rows,
+    changedFieldCount: record.backfilledFields.length + record.overriddenFields.length
+  };
 }

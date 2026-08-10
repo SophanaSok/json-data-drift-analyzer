@@ -1,16 +1,18 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  buildRecordInspection,
   buildSummaryTiles,
   changedRecords,
   groupBackfillsByField,
   groupExclusions,
-  provenanceRowsForRecord,
   withheldFields
 } from "./recovery-review-table";
+import { FindingsExplorer } from "./FindingsExplorer";
 import { buildExportBundle, downloadArtifact, type ExportArtifact } from "../../engine/export";
 import { getProfile } from "../../profiles";
 import { useUiStore } from "../../stores/ui-store";
+import type { RecoveryReview } from "../../engine/review";
 import { useToastStore } from "../../stores/toast-store";
 
 const TONE_CLASS = {
@@ -42,6 +44,7 @@ export function RecoveryReviewPage() {
       withheld: withheldFields(review),
       exclusions: groupExclusions(review),
       records: changedRecords(review),
+      recoverableFields: review.recovery.summary.backfillableFields,
       bundle: profile
         ? buildExportBundle({
             profile,
@@ -92,6 +95,27 @@ export function RecoveryReviewPage() {
         </p>
       </header>
 
+      {model.bundle ? (
+        model.bundle.gate.recoveredExportAllowed ? (
+          <p
+            className="rounded border-2 border-emerald-500 bg-emerald-50 p-3 text-sm font-semibold text-emerald-900"
+            data-testid="export-state"
+            data-state="safe"
+          >
+            ✓ Safe to export — the recovered data artifact passes this profile&rsquo;s safety gate.
+          </p>
+        ) : (
+          <p
+            className="rounded border-2 border-red-600 bg-red-50 p-3 text-sm font-semibold text-red-900"
+            data-testid="export-state"
+            data-state="blocked"
+          >
+            ✕ Export blocked — the recovered data artifact is withheld.{" "}
+            {model.bundle.gate.blockingReasons.join(" ")} Reports and audits remain available.
+          </p>
+        )
+      ) : null}
+
       <section className="grid gap-3 md:grid-cols-5" data-testid="review-summary">
         {model.tiles.map((tile) => (
           <div key={tile.id} className="rounded border bg-white p-3">
@@ -115,6 +139,17 @@ export function RecoveryReviewPage() {
           {review.inputHashes.find((hash) => hash.unavailableReason)?.unavailableReason}
         </p>
       ) : null}
+
+      <section className="rounded border bg-white p-4" data-testid="recoverable-fields">
+        <h3 className="font-medium">Recoverable fields</h3>
+        <p className="mt-1 text-sm text-slate-600">
+          {model.recoverableFields.length > 0
+            ? `Approved for automatic backfill under this profile: ${model.recoverableFields.join(", ")}.`
+            : "No field is approved for automatic backfill under this profile."}
+        </p>
+      </section>
+
+      <FindingsExplorer findings={review.qa.findings} />
 
       <section className="rounded border bg-white p-4">
         <h3 className="font-medium">Proposed changes by field</h3>
@@ -203,28 +238,7 @@ export function RecoveryReviewPage() {
                   {record.fields.join(", ")}
                 </button>
                 {openRecordKey === record.recordKey ? (
-                  <table className="mt-2 w-full text-xs">
-                    <thead className="text-left uppercase text-slate-500">
-                      <tr>
-                        <th className="py-1">Field</th>
-                        <th className="py-1">Source</th>
-                        <th className="py-1">Candidate</th>
-                        <th className="py-1">Would become</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {provenanceRowsForRecord(review, record.recordKey).map((row) => (
-                        <tr key={row.field} className="border-t">
-                          <td className="py-1 font-medium">{row.field}</td>
-                          <td className="py-1">{row.source}</td>
-                          <td className="py-1 text-slate-500">
-                            {row.originalValue === "" ? "(blank)" : truncate(row.originalValue)}
-                          </td>
-                          <td className="py-1">{truncate(row.outputValue)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <RecordInspector review={review} recordKey={record.recordKey} />
                 ) : null}
               </li>
             ))}
@@ -272,4 +286,69 @@ export function RecoveryReviewPage() {
 
 function truncate(value: string, limit = 60): string {
   return value.length > limit ? `${value.slice(0, limit)}…` : value;
+}
+
+const SOURCE_LABEL: Record<string, { text: string; className: string }> = {
+  candidate: { text: "candidate", className: "bg-slate-100 text-slate-700" },
+  reference_backfill: { text: "reference_backfill", className: "bg-amber-100 text-amber-900" },
+  manual_override: { text: "manual_override", className: "bg-sky-100 text-sky-900" }
+};
+
+/**
+ * Candidate, reference, and output side by side for one record.
+ *
+ * Every row states where its output value came from. A reference-derived value is
+ * badged distinctly from a candidate one, so nothing in the recovered artifact can
+ * be mistaken for something the candidate run actually scraped.
+ */
+function RecordInspector({ review, recordKey }: { review: RecoveryReview; recordKey: string }) {
+  const inspection = buildRecordInspection(review, recordKey);
+  if (!inspection) return null;
+
+  return (
+    <div className="mt-2" data-testid="record-inspector">
+      <p className="text-xs text-slate-500">
+        candidate #{inspection.candidateIndex}
+        {inspection.referenceIndex !== null ? ` · reference #${inspection.referenceIndex}` : ""} ·{" "}
+        {inspection.matchStatus} · {inspection.changedFieldCount} field(s) changed
+      </p>
+      <table className="mt-2 w-full text-xs">
+        <thead className="text-left uppercase text-slate-500">
+          <tr>
+            <th className="py-1">Field</th>
+            <th className="py-1">Candidate</th>
+            <th className="py-1">Reference</th>
+            <th className="py-1">Output</th>
+            <th className="py-1">Value source</th>
+          </tr>
+        </thead>
+        <tbody>
+          {inspection.rows.map((row) => {
+            const label = SOURCE_LABEL[row.source] ?? SOURCE_LABEL.candidate;
+            return (
+              <tr key={row.field} className={`border-t ${row.changed ? "bg-amber-50" : ""}`}>
+                <td className="py-1 font-medium">{row.field}</td>
+                <td className="py-1 text-slate-500">
+                  {row.candidateValue === "" ? "(blank)" : truncate(row.candidateValue)}
+                </td>
+                <td className="py-1 text-slate-500">
+                  {row.referenceValue === null ? (
+                    <span className="italic text-slate-400">not compared</span>
+                  ) : row.referenceValue === "" ? (
+                    "(blank)"
+                  ) : (
+                    truncate(row.referenceValue)
+                  )}
+                </td>
+                <td className="py-1">{row.outputValue === "" ? "(blank)" : truncate(row.outputValue)}</td>
+                <td className="py-1">
+                  <span className={`rounded px-2 py-0.5 ${label.className}`}>{label.text}</span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
 }

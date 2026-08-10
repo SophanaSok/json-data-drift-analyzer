@@ -4,7 +4,7 @@ import { DateOrderingAlert } from "../../components/upload/DateOrderingAlert";
 import { ExportDateIndicators } from "../../components/upload/ExportDateIndicators";
 import { db } from "../../db";
 import { defaultProfile } from "../../engine/profile";
-import { BELLINGHAM_PROCUREWARE } from "../../profiles";
+import { BELLINGHAM_PROCUREWARE, PROFILES, getProfile } from "../../profiles";
 import { hashText } from "../../lib/hash";
 import { assessFileOrderFromJson } from "../../lib/file-order";
 import { useUiStore } from "../../stores/ui-store";
@@ -33,8 +33,9 @@ export function UploadPage() {
   const setStep = useUiStore((state) => state.setWorkerStep);
   const setAnalysis = useUiStore((state) => state.setAnalysis);
   const setReview = useUiStore((state) => state.setReview);
-  // One registered source profile today; a picker belongs here once there are more.
-  const sourceProfile = BELLINGHAM_PROCUREWARE;
+  const [sourceProfileId, setSourceProfileId] = useState(BELLINGHAM_PROCUREWARE.id);
+  // Falls back rather than crashing if a stored id ever names an unregistered profile.
+  const sourceProfile = getProfile(sourceProfileId) ?? BELLINGHAM_PROCUREWARE;
   const showToast = useToastStore((state) => state.showToast);
   const fileOrderAssessment = useUiStore((state) => state.fileOrderAssessment);
   const setFileOrderAssessment = useUiStore((state) => state.setFileOrderAssessment);
@@ -219,6 +220,26 @@ export function UploadPage() {
         <label className="text-sm">
           <span className="mb-1 block font-medium">Collection path</span>
           <input className="w-full rounded border border-slate-300 p-2" value={collectionPath} onChange={(event) => setCollectionPath(event.target.value)} placeholder="Export or $" />
+        </label>
+        <label className="block text-sm">
+          <span className="font-medium">Source profile</span>
+          <select
+            className="mt-1 w-full rounded border border-slate-300 p-2"
+            data-testid="source-profile-select"
+            value={sourceProfileId}
+            onChange={(event) => setSourceProfileId(event.target.value)}
+          >
+            {Object.values(PROFILES).map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profile.id} (v{profile.version})
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-xs text-slate-500">
+            Governs recovery: which fields may be backfilled, how records are matched, and when an
+            export is blocked. Approved fields:{" "}
+            {sourceProfile.safeBackfillFields.length > 0 ? sourceProfile.safeBackfillFields.join(", ") : "none"}.
+          </span>
         </label>
         <label className="text-sm">
           <span className="mb-1 block font-medium">Identity fields (comma-separated)</span>

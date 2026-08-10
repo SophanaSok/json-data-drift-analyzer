@@ -74,3 +74,70 @@ test.describe("recovery review", () => {
     expect(download.suggestedFilename()).toMatch(/^bellingham-procureware-recovered-.*\.json$/);
   });
 });
+
+test.describe("recovery review: findings explorer", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("");
+    await page
+      .getByTestId("baseline-input")
+      .setInputFiles(path.join(root, "src/test/fixtures/bellingham-reference.json"));
+    await page
+      .getByTestId("latest-input")
+      .setInputFiles(path.join(root, "src/test/fixtures/bellingham-candidate.json"));
+    await page.getByTestId("analyze-button").click();
+    await page.getByRole("link", { name: "Recovery", exact: true }).click();
+    await expect(page.getByTestId("recovery-review")).toBeVisible({ timeout: 30000 });
+  });
+
+  test("shows an unmistakable safe-to-export state", async ({ page }) => {
+    const state = page.getByTestId("export-state");
+    await expect(state).toHaveAttribute("data-state", "safe");
+    await expect(state).toContainText("Safe to export");
+  });
+
+  test("names the recoverable fields", async ({ page }) => {
+    await expect(page.getByTestId("recoverable-fields")).toContainText("ContactPhone");
+    await expect(page.getByTestId("recoverable-fields")).toContainText("Title");
+  });
+
+  test("filters findings by field and by action", async ({ page }) => {
+    await expect(page.getByTestId("findings-count")).toContainText("Showing 3399 of 3399");
+
+    await page.getByTestId("filter-field").selectOption("Title");
+    await expect(page.getByTestId("findings-count")).toContainText("Showing 499 of 3399");
+
+    await page.getByTestId("filter-reset").click();
+    await page.getByTestId("filter-category").selectOption("field_conflict");
+    await expect(page.getByTestId("findings-count")).toContainText("Showing 5 of 3399");
+  });
+
+  test("reports plainly when a filter combination matches nothing", async ({ page }) => {
+    await page.getByTestId("filter-search").fill("no such finding exists");
+    await expect(page.getByTestId("findings-empty")).toBeVisible();
+  });
+
+  test("virtualizes rather than rendering every finding", async ({ page }) => {
+    // 3,399 findings; only a windowful should exist in the DOM.
+    const rendered = await page.locator('[data-testid^="finding-row-"]').count();
+    expect(rendered).toBeGreaterThan(0);
+    expect(rendered).toBeLessThan(50);
+  });
+
+  test("inspects a record with candidate, reference, and output values", async ({ page }) => {
+    await page.locator('[data-testid^="record-toggle-"]').first().click();
+    const inspector = page.getByTestId("record-inspector");
+
+    await expect(inspector).toBeVisible();
+    await expect(inspector).toContainText("reference_backfill");
+    await expect(inspector).toContainText("candidate");
+    await expect(inspector).toContainText("not compared");
+  });
+});
+
+test("source profile is selectable and governs the review", async ({ page }) => {
+  await page.goto("");
+  const select = page.getByTestId("source-profile-select");
+  await expect(select).toBeVisible();
+  await expect(select).toHaveValue("bellingham-procureware");
+  await expect(page.getByText("Approved fields:")).toContainText("ContactPhone");
+});

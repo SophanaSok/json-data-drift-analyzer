@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyFindingFilters,
+  buildRecordInspection,
   buildSummaryTiles,
+  DEFAULT_FINDING_FILTER,
+  deriveFilterOptions,
+  isFilterActive,
   changedRecords,
   groupBackfillsByField,
   groupExclusions,
@@ -166,5 +171,142 @@ describe("recovery review: record drill-down", () => {
 
   it("returns nothing for a record with no provenance", () => {
     expect(provenanceRowsForRecord(review, "no-such-record")).toEqual([]);
+  });
+});
+
+describe("findings explorer: filter options", () => {
+  const options = deriveFilterOptions(review.qa.findings);
+
+  it("offers only the values present in this run", () => {
+    // Offering "critical" on a run with none invites the user to select it and
+    // conclude the data is missing.
+    expect(options.severities).not.toContain("critical");
+    expect(options.severities).toEqual(["high", "medium"]);
+    expect(options.categories).toEqual(["field_conflict", "field_regression"]);
+  });
+
+  it("sorts severities by seriousness, not alphabetically", () => {
+    const mixed = deriveFilterOptions([
+      { ...review.qa.findings[0], severity: "low" },
+      { ...review.qa.findings[0], severity: "critical" },
+      { ...review.qa.findings[0], severity: "medium" }
+    ]);
+    expect(mixed.severities).toEqual(["critical", "medium", "low"]);
+  });
+
+  it("lists the affected fields and the actions actually recommended", () => {
+    expect(options.fields).toContain("Title");
+    expect(options.fields).toContain("BidDocuments");
+    expect(options.actions).toContain("manual_review");
+    expect(options.actions).toContain("backfill_allowed");
+  });
+});
+
+describe("findings explorer: filtering", () => {
+  const findings = review.qa.findings;
+
+  it("returns everything when nothing is constrained", () => {
+    expect(applyFindingFilters(findings, DEFAULT_FINDING_FILTER)).toHaveLength(findings.length);
+  });
+
+  it("filters by field", () => {
+    const filtered = applyFindingFilters(findings, { ...DEFAULT_FINDING_FILTER, field: "Title" });
+    expect(filtered).toHaveLength(499);
+    expect(filtered.every((finding) => finding.fieldPath === "Title")).toBe(true);
+  });
+
+  it("filters by category", () => {
+    const filtered = applyFindingFilters(findings, { ...DEFAULT_FINDING_FILTER, category: "field_conflict" });
+    expect(filtered).toHaveLength(5);
+  });
+
+  it("filters by recommended action", () => {
+    const filtered = applyFindingFilters(findings, { ...DEFAULT_FINDING_FILTER, action: "backfill_allowed" });
+    const fields = new Set(filtered.map((finding) => finding.fieldPath));
+    expect(fields).toEqual(new Set(["ContactPhone", "ContactEmail", "BidType", "Title"]));
+  });
+
+  it("combines filters as AND", () => {
+    const filtered = applyFindingFilters(findings, {
+      ...DEFAULT_FINDING_FILTER,
+      field: "Title",
+      action: "backfill_allowed"
+    });
+    expect(filtered).toHaveLength(499);
+
+    const contradictory = applyFindingFilters(findings, {
+      ...DEFAULT_FINDING_FILTER,
+      field: "Title",
+      category: "field_conflict"
+    });
+    expect(contradictory).toHaveLength(0);
+  });
+
+  it("searches message, record key, and field, case-insensitively", () => {
+    expect(applyFindingFilters(findings, { ...DEFAULT_FINDING_FILTER, search: "DUEDATE" }).length).toBeGreaterThan(0);
+    expect(applyFindingFilters(findings, { ...DEFAULT_FINDING_FILTER, search: "nothing matches this" })).toHaveLength(0);
+  });
+
+  it("ignores surrounding whitespace in the search box", () => {
+    expect(applyFindingFilters(findings, { ...DEFAULT_FINDING_FILTER, search: "   " })).toHaveLength(findings.length);
+  });
+
+  it("reports whether any filter is active", () => {
+    expect(isFilterActive(DEFAULT_FINDING_FILTER)).toBe(false);
+    expect(isFilterActive({ ...DEFAULT_FINDING_FILTER, field: "Title" })).toBe(true);
+    expect(isFilterActive({ ...DEFAULT_FINDING_FILTER, search: "  " })).toBe(false);
+  });
+});
+
+describe("record inspector", () => {
+  const changed = changedRecords(review);
+  const inspection = buildRecordInspection(review, changed[0].recordKey);
+
+  it("returns a row for every field in the output record", () => {
+    expect(inspection).not.toBeNull();
+    expect(inspection?.rows.length).toBe(45);
+  });
+
+  it("labels a recovered value as reference-derived, never candidate", () => {
+    const recovered = inspection?.rows.filter((row) => row.changed) ?? [];
+
+    expect(recovered.length).toBe(changed[0].changedFieldCount);
+    for (const row of recovered) {
+      expect(row.source).toBe("reference_backfill");
+      expect(row.candidateValue).toBe("");
+      expect(row.outputValue).not.toBe("");
+    }
+  });
+
+  it("labels untouched values as candidate", () => {
+    const untouched = inspection?.rows.filter((row) => !row.changed) ?? [];
+    expect(untouched.length).toBeGreaterThan(0);
+    for (const row of untouched) {
+      expect(row.source).toBe("candidate");
+      // Nothing changed, so the output is exactly what the candidate held.
+      expect(row.outputValue).toBe(row.candidateValue);
+    }
+  });
+
+  it("says a reference value is unknown rather than implying it matched", () => {
+    const notCompared = inspection?.rows.filter((row) => row.referenceValue === null) ?? [];
+    expect(notCompared.length).toBeGreaterThan(0);
+  });
+
+  it("carries the reference value where a finding recorded one", () => {
+    const compared = inspection?.rows.filter((row) => row.referenceValue !== null) ?? [];
+    expect(compared.length).toBeGreaterThan(0);
+    for (const row of compared) {
+      expect(typeof row.referenceValue).toBe("string");
+    }
+  });
+
+  it("sorts rows by field for a stable read", () => {
+    const fields = inspection?.rows.map((row) => row.field) ?? [];
+    expect(fields).toEqual([...fields].sort());
+  });
+
+  it("returns null for an unknown record", () => {
+    expect(buildRecordInspection(review, "no-such-record")).toBeNull();
   });
 });
