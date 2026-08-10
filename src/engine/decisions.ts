@@ -152,10 +152,17 @@ function describeLane(
     : "The profile does not approve this field for automatic backfill.";
 }
 
-/** Deterministic id: same cell, action, and timestamp always produce the same value. */
-function decisionId(input: DecisionInput, timestamp: string): string {
+/**
+ * Deterministic id, unique per entry.
+ *
+ * The sequence is part of the hash because cell, action, and timestamp alone are not
+ * unique: deciding backfill, then keep, then backfill again on one cell would
+ * regenerate the first id, and a keyed store would overwrite the earlier row --
+ * silently destroying the append-only history this log exists to keep.
+ */
+function decisionId(input: DecisionInput, timestamp: string, sequence: number): string {
   let hash = 0x811c9dc5;
-  const source = JSON.stringify([input.recordKey, input.field, input.action, timestamp]);
+  const source = JSON.stringify([input.recordKey, input.field, input.action, timestamp, sequence]);
   for (let index = 0; index < source.length; index += 1) {
     hash ^= source.charCodeAt(index);
     hash = Math.imul(hash, 0x01000193) >>> 0;
@@ -168,6 +175,11 @@ export type DecisionContext = {
   profile: SourceProfile;
   /** ISO-8601. Injectable so identical inputs produce identical entries. */
   timestamp: string;
+  /**
+   * Position of this entry in the log. Callers pass the current log length so ids
+   * stay unique when the same decision is made, reversed, and made again.
+   */
+  sequence: number;
 };
 
 /**
@@ -199,7 +211,7 @@ export function createDecision(
         : cell.candidateValue;
 
   return {
-    id: decisionId(input, context.timestamp),
+    id: decisionId(input, context.timestamp, context.sequence),
     recordKey: input.recordKey,
     field: input.field,
     action: input.action,
@@ -302,4 +314,88 @@ export function countLanes(cells: CellClassification[]): LaneCounts {
     counts[cell.lane] += 1;
   }
   return counts;
+}
+
+// ---------------------------------------------------------------------------
+// Bulk decisions
+// ---------------------------------------------------------------------------
+
+export type SkippedCell = {
+  recordKey: string;
+  field: string;
+  reason: string;
+};
+
+export type BulkDecisionResult = {
+  /** One entry per cell. The log stays per-cell, so provenance is unchanged. */
+  decisions: RecoveryDecision[];
+  applied: number;
+  /** Cells the bulk action refused, each with why. Never silently dropped. */
+  skipped: SkippedCell[];
+};
+
+export type BulkDecisionInput = {
+  /**
+   * `use_custom` is deliberately not accepted in bulk. Bulk custom means writing one
+   * literal to every cell, which is exactly the modal-value mistake that would
+   * rewrite the single outlier record along with the rest. A custom value is a
+   * per-cell judgement and stays a per-cell action.
+   */
+  action: Exclude<DecisionAction, "use_custom">;
+  reason: string;
+};
+
+/**
+ * Record the same decision across many cells, one entry each.
+ *
+ * `backfill` copies each cell's OWN reference value — never a shared or modal value.
+ * That distinction is the whole reason bulk is safe here: the action is uniform, the
+ * values are not.
+ *
+ * @throws when the reason is blank, or a custom action is attempted in bulk
+ */
+export function createBulkDecisions(
+  cells: CellClassification[],
+  input: BulkDecisionInput,
+  context: DecisionContext
+): BulkDecisionResult {
+  if (input.reason.trim().length === 0) {
+    throw new Error("Bulk decision has no reason; a reason is required for the audit trail.");
+  }
+  // Defensive: the type forbids this, but a caller crossing a boundary might not be typed.
+  if ((input.action as DecisionAction) === "use_custom") {
+    throw new Error(
+      "A custom value cannot be applied in bulk: it would write one literal to every cell. Decide those individually."
+    );
+  }
+
+  const decisions: RecoveryDecision[] = [];
+  const skipped: SkippedCell[] = [];
+
+  for (const cell of cells) {
+    if (cell.lane === "ineligible") {
+      skipped.push({
+        recordKey: cell.recordKey,
+        field: cell.field,
+        reason: "No reference value was recorded for this cell."
+      });
+      continue;
+    }
+
+    decisions.push(
+      createDecision(
+        { recordKey: cell.recordKey, field: cell.field, action: input.action, reason: input.reason },
+        cell,
+        // Each entry takes the next position, so a batch cannot collide with itself.
+        { ...context, sequence: context.sequence + decisions.length }
+      )
+    );
+  }
+
+  return { decisions, applied: decisions.length, skipped };
+}
+
+/** Append many entries at once, preserving their order. */
+export function appendDecisions(log: RecoveryDecision[], decisions: RecoveryDecision[]): RecoveryDecision[] {
+  return [...log, ...decisions];
 }

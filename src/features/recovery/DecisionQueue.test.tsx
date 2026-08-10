@@ -100,3 +100,76 @@ describe("DecisionQueue: the log", () => {
     expect(log).toContain("Append-only");
   });
 });
+
+describe("DecisionQueue: bulk", () => {
+  it("states the scope before anything is recorded", () => {
+    renderQueue();
+    expect(screen.getByTestId("bulk-panel").textContent).toContain("Apply to all 1992 cell(s) in the queue");
+  });
+
+  it("narrows the scope with the field filter", async () => {
+    const user = userEvent.setup();
+    renderQueue();
+
+    await user.selectOptions(screen.getByTestId("decision-field-filter"), "DueDate");
+    expect(screen.getByTestId("bulk-panel").textContent).toContain("Apply to all 499 cell(s) for DueDate");
+  });
+
+  it("requires confirmation naming the exact count before recording", async () => {
+    const user = userEvent.setup();
+    const onRecord = renderQueue();
+
+    await user.selectOptions(screen.getByTestId("decision-field-filter"), "DueDate");
+    await user.type(screen.getByTestId("bulk-reason"), "confirmed in writing");
+    await user.click(screen.getByTestId("bulk-backfill"));
+
+    // Nothing recorded yet: this is a confirmation, not a one-click override.
+    expect(onRecord).not.toHaveBeenCalled();
+    expect(screen.getByTestId("bulk-confirm").textContent).toContain("Record 499 decision(s)");
+  });
+
+  it("records the batch once confirmed", async () => {
+    const user = userEvent.setup();
+    const onRecord = renderQueue();
+
+    await user.selectOptions(screen.getByTestId("decision-field-filter"), "DueDate");
+    await user.type(screen.getByTestId("bulk-reason"), "confirmed in writing");
+    await user.click(screen.getByTestId("bulk-backfill"));
+    await user.click(screen.getByTestId("bulk-confirm-apply"));
+
+    const [next] = onRecord.mock.calls[0] as [RecoveryDecision[]];
+    expect(next).toHaveLength(499);
+    expect(new Set(next.map((entry) => entry.id)).size).toBe(499);
+    expect(screen.getByTestId("bulk-outcome").textContent).toContain("Recorded 499 decision(s)");
+  });
+
+  it("cancels without recording", async () => {
+    const user = userEvent.setup();
+    const onRecord = renderQueue();
+
+    await user.type(screen.getByTestId("bulk-reason"), "reason");
+    await user.click(screen.getByTestId("bulk-keep"));
+    await user.click(screen.getByTestId("bulk-confirm-cancel"));
+
+    expect(onRecord).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("bulk-confirm")).toBeNull();
+  });
+
+  it("refuses a bulk decision with no reason and says why", async () => {
+    const user = userEvent.setup();
+    const onRecord = renderQueue();
+
+    await user.click(screen.getByTestId("bulk-backfill"));
+    await user.click(screen.getByTestId("bulk-confirm-apply"));
+
+    expect(screen.getByTestId("bulk-error").textContent).toContain("reason is required");
+    expect(onRecord).not.toHaveBeenCalled();
+  });
+
+  it("offers no bulk custom value at all", () => {
+    renderQueue();
+    // Applying one literal everywhere is the modal-value mistake; it stays per-cell.
+    expect(screen.queryByTestId("bulk-custom")).toBeNull();
+    expect(screen.getByTestId("bulk-panel").textContent).toContain("custom value stays a");
+  });
+});

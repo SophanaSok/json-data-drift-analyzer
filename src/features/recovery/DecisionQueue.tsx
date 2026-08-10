@@ -1,11 +1,14 @@
 import { useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  appendDecisions,
   cellId,
   classifyCells,
   countLanes,
+  createBulkDecisions,
   resolveDecisions,
   summarizeDecisions,
+  type BulkDecisionInput,
   type RecoveryDecision
 } from "../../engine/decisions";
 import { DecisionRow } from "./DecisionRow";
@@ -36,6 +39,10 @@ export function DecisionQueue({
   timestamp: string;
 }) {
   const [fieldFilter, setFieldFilter] = useState<string>("all");
+  const [bulkReason, setBulkReason] = useState("");
+  const [pendingBulk, setPendingBulk] = useState<BulkDecisionInput["action"] | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkOutcome, setBulkOutcome] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const cells = useMemo(() => classifyCells(review, profile), [review, profile]);
@@ -58,6 +65,28 @@ export function DecisionQueue({
     estimateSize: () => 92,
     overscan: 6
   });
+
+  const applyBulk = (action: BulkDecisionInput["action"]) => {
+    setBulkError(null);
+    try {
+      const result = createBulkDecisions(reviewCells, { action, reason: bulkReason }, {
+        review,
+        profile,
+        timestamp,
+        sequence: log.length
+      });
+      onRecord(appendDecisions(log, result.decisions));
+      setBulkOutcome(
+        `Recorded ${result.applied} decision(s).` +
+          (result.skipped.length > 0 ? ` Skipped ${result.skipped.length} with no reference value.` : "")
+      );
+      setBulkReason("");
+      setPendingBulk(null);
+    } catch (caught) {
+      setBulkError(caught instanceof Error ? caught.message : "Could not record the decisions.");
+      setPendingBulk(null);
+    }
+  };
 
   return (
     <section className="rounded border bg-white p-4" data-testid="decision-queue">
@@ -95,6 +124,86 @@ export function DecisionQueue({
         </span>
       </div>
 
+      <div className="mt-3 rounded border border-slate-200 bg-slate-50 p-3" data-testid="bulk-panel">
+        <p className="text-xs font-medium">
+          Apply to all {reviewCells.length} cell(s){fieldFilter === "all" ? " in the queue" : ` for ${fieldFilter}`}
+        </p>
+        <p className="mt-1 text-xs text-slate-500">
+          Each cell gets its own reference value, never a shared one. A custom value stays a
+          per-cell decision, because applying one literal everywhere is how the single outlier
+          record gets overwritten with the common one.
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <input
+            className="min-w-[14rem] flex-1 rounded border border-slate-300 p-1 text-xs"
+            placeholder="Reason for all of them (required)"
+            data-testid="bulk-reason"
+            value={bulkReason}
+            onChange={(event) => setBulkReason(event.target.value)}
+          />
+          <button
+            className="rounded border px-2 py-1 text-xs text-sky-700 hover:bg-slate-100"
+            data-testid="bulk-backfill"
+            disabled={reviewCells.length === 0}
+            onClick={() => {
+              setBulkOutcome(null);
+              setPendingBulk("backfill");
+            }}
+          >
+            Use reference for all
+          </button>
+          <button
+            className="rounded border px-2 py-1 text-xs text-sky-700 hover:bg-slate-100"
+            data-testid="bulk-keep"
+            disabled={reviewCells.length === 0}
+            onClick={() => {
+              setBulkOutcome(null);
+              setPendingBulk("keep_candidate");
+            }}
+          >
+            Keep candidate for all
+          </button>
+        </div>
+
+        {pendingBulk ? (
+          <div className="mt-2 rounded border border-amber-400 bg-amber-50 p-2" data-testid="bulk-confirm">
+            <p className="text-xs text-amber-900">
+              Record <strong>{reviewCells.length}</strong> decision(s) —{" "}
+              {pendingBulk === "backfill" ? "use the reference value" : "keep the candidate value"}
+              {fieldFilter === "all" ? " across every queued field" : ` for ${fieldFilter}`}? This appends
+              {" "}{reviewCells.length} entries to the log.
+            </p>
+            <div className="mt-2 flex gap-2">
+              <button
+                className="rounded border border-amber-500 px-2 py-1 text-xs text-amber-900 hover:bg-amber-100"
+                data-testid="bulk-confirm-apply"
+                onClick={() => applyBulk(pendingBulk)}
+              >
+                Yes, record them
+              </button>
+              <button
+                className="rounded border px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
+                data-testid="bulk-confirm-cancel"
+                onClick={() => setPendingBulk(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {bulkError ? (
+          <p className="mt-2 rounded border border-red-300 bg-red-50 p-2 text-xs text-red-900" data-testid="bulk-error">
+            {bulkError}
+          </p>
+        ) : null}
+        {bulkOutcome ? (
+          <p className="mt-2 text-xs text-emerald-800" data-testid="bulk-outcome">
+            {bulkOutcome}
+          </p>
+        ) : null}
+      </div>
+
       {reviewCells.length === 0 ? (
         <p className="mt-3 text-sm text-slate-600" data-testid="queue-empty">
           Nothing awaiting a decision for this filter.
@@ -115,7 +224,7 @@ export function DecisionQueue({
                     cell={cell}
                     decision={resolved.get(id)}
                     log={log}
-                    context={{ review, profile, timestamp }}
+                    context={{ review, profile, timestamp, sequence: log.length }}
                     onRecord={onRecord}
                     index={row.index}
                   />
