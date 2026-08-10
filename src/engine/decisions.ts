@@ -69,6 +69,13 @@ export type RecoveryDecision = {
   profileId: string;
   profileVersion: number;
   timestamp: string;
+  /**
+   * Position in the append-only log at recording time. Persisted because it is what
+   * makes "the latest decision for a cell" reconstructible: timestamps can tie (two
+   * clicks in one millisecond, a bulk batch), and a store's iteration order is not
+   * append order. Resolution order must come from here, never from storage order.
+   */
+  sequence: number;
 };
 
 export type DecisionInput = {
@@ -226,13 +233,34 @@ export function createDecision(
     matchingKey: context.profile.primaryKey,
     profileId: context.profile.id,
     profileVersion: context.profile.version,
-    timestamp: context.timestamp
+    timestamp: context.timestamp,
+    sequence: context.sequence
   };
 }
 
 /** Append, never replace. The previous entry for a cell stays in the history. */
 export function appendDecision(log: RecoveryDecision[], decision: RecoveryDecision): RecoveryDecision[] {
   return [...log, decision];
+}
+
+/**
+ * Reconstruct append order from persisted rows.
+ *
+ * A keyed store returns rows in ITS order (primary-key order for an IndexedDB index
+ * scan), which has nothing to do with the order decisions were made — and
+ * `resolveDecisions` is last-entry-wins, so feeding it storage order can silently
+ * flip which decision is in force. Sort by the recorded sequence; timestamp and id
+ * are tie-breakers only for rows persisted before sequences existed.
+ */
+export function orderDecisionLog<T extends RecoveryDecision>(rows: T[]): T[] {
+  const sequenceOf = (row: T): number => (Number.isFinite(row.sequence) ? row.sequence : -1);
+  return [...rows].sort((left, right) => {
+    const bySequence = sequenceOf(left) - sequenceOf(right);
+    if (bySequence !== 0) return bySequence;
+    const byTimestamp = left.timestamp.localeCompare(right.timestamp);
+    if (byTimestamp !== 0) return byTimestamp;
+    return left.id.localeCompare(right.id);
+  });
 }
 
 /**
@@ -273,7 +301,10 @@ export function decisionsToOverrides(resolved: Map<string, RecoveryDecision>): M
       recordKey: decision.recordKey,
       field: decision.field,
       value: decision.outputValue,
-      reason: decision.reason
+      reason: decision.reason,
+      // Carried onto the provenance entry: the audit records when the person
+      // decided, not when the analysis ran.
+      timestamp: decision.timestamp
     }));
 }
 

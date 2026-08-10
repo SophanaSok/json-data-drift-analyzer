@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { auditRecoveredRecord, resolveBackfillableFields, runRecovery, type RecoveryResult } from "./recovery";
+import { applyOverridesToRecovery, auditRecoveredRecord, resolveBackfillableFields, runRecovery, type RecoveryResult } from "./recovery";
 import { buildRecordProvenance, resolveFieldProvenance } from "./provenance";
 import { matchRecords } from "./matchRecords";
 import { runQa } from "./qa";
@@ -13,6 +13,7 @@ const candidateRecords = (candidateData as unknown as { Export: Array<Record<str
 
 const FIXED_NOW = "2026-08-10T00:00:00.000Z";
 const RUNS = { generatedAt: FIXED_NOW, sourceRun: "candidate.json", referenceRun: "reference.json" };
+const LATER_DECISION = "2026-08-10T02:00:00.000Z";
 
 /** The approved Bellingham policy, loaded from the single source of truth. */
 const bellinghamProfile: SourceProfile = BELLINGHAM_PROCUREWARE;
@@ -575,5 +576,90 @@ describe("recovery: real Bellingham fixtures", () => {
       expect(entry.actor).toBe("auto");
       expect(entry.matchStatus).toBe("matched_primary");
     }
+  });
+});
+
+describe("recovery: applying overrides to a finished result", () => {
+  // The review UI holds a finished RecoveryResult but not the raw record arrays, so
+  // recorded decisions are applied post-hoc. These tests prove the applied artifact
+  // and its audit trail move together — the decision log and the export can never
+  // silently disagree.
+  const baseResult = () => recover([rec({ Note: "from reference" })], [rec({ Note: "" })]);
+  const key = () => baseResult().recovered[0].recordKey;
+
+  it("applies an override to the recovered record with full provenance", () => {
+    const result = baseResult();
+    const applied = applyOverridesToRecovery(
+      result,
+      [{ recordKey: key(), field: "Note", value: "operator value", reason: "operator decision", timestamp: LATER_DECISION }],
+      genericProfile
+    );
+
+    expect(applied.appliedCount).toBe(1);
+    expect(applied.unapplied).toEqual([]);
+
+    const record = applied.recovery.recovered[0];
+    expect(record.record.Note).toBe("operator value");
+    expect(record.overriddenFields).toEqual(["Note"]);
+    expect(applied.recovery.summary.overriddenFieldCount).toBe(1);
+
+    const entry = applied.recovery.provenance.find((item) => item.source === "manual_override");
+    expect(entry?.actor).toBe("user");
+    expect(entry?.reason).toBe("operator decision");
+    expect(entry?.outputValue).toBe("operator value");
+    // The decision's own time, not the analysis time.
+    expect(entry?.timestamp).toBe(LATER_DECISION);
+  });
+
+  it("does not mutate the input result", () => {
+    const result = baseResult();
+    const before = JSON.stringify(result);
+    applyOverridesToRecovery(
+      result,
+      [{ recordKey: key(), field: "Note", value: "changed", reason: "r" }],
+      genericProfile
+    );
+    expect(JSON.stringify(result)).toBe(before);
+  });
+
+  it("reports an override addressing no recovered record instead of dropping it", () => {
+    const applied = applyOverridesToRecovery(
+      baseResult(),
+      [{ recordKey: "no-such-key", field: "Note", value: "x", reason: "r" }],
+      genericProfile
+    );
+
+    expect(applied.appliedCount).toBe(0);
+    expect(applied.unapplied).toHaveLength(1);
+    expect(applied.unapplied[0].reason).toMatch(/No recovered record/);
+    expect(applied.recovery.unappliedOverrides).toHaveLength(1);
+  });
+
+  it("refuses an override that would blank a hard-required field", () => {
+    const applied = applyOverridesToRecovery(
+      baseResult(),
+      [{ recordKey: key(), field: "Id", value: "", reason: "r" }],
+      genericProfile
+    );
+
+    expect(applied.appliedCount).toBe(0);
+    expect(applied.unapplied[0].reason).toMatch(/hard-required/);
+    expect(applied.recovery.recovered[0].record.Id).toBe("a");
+  });
+
+  it("refuses an override with a blank reason", () => {
+    expect(() =>
+      applyOverridesToRecovery(baseResult(), [{ recordKey: key(), field: "Note", value: "x", reason: " " }], genericProfile)
+    ).toThrow(/reason is required/);
+  });
+
+  it("refuses to apply decisions resolved under a different profile version", () => {
+    expect(() =>
+      applyOverridesToRecovery(
+        baseResult(),
+        [{ recordKey: key(), field: "Note", value: "x", reason: "r" }],
+        { ...genericProfile, version: genericProfile.version + 1 }
+      )
+    ).toThrow(/Re-run the analysis/);
   });
 });
