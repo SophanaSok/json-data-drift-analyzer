@@ -23,6 +23,38 @@ jobs:
       - run: npm run test
       - run: npm run build
 
+      # Cache the browser binary rather than downloading ~115 MB on every run.
+      # Keyed on the Playwright version so an upgrade fetches a matching browser.
+      # The INSTALLED version, not the declared range: a range can resolve to a
+      # newer Playwright whose browser build differs, and a stale cache hit would
+      # then pair new Playwright with an old browser.
+      - name: Resolve Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+      # System dependencies are not cached, so they are installed either way.
+      - name: Install Chromium system dependencies
+        run: npx playwright install-deps chromium
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+
+      - run: npm run test:e2e
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
   deploy:
     if: github.ref == 'refs/heads/main'
     needs: test-build
