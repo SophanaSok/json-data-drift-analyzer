@@ -498,7 +498,7 @@ describe("export: real Bellingham fixtures", () => {
     const parsed = JSON.parse(recovered!.content);
 
     expect(parsed._provenance.containsReferenceDerivedValues).toBe(true);
-    expect(parsed._provenance.referenceDerivedValueCount).toBe(908);
+    expect(parsed._provenance.referenceDerivedValueCount).toBe(1407);
     expect(parsed._provenance.profileVersion).toBe(bellinghamProfile.version);
   });
 

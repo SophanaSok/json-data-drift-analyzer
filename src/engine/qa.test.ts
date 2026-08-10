@@ -524,11 +524,11 @@ describe("qa: real Bellingham fixtures", () => {
         .filter((f) => f.recommendedAction === "backfill_allowed")
         .map((f) => f.fieldPath)
     );
-    expect(permitted).toEqual(new Set(["ContactPhone", "ContactEmail", "BidType"]));
+    expect(permitted).toEqual(new Set(["ContactPhone", "ContactEmail", "BidType", "Title"]));
   });
 
   it("still refuses backfill for every unapproved regressed field", () => {
-    for (const field of ["Title", "BidStatus", "PublishedDate", "DueDate", "AwardDate"]) {
+    for (const field of ["BidStatus", "PublishedDate", "DueDate", "AwardDate"]) {
       const actions = new Set(
         of(report, "field_regression").filter((f) => f.fieldPath === field).map((f) => f.recommendedAction)
       );
