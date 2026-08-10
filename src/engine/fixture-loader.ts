@@ -95,8 +95,12 @@ export function stripBOM(content: string): { content: string; bomStripped: boole
  * @returns LoadResult with parsed dataset or error
  */
 export function parseJSON(content: string, source: string): LoadResult {
+  // Strip outside the try so the flag stays accurate on the failure path too:
+  // "BOM removed but JSON still invalid" and "no BOM" are different diagnoses,
+  // and this source is exactly where that distinction matters.
+  const { content: cleaned, bomStripped } = stripBOM(content);
+
   try {
-    const { content: cleaned, bomStripped } = stripBOM(content);
     const parsed = JSON.parse(cleaned) as RawSourceDataset;
     return {
       success: true,
@@ -110,7 +114,7 @@ export function parseJSON(content: string, source: string): LoadResult {
       success: false,
       error: errorMessage,
       source,
-      bomStripped: false
+      bomStripped
     };
   }
 }

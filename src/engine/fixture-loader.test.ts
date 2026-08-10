@@ -90,6 +90,18 @@ describe("fixture-loader: BOM handling", () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain("Unexpected token");
     expect(result.source).toBe("invalid.json");
+    expect(result.bomStripped).toBe(false);
+  });
+
+  it("reports bomStripped accurately when parsing fails after stripping a BOM", () => {
+    // "BOM removed but JSON still invalid" must be distinguishable from "no BOM";
+    // they point at different problems in the export pipeline.
+    const bomThenInvalid = '﻿{"Export": invalid}';
+    const result = parseJSON(bomThenInvalid, "bom-invalid.json");
+
+    expect(result.success).toBe(false);
+    expect(result.bomStripped).toBe(true);
+    expect(result.error).toContain("Unexpected token");
   });
 });
 
