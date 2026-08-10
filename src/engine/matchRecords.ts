@@ -18,6 +18,12 @@
  * A reference claimed in pass 1 is not available in pass 2 — primary key matches
  * are authoritative, and allowing a fallback to re-claim a reference would produce
  * a double assignment.
+ *
+ * Fallback AMBIGUITY, however, is judged against the FULL reference population, not
+ * just the references still unclaimed. A fallback key carried by two reference
+ * records proves nothing about identity even after one of them was claimed on the
+ * primary key — treating the survivor as unique would quietly pair (and backfill
+ * from) whichever sibling happened to be left over.
  */
 
 import { buildIdentityKey, type IdentityKey } from "./normalize";
@@ -226,7 +232,13 @@ export function matchRecords(
       const referenceFallback = referenceRecords.map((record) => buildIdentityKey(record, fallbackFields));
       const candidateFallback = candidateRecords.map((record) => buildIdentityKey(record, fallbackFields));
 
-      const referenceIndex = indexByKey(referenceFallback, (position) => !matchedReference.has(position));
+      // ALL references, claimed or not: a key that collides anywhere in the
+      // reference set cannot prove identity (see the module doc). Rule 4's
+      // "exactly one reference match exists" is read over the whole export.
+      const referenceIndex = indexByKey(referenceFallback, () => true);
+      // Candidates still unmatched only: this side exists to stop two live
+      // candidates claiming one key, and a candidate already matched on its
+      // primary key is not competing.
       const candidateIndex = indexByKey(candidateFallback, (position) => candidateOutcome[position] === null);
 
       for (const position of unmatchedCandidates) {
@@ -260,8 +272,10 @@ export function matchRecords(
           continue;
         }
 
-        // Requirement: fallback applies only when it yields exactly one reference match.
-        if (referenceMatches.length === 1) {
+        // Requirement: fallback applies only when it yields exactly one reference
+        // match — and that sole carrier must still be unclaimed. A claimed sole
+        // carrier means this candidate has no counterpart, not a different one.
+        if (referenceMatches.length === 1 && !matchedReference.has(referenceMatches[0])) {
           const matchedIndex = referenceMatches[0];
           matchedReference.add(matchedIndex);
           candidateOutcome[position] = {

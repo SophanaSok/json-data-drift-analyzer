@@ -663,3 +663,33 @@ describe("recovery: applying overrides to a finished result", () => {
     ).toThrow(/Re-run the analysis/);
   });
 });
+
+describe("recovery: no backfill from an ambiguous fallback group", () => {
+  it("excludes the record instead of backfilling from the leftover sibling", () => {
+    // Two references share the fallback key; one is claimed by a primary match.
+    // The masked version of this used to pair the second candidate with the
+    // leftover sibling and backfill Note from it.
+    const profile: SourceProfile = {
+      ...genericProfile,
+      primaryKey: ["Url"],
+      fallbackKeys: [["Id"]],
+      hardRequiredFields: []
+    };
+    const reference = [
+      { Id: "k", Url: "https://a.test/1", Note: "original" },
+      { Id: "k", Url: "https://a.test/2", Note: "sibling" }
+    ];
+    const candidate = [
+      { Id: "k", Url: "https://a.test/1", Note: "kept" },
+      { Id: "k", Url: "https://a.test/3", Note: "" }
+    ];
+
+    const result = recover(reference, candidate, profile);
+
+    const excluded = result.excluded.find((entry) => entry.candidateIndex === 1);
+    expect(excluded?.reason).toBe("ambiguous_identity");
+    expect(result.summary.backfilledFieldCount).toBe(0);
+    // Nothing in the artifact carries the sibling's value.
+    expect(result.recovered.every((entry) => entry.record.Note !== "sibling")).toBe(true);
+  });
+});

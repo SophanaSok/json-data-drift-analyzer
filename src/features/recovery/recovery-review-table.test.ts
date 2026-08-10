@@ -182,7 +182,7 @@ describe("findings explorer: filter options", () => {
     // conclude the data is missing.
     expect(options.severities).not.toContain("critical");
     expect(options.severities).toEqual(["high", "medium"]);
-    expect(options.categories).toEqual(["field_conflict", "field_regression"]);
+    expect(options.categories).toEqual(["field_conflict", "field_regression", "record_missing_from_candidate"]);
   });
 
   it("sorts severities by seriousness, not alphabetically", () => {

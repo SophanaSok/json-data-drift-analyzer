@@ -8,6 +8,7 @@ import {
   buildQualityReportArtifact,
   buildRecoveredArtifact,
   buildRecoveryAuditArtifact,
+  buildTicketInputFromExport,
   downloadArtifact,
   escapeCsvCell,
   evaluateExportGate,
@@ -531,6 +532,26 @@ describe("export: real Bellingham fixtures", () => {
   it("writes one CSV row per finding for the whole regression", () => {
     const csv = bundle.artifacts.find((artifact) => artifact.kind === "findings");
     const rows = csv!.content.trimEnd().split("\r\n");
-    expect(rows).toHaveLength(3400); // 3,399 findings plus the header
+    expect(rows).toHaveLength(3401); // 3,400 findings (incl. the dropped-record row for 3B-2018) plus the header
+  });
+});
+
+describe("export: a dropped record reaches the contractor ticket", () => {
+  it("puts a missing-record group in the ticket even when counts are equal", () => {
+    // The regression this covers: a 1:1 drop-and-gain produced an empty finding
+    // list, so the deliverable sent to the contractor never mentioned the record
+    // that disappeared.
+    const exportInputs = inputs(
+      [rec({ Id: "a" }), rec({ Id: "dropped" })],
+      [rec({ Id: "a" }), rec({ Id: "gained" })]
+    );
+
+    const ticket = buildTicketInputFromExport(exportInputs);
+    expect(ticket.findingGroups.length).toBeGreaterThan(0);
+    expect(ticket.findingGroups.some((group) => group.category === "record_missing_from_candidate")).toBe(true);
+
+    const csv = buildFindingsCsvArtifact(exportInputs);
+    expect(csv.content).toContain("record_missing_from_candidate");
+    expect(csv.content).toContain("dropped");
   });
 });

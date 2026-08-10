@@ -29,6 +29,12 @@ export type FindingCategory =
   | "duplicate_identity_key"
   /** Candidate record population differs from the reference. */
   | "record_count_anomaly"
+  /**
+   * A keyed reference record has no candidate counterpart. Reported per record:
+   * a 1:1 drop-and-gain leaves the record COUNTS equal, so a disappeared record
+   * would otherwise be invisible in the findings and the contractor ticket.
+   */
+  | "record_missing_from_candidate"
   /** A record could not be matched unambiguously, or could not be keyed at all. */
   | "identity_match_issue";
 
@@ -153,6 +159,7 @@ const ZERO_CATEGORY: Record<FindingCategory, number> = {
   schema_field_missing: 0,
   duplicate_identity_key: 0,
   record_count_anomaly: 0,
+  record_missing_from_candidate: 0,
   identity_match_issue: 0
 };
 
