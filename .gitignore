@@ -14,6 +14,11 @@ test-results
 playwright-report
 *.local
 
+# Raw scraper exports dropped in the repo root for analysis.
+# Committed copies live in src/test/fixtures/ where the tests import them;
+# tracking these too would duplicate several MB in history.
+/lambda-*.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
