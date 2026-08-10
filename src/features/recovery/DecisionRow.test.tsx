@@ -25,7 +25,7 @@ const review = runRecoveryReview(referenceRecords, candidateRecords, BELLINGHAM_
 const cells = classifyCells(review, BELLINGHAM_PROCUREWARE);
 const reviewCell = cells.find((cell) => cell.lane === "review" && cell.field === "DueDate")!;
 const conflictCell = cells.find((cell) => cell.field === "BidDocuments")!;
-const context = { review, profile: BELLINGHAM_PROCUREWARE, timestamp: FIXED_NOW };
+const context = { review, profile: BELLINGHAM_PROCUREWARE, timestamp: FIXED_NOW, sequence: 0 };
 
 afterEach(cleanup);
 

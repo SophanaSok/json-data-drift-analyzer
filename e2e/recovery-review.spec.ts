@@ -219,3 +219,59 @@ test.describe("recovery review: decision log", () => {
     await expect(page.getByTestId("decision-log")).toContainText("persisted decision", { timeout: 30000 });
   });
 })
+
+test.describe("recovery review: bulk decisions", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("");
+    await page
+      .getByTestId("baseline-input")
+      .setInputFiles(path.join(root, "src/test/fixtures/bellingham-reference.json"));
+    await page
+      .getByTestId("latest-input")
+      .setInputFiles(path.join(root, "src/test/fixtures/bellingham-candidate.json"));
+    await page.getByTestId("analyze-button").click();
+    await page.getByRole("link", { name: "Recovery", exact: true }).click();
+    await expect(page.getByTestId("bulk-panel")).toBeVisible({ timeout: 30000 });
+  });
+
+  test("requires a confirmation naming the count", async ({ page }) => {
+    await page.getByTestId("decision-field-filter").selectOption("DueDate");
+    await page.getByTestId("bulk-reason").fill("confirmed with the city");
+    await page.getByTestId("bulk-backfill").click();
+
+    await expect(page.getByTestId("bulk-confirm")).toContainText("Record 499 decision(s)");
+    await expect(page.getByTestId("decision-log")).toHaveCount(0);
+  });
+
+  test("records the whole batch and persists it", async ({ page }) => {
+    await page.getByTestId("decision-field-filter").selectOption("DueDate");
+    await page.getByTestId("bulk-reason").fill("confirmed with the city");
+    await page.getByTestId("bulk-backfill").click();
+    await page.getByTestId("bulk-confirm-apply").click();
+
+    await expect(page.getByTestId("bulk-outcome")).toContainText("Recorded 499 decision(s)");
+    await expect(page.getByTestId("decision-log")).toContainText("499 entries");
+    await expect(page.getByTestId("lane-counts")).toContainText("499 decided");
+
+    // Every entry must reach storage, not just the last one.
+    await page.goto("");
+    await page
+      .getByTestId("baseline-input")
+      .setInputFiles(path.join(root, "src/test/fixtures/bellingham-reference.json"));
+    await page
+      .getByTestId("latest-input")
+      .setInputFiles(path.join(root, "src/test/fixtures/bellingham-candidate.json"));
+    await page.getByTestId("analyze-button").click();
+    await page.getByRole("link", { name: "Recovery", exact: true }).click();
+
+    await expect(page.getByTestId("decision-log")).toContainText("499 entries", { timeout: 30000 });
+  });
+
+  test("refuses a bulk decision with no reason", async ({ page }) => {
+    await page.getByTestId("bulk-backfill").click();
+    await page.getByTestId("bulk-confirm-apply").click();
+
+    await expect(page.getByTestId("bulk-error")).toContainText("reason is required");
+    await expect(page.getByTestId("decision-log")).toHaveCount(0);
+  });
+})

@@ -50,12 +50,20 @@ export function RecoveryReviewPage() {
   }, [review, analysisKey]);
 
   const onRecordDecisions = (next: RecoveryDecision[]) => {
+    // Persist everything appended since the last state, not just the final entry:
+    // a bulk action adds hundreds at once and saving only the last would lose them.
+    const appended = next.slice(decisionLog.length);
     setDecisionLog(next);
-    const appended = next[next.length - 1];
-    if (!appended) return;
-    void db.decisions.put({ ...appended, analysisKey }).catch(() => {
-      showToast("Decision recorded for this session but not saved in browser storage.", "warning");
-    });
+    if (appended.length === 0) return;
+
+    void db.decisions
+      .bulkPut(appended.map((decision) => ({ ...decision, analysisKey })))
+      .catch(() => {
+        showToast(
+          `${appended.length} decision(s) recorded for this session but not saved in browser storage.`,
+          "warning"
+        );
+      });
   };
 
   const model = useMemo(() => {

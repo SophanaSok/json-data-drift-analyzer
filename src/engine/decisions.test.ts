@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   appendDecision,
+  appendDecisions,
+  createBulkDecisions,
   cellId,
   classifyCells,
   countLanes,
@@ -34,7 +36,7 @@ const review = runRecoveryReview(referenceRecords, candidateRecords, BELLINGHAM_
 });
 
 const cells = classifyCells(review, BELLINGHAM_PROCUREWARE);
-const context = { review, profile: BELLINGHAM_PROCUREWARE, timestamp: FIXED_NOW };
+const context = { review, profile: BELLINGHAM_PROCUREWARE, timestamp: FIXED_NOW, sequence: 0 };
 
 const reviewCell = cells.find((cell) => cell.lane === "review" && cell.field === "DueDate")!;
 const autoCell = cells.find((cell) => cell.lane === "auto")!;
@@ -186,7 +188,7 @@ describe("the log is append-only", () => {
   const second = createDecision(
     { recordKey: "record-1", field: "DueDate", action: "keep_candidate", reason: "changed my mind" },
     reviewCell,
-    { ...context, timestamp: LATER }
+    { ...context, timestamp: LATER, sequence: 1 }
   );
 
   it("appends rather than replacing", () => {
@@ -316,5 +318,129 @@ describe("applying decisions", () => {
 describe("cell identity", () => {
   it("distinguishes cells that differ only by where the separator falls", () => {
     expect(cellId("a b", "c")).not.toBe(cellId("a", "b c"));
+  });
+});
+
+describe("bulk decisions", () => {
+  const dueDateCells = cells.filter((cell) => cell.lane === "review" && cell.field === "DueDate");
+
+  it("records one entry per cell so provenance stays per-record", () => {
+    const result = createBulkDecisions(dueDateCells, { action: "backfill", reason: "confirmed in writing" }, context);
+
+    expect(result.applied).toBe(499);
+    expect(result.decisions).toHaveLength(499);
+    expect(result.skipped).toEqual([]);
+  });
+
+  it("copies each cell's own reference value, never a shared one", () => {
+    // The modal-value trap: one literal written everywhere would flatten records
+    // that legitimately differ.
+    const result = createBulkDecisions(dueDateCells, { action: "backfill", reason: "confirmed" }, context);
+    const outputs = new Set(result.decisions.map((decision) => String(decision.outputValue)));
+
+    expect(outputs.size).toBeGreaterThan(1);
+    for (const decision of result.decisions) {
+      const cell = dueDateCells.find((entry) => entry.recordKey === decision.recordKey)!;
+      expect(decision.outputValue).toBe(cell.referenceValue);
+    }
+  });
+
+  it("gives every entry a distinct id", () => {
+    const result = createBulkDecisions(dueDateCells, { action: "backfill", reason: "confirmed" }, context);
+    const ids = new Set(result.decisions.map((decision) => decision.id));
+    expect(ids.size).toBe(result.decisions.length);
+  });
+
+  it("carries the same reason on every entry", () => {
+    const result = createBulkDecisions(dueDateCells.slice(0, 5), { action: "keep_candidate", reason: "left as is" }, context);
+    for (const decision of result.decisions) {
+      expect(decision.reason).toBe("left as is");
+      expect(decision.actor).toBe("user");
+    }
+  });
+
+  it("refuses a bulk decision with no reason", () => {
+    expect(() => createBulkDecisions(dueDateCells, { action: "backfill", reason: "  " }, context)).toThrow(
+      /reason is required/
+    );
+  });
+
+  it("refuses a custom value in bulk", () => {
+    expect(() =>
+      createBulkDecisions(
+        dueDateCells,
+        { action: "use_custom" as unknown as "backfill", reason: "because" },
+        context
+      )
+    ).toThrow(/cannot be applied in bulk/);
+  });
+
+  it("skips ineligible cells and reports them rather than dropping them", () => {
+    const ineligible: CellClassification = { ...dueDateCells[0], lane: "ineligible", recordKey: "no-reference" };
+    const result = createBulkDecisions([dueDateCells[0], ineligible], { action: "backfill", reason: "r" }, context);
+
+    expect(result.applied).toBe(1);
+    expect(result.skipped).toHaveLength(1);
+    expect(result.skipped[0].recordKey).toBe("no-reference");
+    expect(result.skipped[0].reason).toContain("No reference value");
+  });
+
+  it("appends the whole batch without disturbing what came before", () => {
+    const existing = createDecision(
+      { recordKey: "earlier", field: "DueDate", action: "keep_candidate", reason: "earlier call" },
+      reviewCell,
+      context
+    );
+    const result = createBulkDecisions(dueDateCells.slice(0, 3), { action: "backfill", reason: "bulk" }, {
+      ...context,
+      sequence: 1
+    });
+    const log = appendDecisions([existing], result.decisions);
+
+    expect(log).toHaveLength(4);
+    expect(log[0].reason).toBe("earlier call");
+    expect(new Set(log.map((entry) => entry.id)).size).toBe(4);
+  });
+
+  it("supersedes an earlier per-cell decision without erasing it", () => {
+    const single = createDecision(
+      { recordKey: dueDateCells[0].recordKey, field: "DueDate", action: "keep_candidate", reason: "first" },
+      dueDateCells[0],
+      context
+    );
+    const bulk = createBulkDecisions(dueDateCells.slice(0, 1), { action: "backfill", reason: "bulk override" }, {
+      ...context,
+      sequence: 1
+    });
+    const log = appendDecisions([single], bulk.decisions);
+    const resolved = resolveDecisions(log);
+
+    expect(log).toHaveLength(2);
+    expect(resolved.get(cellId(dueDateCells[0].recordKey, "DueDate"))?.reason).toBe("bulk override");
+    expect(decisionHistory(log, dueDateCells[0].recordKey, "DueDate")).toHaveLength(2);
+  });
+});
+
+describe("decision ids stay unique across a reversal", () => {
+  it("does not reuse an id when a decision is reverted and remade", () => {
+    // Same cell, same action, same timestamp: only the sequence differs, and without
+    // it a keyed store would overwrite the first entry.
+    const first = createDecision(
+      { recordKey: "r", field: "DueDate", action: "backfill", reason: "one" },
+      reviewCell,
+      { ...context, sequence: 0 }
+    );
+    const reverted = createDecision(
+      { recordKey: "r", field: "DueDate", action: "keep_candidate", reason: "two" },
+      reviewCell,
+      { ...context, sequence: 1 }
+    );
+    const remade = createDecision(
+      { recordKey: "r", field: "DueDate", action: "backfill", reason: "three" },
+      reviewCell,
+      { ...context, sequence: 2 }
+    );
+
+    expect(new Set([first.id, reverted.id, remade.id]).size).toBe(3);
   });
 });
