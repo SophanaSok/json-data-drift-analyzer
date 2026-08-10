@@ -32,7 +32,7 @@ function renderQueue(log: RecoveryDecision[] = []) {
       profile={BELLINGHAM_PROCUREWARE}
       log={log}
       onRecord={onRecord}
-      timestamp={FIXED_NOW}
+      now={() => FIXED_NOW}
     />
   );
   return onRecord;
@@ -90,7 +90,8 @@ describe("DecisionQueue: the log", () => {
       matchingKey: [],
       profileId: BELLINGHAM_PROCUREWARE.id,
       profileVersion: 4,
-      timestamp: FIXED_NOW
+      timestamp: FIXED_NOW,
+      sequence: 0
     };
     renderQueue([entry]);
 
@@ -171,5 +172,41 @@ describe("DecisionQueue: bulk", () => {
     // Applying one literal everywhere is the modal-value mistake; it stays per-cell.
     expect(screen.queryByTestId("bulk-custom")).toBeNull();
     expect(screen.getByTestId("bulk-panel").textContent).toContain("custom value stays a");
+  });
+});
+
+describe("DecisionQueue: decision timestamps are the decision's, not the render's", () => {
+  // The regression this covers: every entry used to be stamped with the review's
+  // generatedAt, so all decisions in a run carried one identical timestamp — false
+  // as an audit record, and ambiguous to reorder after a reload.
+  it("reads the clock when the decision is recorded, and stamps the log position", async () => {
+    const user = userEvent.setup();
+    const onRecord = vi.fn();
+    const clock = vi.fn(() => "2026-08-10T04:05:06.000Z");
+    render(
+      <DecisionQueue
+        review={review}
+        profile={BELLINGHAM_PROCUREWARE}
+        log={[]}
+        onRecord={onRecord}
+        now={clock}
+      />
+    );
+
+    // Rendering alone decides nothing, so it consults no clock.
+    expect(clock).not.toHaveBeenCalled();
+
+    await user.selectOptions(screen.getByTestId("decision-field-filter"), "DueDate");
+    await user.type(screen.getByTestId("bulk-reason"), "confirmed by phone");
+    await user.click(screen.getByTestId("bulk-backfill"));
+    expect(clock).not.toHaveBeenCalled();
+    await user.click(screen.getByTestId("bulk-confirm-apply"));
+
+    expect(clock).toHaveBeenCalled();
+    const [next] = onRecord.mock.calls[0] as [RecoveryDecision[]];
+    expect(next[0].timestamp).toBe("2026-08-10T04:05:06.000Z");
+    // Positions are the log length each entry is appended at, so a reload can
+    // reconstruct append order even though the batch shares one timestamp.
+    expect(next.map((entry) => entry.sequence)).toEqual(next.map((_, index) => index));
   });
 });

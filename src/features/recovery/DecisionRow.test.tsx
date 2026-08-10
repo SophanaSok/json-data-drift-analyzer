@@ -32,7 +32,7 @@ afterEach(cleanup);
 function renderRow(cell = reviewCell, log: RecoveryDecision[] = [], decision?: RecoveryDecision) {
   const onRecord = vi.fn();
   render(
-    <DecisionRow cell={cell} decision={decision} log={log} context={context} onRecord={onRecord} index={0} />
+    <DecisionRow cell={cell} decision={decision} log={log} makeContext={() => context} onRecord={onRecord} index={0} />
   );
   return onRecord;
 }
@@ -62,7 +62,8 @@ describe("DecisionRow: what it shows", () => {
       matchingKey: [],
       profileId: BELLINGHAM_PROCUREWARE.id,
       profileVersion: 4,
-      timestamp: FIXED_NOW
+      timestamp: FIXED_NOW,
+      sequence: 0
     };
     renderRow(reviewCell, [decision], decision);
 
@@ -174,7 +175,8 @@ describe("DecisionRow: recording", () => {
       matchingKey: [],
       profileId: BELLINGHAM_PROCUREWARE.id,
       profileVersion: 4,
-      timestamp: FIXED_NOW
+      timestamp: FIXED_NOW,
+      sequence: 0
     };
     const onRecord = renderRow(reviewCell, [existing]);
 

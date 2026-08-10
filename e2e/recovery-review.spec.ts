@@ -23,9 +23,9 @@ test.describe("recovery review", () => {
     await expect(page.getByTestId("recovery-review")).toBeVisible({ timeout: 30000 });
   });
 
-  test("shows what recovery would do, and says it changes nothing", async ({ page }) => {
+  test("shows what recovery would do, and says decisions reach the exports", async ({ page }) => {
     await expect(page.getByTestId("recovery-review")).toContainText("What recovery would do");
-    await expect(page.getByTestId("recovery-review")).toContainText("this view is read-only");
+    await expect(page.getByTestId("recovery-review")).toContainText("applied to the exported artifacts");
     await expect(page.getByTestId("recovery-review")).toContainText("bellingham-procureware");
   });
 
@@ -179,6 +179,10 @@ test.describe("recovery review: decision log", () => {
     await expect(log).toContainText("confirmed with the city");
     await expect(log).toContainText("Append-only");
     await expect(page.getByTestId("lane-counts")).toContainText("1 decided");
+
+    // The decision is not just logged — the export section confirms it is applied
+    // to the recovered artifact.
+    await expect(page.getByTestId("decisions-applied")).toContainText("1 recorded decision(s) applied");
   });
 
   test("keeps the superseded entry when a decision is revised", async ({ page }) => {

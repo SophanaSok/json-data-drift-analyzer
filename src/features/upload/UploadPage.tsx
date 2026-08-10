@@ -9,9 +9,14 @@ import { hashText } from "../../lib/hash";
 import { assessFileOrderFromJson } from "../../lib/file-order";
 import { useUiStore } from "../../stores/ui-store";
 import { useToastStore } from "../../stores/toast-store";
-import type { AnalyzeRequest, WorkerMessage } from "../../workers/protocol";
+import { createAnalysisRunner } from "./analysis-runner";
+import type { AnalyzeRequest } from "../../workers/protocol";
 
 const worker = new Worker(new URL("../../workers/analysis.worker.ts", import.meta.url), { type: "module" });
+// Owns request/response correlation: every worker message is dispatched by the
+// analysisKey it echoes, so a result can never be handled — or cached — under a
+// different run's key.
+const runner = createAnalysisRunner(worker);
 
 function parseCsvInput(value: string): string[] {
   return value
@@ -29,6 +34,7 @@ export function UploadPage() {
   const [ignoredFields, setIgnoredFields] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pendingAlert, setPendingAlert] = useState(false);
+  const [running, setRunning] = useState(false);
   const step = useUiStore((state) => state.workerStep);
   const setStep = useUiStore((state) => state.setWorkerStep);
   const setAnalysis = useUiStore((state) => state.setAnalysis);
@@ -39,9 +45,11 @@ export function UploadPage() {
   const showToast = useToastStore((state) => state.showToast);
   const fileOrderAssessment = useUiStore((state) => state.fileOrderAssessment);
   const setFileOrderAssessment = useUiStore((state) => state.setFileOrderAssessment);
+  // Includes `running`: a second Analyze while one is live would either interleave
+  // two runs on one worker or be refused by the runner — disable it instead.
   const disabled = useMemo(
-    () => !baselineFile || !latestFile || !fileOrderAssessment,
-    [baselineFile, fileOrderAssessment, latestFile]
+    () => !baselineFile || !latestFile || !fileOrderAssessment || running,
+    [baselineFile, fileOrderAssessment, latestFile, running]
   );
   const dateOrderingIssues = fileOrderAssessment?.issues ?? [];
   const baselineExportDates = fileOrderAssessment?.baseline.dates ?? {};
@@ -139,28 +147,41 @@ export function UploadPage() {
         }
       };
 
-      worker.postMessage(request);
-      worker.onmessage = async (event: MessageEvent<WorkerMessage>) => {
-        if (event.data.type === "progress") {
-          setStep(event.data.payload.step);
-          return;
+      const started = runner.start(request, {
+        onProgress: setStep,
+        onError: (message) => {
+          setRunning(false);
+          setError(message);
+        },
+        onResult: async (payload) => {
+          setRunning(false);
+          setStep("Ready");
+          const { analysis, review } = payload;
+          setAnalysis(analysis);
+          setReview(review);
+          try {
+            // Keyed by the analysisKey the worker ECHOED, which the runner guarantees
+            // is the one this request was started with — a result can never be
+            // cached under a different run's key.
+            await db.analyses.put({
+              analysisKey: payload.analysisKey,
+              createdAt: new Date().toISOString(),
+              result: analysis,
+              review
+            });
+          } catch {
+            showToast("Result saved in this session but not cached in browser storage.", "warning");
+          }
+          navigate(`/results?tab=${analysis.qualityIssues.some((issue) => ["critical", "high"].includes(issue.severity)) ? "overview" : "records"}`);
         }
-        if (event.data.type === "error") {
-          setError(event.data.payload.message);
-          return;
-        }
-        setStep("Ready");
-        const { analysis, review } = event.data.payload;
-        setAnalysis(analysis);
-        setReview(review);
-        try {
-          await db.analyses.put({ analysisKey, createdAt: new Date().toISOString(), result: analysis, review });
-        } catch {
-          showToast("Result saved in this session but not cached in browser storage.", "warning");
-        }
-        navigate(`/results?tab=${analysis.qualityIssues.some((issue) => ["critical", "high"].includes(issue.severity)) ? "overview" : "records"}`);
-      };
+      });
+      if (!started) {
+        setError("An analysis is already running. Wait for it to finish.");
+        return;
+      }
+      setRunning(true);
     } catch (analysisError) {
+      setRunning(false);
       setError(analysisError instanceof Error ? analysisError.message : "Failed to analyze files");
     }
   };

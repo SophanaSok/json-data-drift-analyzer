@@ -31,11 +31,20 @@ export type AnalyzeRequest = {
   };
 };
 
+/**
+ * Every message echoes the request's analysisKey. The worker is a singleton shared
+ * across runs, so without the echo a listener cannot tell which request a message
+ * answers — and a result correlated by closure alone can be cached under a LATER
+ * request's key, permanently mislabeling the analysis (see analysis-runner.ts).
+ */
 export type WorkerMessage =
-  | { type: "progress"; payload: { step: WorkerStep } }
+  | { type: "progress"; payload: { analysisKey: string; step: WorkerStep } }
   /**
    * The drift analysis, plus the recovery review when a source profile applied.
    * Both travel together so a cached run cannot hold one without the other.
    */
-  | { type: "result"; payload: { analysis: AnalysisResult; review: RecoveryReview | null } }
-  | { type: "error"; payload: { message: string } };
+  | {
+      type: "result";
+      payload: { analysisKey: string; analysis: AnalysisResult; review: RecoveryReview | null };
+    }
+  | { type: "error"; payload: { analysisKey: string; message: string } };

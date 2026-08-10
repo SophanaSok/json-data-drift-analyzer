@@ -29,14 +29,18 @@ export function DecisionQueue({
   profile,
   log,
   onRecord,
-  timestamp
+  now
 }: {
   review: RecoveryReview;
   profile: SourceProfile;
   log: RecoveryDecision[];
   onRecord: (log: RecoveryDecision[]) => void;
-  /** Injected so the same inputs always produce the same entry. */
-  timestamp: string;
+  /**
+   * Clock for decision timestamps, read at the moment a decision is recorded — the
+   * audit trail carries when the person acted, not when the page rendered. Injected
+   * so tests can freeze it.
+   */
+  now: () => string;
 }) {
   const [fieldFilter, setFieldFilter] = useState<string>("all");
   const [bulkReason, setBulkReason] = useState("");
@@ -66,15 +70,14 @@ export function DecisionQueue({
     overscan: 6
   });
 
+  // Built at recording time, not render time: the timestamp is the decision's, and
+  // the sequence is the log length the entry is appended at.
+  const makeContext = () => ({ review, profile, timestamp: now(), sequence: log.length });
+
   const applyBulk = (action: BulkDecisionInput["action"]) => {
     setBulkError(null);
     try {
-      const result = createBulkDecisions(reviewCells, { action, reason: bulkReason }, {
-        review,
-        profile,
-        timestamp,
-        sequence: log.length
-      });
+      const result = createBulkDecisions(reviewCells, { action, reason: bulkReason }, makeContext());
       onRecord(appendDecisions(log, result.decisions));
       setBulkOutcome(
         `Recorded ${result.applied} decision(s).` +
@@ -224,7 +227,7 @@ export function DecisionQueue({
                     cell={cell}
                     decision={resolved.get(id)}
                     log={log}
-                    context={{ review, profile, timestamp, sequence: log.length }}
+                    makeContext={makeContext}
                     onRecord={onRecord}
                     index={row.index}
                   />
