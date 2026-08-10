@@ -1,11 +1,14 @@
 import type { AnalysisResult, ComparisonConfig, QualityProfile } from "../engine/types";
 
 export type WorkerStep =
+  /** Emitted by the worker, which is where parsing actually happens. */
   | "Parsing files"
+  /** Everything below is emitted by runAnalysis, which receives parsed data. */
+  | "Reading export metadata"
   | "Detecting record collection"
   | "Matching records"
-  | "Comparing fields"
-  | "Comparing documents"
+  // Fields and documents are compared in one pass, so they share one step.
+  | "Comparing fields and documents"
   | "Profiling field health"
   | "Building fast indexes"
   | "Ready";
