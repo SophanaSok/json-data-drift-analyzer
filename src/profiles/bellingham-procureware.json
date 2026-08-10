@@ -1,6 +1,6 @@
 {
   "id": "bellingham-procureware",
-  "version": 2,
+  "version": 3,
   "collectionPath": "Export",
   "primaryKey": [
     "AgentID",
@@ -23,12 +23,12 @@
   ],
   "safeBackfillFields": [
     "ContactPhone",
-    "ContactEmail"
+    "ContactEmail",
+    "BidType"
   ],
   "manualReviewFields": [
     "Title",
     "BidStatus",
-    "BidType",
     "PublishedDate",
     "DueDate",
     "AwardDate",
@@ -50,7 +50,7 @@
     "ContractValue"
   ],
   "notes": [
-    "STATUS: PARTIALLY APPROVED at v2. ContactPhone and ContactEmail are approved for automatic backfill. Every other field remains unapproved, and per AGENTS.md rule 4 a field is backfillable only when it appears in safeBackfillFields. The five rule 6 date-sensitive fields remain withheld and require their own explicit decision.",
+    "STATUS: PARTIALLY APPROVED at v3. ContactPhone, ContactEmail, and BidType are approved for automatic backfill. Every other field remains unapproved, and per AGENTS.md rule 4 a field is backfillable only when it appears in safeBackfillFields. The five rule 6 date-sensitive fields remain withheld and require their own explicit decision.",
     "Derived from a read-only comparison of reference lambda-20260714-194920-c3177c97_2026-07-15.json (500 records) against candidate lambda-20260715-080212-d3836a0d_2026-07-15.json (500 records). Full evidence: docs/forensic-bellingham-report.md.",
     "RULE 6 GUARD: dateSensitiveFields names the five fields AGENTS.md rule 6 covers. Listing them here makes the guard explicit -- the recovery engine refuses them for automatic backfill unless the same field also appears in safeBackfillFields, and that combination is recorded in the audit trail as a rule 6 approval. Until this was added the fields were merely absent from safeBackfillFields, which is the same outcome by accident rather than by policy: adding one of them to safeBackfillFields would have been permitted silently, with no rule 6 marker in the provenance.",
     "SCHEMA NOTE: two fields were added to the originally-specified schema. (1) 'version' — AGENTS.md rule 7 requires the rule/profile version on every finding, recovery action, export, and Trello draft, and there is no other field to source it from; bump it on any change below, since decisions audited against v1 are not valid under v2. (2) 'collectionPath' — the records path must be declared, never inferred (rule 1); it follows the same convention as ComparisonConfig.collectionPath in src/engine/types.ts, where a root key name selects that key and '$' means the root itself is the array. Say the word if you want either kept out of the specified schema.",
@@ -65,6 +65,7 @@
     "FACT — THE REGRESSION: eight fields hold the empty string \"\" in 500 of 500 candidate records: Title, BidStatus, BidType, PublishedDate, DueDate, AwardDate, ContactEmail, ContactPhone. Measured against populated reference values the loss rate is exactly 100% for each. The differing per-file percentages (Title 100%, BidType 99.2%, AwardDate 97.6%, ContactEmail 48.5%, ContactPhone 34.3%) only reflect how often each field was populated in the reference.",
     "FACT: Description (495/500 populated), ConferenceDescription, and the document fields (349 vs 350 populated) survived intact, and the candidate discovered a new record 33B-2026 with 5 documents fetched. The candidate run therefore authenticated, enumerated, and parsed several page regions successfully. HYPOTHESIS (high confidence): one localized header/summary-block extraction routine failed and emitted its initialized \"\" default. Confirming the trigger requires the scraper source and current page HTML.",
     "APPROVAL RECORD (v1 -> v2): ContactPhone and ContactEmail were approved for automatic backfill. Rationale, from report section 6e: presence is year-correlated rather than random (100% in 2018-2019, 0% phone from 2025), so eligible records cluster in long-closed procurements; the reference holds only 2 distinct phone values and 4 email values. Expected effect on the analysed run: 171 ContactPhone and 242 ContactEmail values recovered, 413 total. CAVEAT THAT DID NOT CHANGE: cross-run volatility for these fields is still unmeasurable from the analysed pair (zero comparable pairs, section 6a), so this approval rests on the static-organisational-data argument, not on measured stability. Backfill copies the matched reference record's own value, never a modal value -- the single purchasing@cob.org record must not be rewritten to bids@cob.org.",
+    "APPROVAL RECORD (v2 -> v3): BidType was approved for automatic backfill. Rationale from report section 6: it is a closed five-value taxonomy in the reference (Invitation for Bid/Request a Quote 231, RFP 121, RFQ 114, SOQ 29, Sale of Surplus Property 1), and a solicitation's type is set when it is issued. 495 of 499 matched records are eligible; the other 4 held no BidType in the reference either. BidType is NOT a rule 6 field. CAVEAT: as with the contact fields, cross-run volatility is unmeasurable from the analysed pair -- the candidate holds no BidType values at all, so there are zero comparable pairs. The residual risk is a re-scoped solicitation whose type genuinely changed between runs (an IFB reissued as an RFP, say); that would be silently reinstated as the old type. Nothing in the analysed data shows such a change, and nothing in the analysed data could.",
     "STILL UNAPPROVED and requiring separate decisions: BidType (closed 5-value taxonomy, 495 eligible), Title (499 eligible but volatility unmeasurable), and the rule 6 fields BidStatus, DueDate, AwardDate, PublishedDate, ContractValue. Record 38B-2026 remains the standing evidence against date backfill: its surviving description shows the deadline moved from July 29 to August 4th while the reference still reads 7/29/2026.",
     "VERSION DISCIPLINE: bumping to v2 is required, not cosmetic. Recovery and QA stamp profileVersion into every provenance entry and finding, so decisions audited against v1 were made under a policy that permitted no backfill at all and are not valid under v2.",
     "DO NOT PROMOTE without a specific per-source decision: BidStatus, DueDate, AwardDate, PublishedDate. These are named in AGENTS.md rule 6, and two are demonstrably volatile in this very dataset — BidStatus is precisely the field that legitimately changes between runs (Awarded 488 / Cancelled 7 / Open for Bidding 5), and record 38B-2026's description text changed from 'July 29' to 'August 4th' between the two runs, proving due dates move.",

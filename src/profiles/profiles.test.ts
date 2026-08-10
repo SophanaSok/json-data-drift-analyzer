@@ -72,9 +72,11 @@ describe("profile contradiction checks", () => {
 describe("Bellingham profile: the approved policy", () => {
   const profile = BELLINGHAM_PROCUREWARE;
 
-  it("is at v2 with exactly the two approved contact fields", () => {
-    expect(profile.version).toBe(2);
-    expect(profile.safeBackfillFields).toEqual(["ContactPhone", "ContactEmail"]);
+  it("is at v3 with exactly the three approved fields", () => {
+    // Deliberately literal: a policy change must fail this test and be re-confirmed
+    // by a person, not quietly absorbed by deriving from the profile itself.
+    expect(profile.version).toBe(3);
+    expect(profile.safeBackfillFields).toEqual(["ContactPhone", "ContactEmail", "BidType"]);
   });
 
   it("declares the five rule 6 date-sensitive fields", () => {
@@ -95,7 +97,7 @@ describe("Bellingham profile: the approved policy", () => {
   });
 
   it("keeps the fields with unmeasurable volatility out of automatic backfill", () => {
-    for (const field of ["Title", "BidType", "Description", "BidDocuments"]) {
+    for (const field of ["Title", "Description", "BidDocuments"]) {
       expect(profile.safeBackfillFields).not.toContain(field);
     }
   });
@@ -117,8 +119,9 @@ describe("Bellingham profile: the approved policy", () => {
 
   it("carries the approval record in its notes", () => {
     const notes = (profile.notes ?? []).join(" ");
-    expect(notes).toContain("PARTIALLY APPROVED at v2");
-    expect(notes).toContain("APPROVAL RECORD");
+    expect(notes).toContain("PARTIALLY APPROVED at v3");
+    expect(notes).toContain("APPROVAL RECORD (v1 -> v2)");
+    expect(notes).toContain("APPROVAL RECORD (v2 -> v3)");
     expect(notes).toContain("RULE 6 GUARD");
   });
 });

@@ -448,7 +448,7 @@ describe("qa: report envelope", () => {
     });
 
     expect(report.profileId).toBe("bellingham-procureware");
-    expect(report.profileVersion).toBe(2);
+    expect(report.profileVersion).toBe(bellinghamProfile.version);
     expect(report.generatedAt).toBe(FIXED_NOW);
     expect(report.sourceRun).toBe("candidate.json");
     expect(report.referenceRun).toBe("reference.json");
@@ -518,17 +518,17 @@ describe("qa: real Bellingham fixtures", () => {
     }
   });
 
-  it("permits backfill only for the two approved contact fields", () => {
+  it("permits backfill only for the approved fields", () => {
     const permitted = new Set(
       of(report, "field_regression")
         .filter((f) => f.recommendedAction === "backfill_allowed")
         .map((f) => f.fieldPath)
     );
-    expect(permitted).toEqual(new Set(["ContactPhone", "ContactEmail"]));
+    expect(permitted).toEqual(new Set(["ContactPhone", "ContactEmail", "BidType"]));
   });
 
   it("still refuses backfill for every unapproved regressed field", () => {
-    for (const field of ["Title", "BidStatus", "BidType", "PublishedDate", "DueDate", "AwardDate"]) {
+    for (const field of ["Title", "BidStatus", "PublishedDate", "DueDate", "AwardDate"]) {
       const actions = new Set(
         of(report, "field_regression").filter((f) => f.fieldPath === field).map((f) => f.recommendedAction)
       );
