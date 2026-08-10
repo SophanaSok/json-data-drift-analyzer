@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runQa, type QaReport } from "./qa";
+import { runQa, valuesEqual, type QaReport } from "./qa";
 import { resolveRecommendedAction, stableFindingId, summarizeFindings, type Finding, type FindingCategory } from "./findings";
 import type { SourceProfile } from "./adapter-types";
 import referenceData from "../test/fixtures/bellingham-reference.json";
@@ -292,6 +292,38 @@ describe("qa: field conflict against a matched reference", () => {
   it("does not flag identical values", () => {
     const report = run([rec({ Title: "Same" })], [rec({ Title: "Same" })]);
     expect(of(report, "field_conflict")).toHaveLength(0);
+  });
+
+  it("does not report a false conflict for objects differing only in key order", () => {
+    // This source is flat and all-string, so the case cannot arise today. The guard
+    // exists so the engine stays correct for a source whose values are structured.
+    const reference = [rec({ Blob: { a: 1, b: 2 } })];
+    const candidate = [rec({ Blob: { b: 2, a: 1 } })];
+    expect(of(run(reference, candidate), "field_conflict")).toHaveLength(0);
+  });
+
+  it("still reports a genuine difference inside a nested value", () => {
+    const reference = [rec({ Blob: { a: 1, b: 2 } })];
+    const candidate = [rec({ Blob: { a: 1, b: 3 } })];
+    expect(of(run(reference, candidate), "field_conflict")).toHaveLength(1);
+  });
+
+  it("treats array order as significant", () => {
+    expect(valuesEqual([1, 2], [2, 1])).toBe(false);
+    expect(valuesEqual([1, 2], [1, 2])).toBe(true);
+  });
+
+  it("compares scalars exactly", () => {
+    expect(valuesEqual("a", "a")).toBe(true);
+    expect(valuesEqual("a", "b")).toBe(false);
+    expect(valuesEqual(1, "1")).toBe(false);
+    expect(valuesEqual(null, undefined)).toBe(false);
+    expect(valuesEqual(null, null)).toBe(true);
+  });
+
+  it("compares nested structures irrespective of key order at every depth", () => {
+    expect(valuesEqual({ x: { a: 1, b: 2 } }, { x: { b: 2, a: 1 } })).toBe(true);
+    expect(valuesEqual([{ a: 1, b: 2 }], [{ b: 2, a: 1 }])).toBe(true);
   });
 
   it("ignores excluded fields", () => {

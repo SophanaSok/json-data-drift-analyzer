@@ -102,6 +102,44 @@ const VALIDATORS: Record<ValidationKind, (value: string) => ValidationOutcome> =
 
 const HEURISTIC_KINDS = new Set<ValidationKind>(["emailFields", "phoneFields"]);
 
+/**
+ * Canonical serialization used only when a value is not a scalar.
+ *
+ * Object keys are sorted so insertion order cannot affect the result. Array order IS
+ * preserved, because reordering an array is a real change.
+ */
+function canonicalize(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value) ?? "undefined";
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalize).join(",")}]`;
+  }
+  const entries = Object.entries(value as Record<string, unknown>).sort(([left], [right]) =>
+    left < right ? -1 : left > right ? 1 : 0
+  );
+  return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalize(item)}`).join(",")}}`;
+}
+
+/**
+ * Value equality for conflict detection.
+ *
+ * Scalars compare directly, which is both allocation-free and exact — and in this
+ * source every value is a string, so that is the only path taken in practice. Values
+ * that are objects or arrays fall back to a canonical comparison insensitive to key
+ * insertion order, so `{a:1,b:2}` and `{b:2,a:1}` are equal rather than a false
+ * conflict. Comparing raw `JSON.stringify` output would report that pair as differing.
+ */
+export function valuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) {
+    return true;
+  }
+  if (left === null || right === null || typeof left !== "object" || typeof right !== "object") {
+    return false;
+  }
+  return canonicalize(left) === canonicalize(right);
+}
+
 function validationSeverity(kind: ValidationKind, isRequiredField: boolean): FindingSeverity {
   if (HEURISTIC_KINDS.has(kind)) return "low";
   return isRequiredField ? "high" : "medium";
@@ -441,7 +479,7 @@ export function runQa(
         continue;
       }
 
-      if (JSON.stringify(candidateValue) !== JSON.stringify(referenceValue)) {
+      if (!valuesEqual(candidateValue, referenceValue)) {
         findings.push(
           createFinding({
             severity: "medium",

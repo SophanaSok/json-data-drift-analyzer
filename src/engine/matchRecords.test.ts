@@ -72,6 +72,17 @@ describe("normalizeIdentityValue", () => {
     expect(normalizeIdentityValue("https://a.test/x")).not.toBe(normalizeIdentityValue("https://a.test/x/"));
   });
 
+  it("canonicalizes the serialization without changing the resource", () => {
+    // Documented, deliberate: URL#href is not byte-preserving. These rewrites are
+    // RFC-equivalent, and both sides of a comparison get the same treatment.
+    expect(normalizeIdentityValue("https://a.test/x y")).toBe("https://a.test/x%20y");
+    expect(normalizeIdentityValue("https://a.test")).toBe("https://a.test/");
+
+    // Equivalent spellings therefore match each other.
+    expect(normalizeIdentityValue("https://a.test/x y")).toBe(normalizeIdentityValue("https://a.test/x%20y"));
+    expect(normalizeIdentityValue("https://a.test")).toBe(normalizeIdentityValue("https://a.test/"));
+  });
+
   it("returns null for absent, blank, and non-scalar values", () => {
     expect(normalizeIdentityValue(null)).toBeNull();
     expect(normalizeIdentityValue(undefined)).toBeNull();

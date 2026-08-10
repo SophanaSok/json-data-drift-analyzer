@@ -7,10 +7,14 @@ import { isBlankStrict } from "./empty";
  * - Unicode NFC, so canonically-equivalent spellings compare equal.
  * - Outer whitespace trimmed. Interior whitespace is preserved — collapsing it
  *   would merge genuinely different values.
- * - For absolute http(s) URLs: scheme and host lowercased and default ports
- *   dropped, both of which RFC 3986 defines as insignificant. Path, query, and
- *   fragment are preserved exactly, including case and any trailing slash, because
- *   those ARE significant and rewriting them could merge distinct resources.
+ * - For absolute http(s) URLs: the value is re-serialized by the URL parser, which
+ *   lowercases scheme and host, drops default ports, and canonicalizes the
+ *   serialization. Path, query, and fragment keep their CASE and their content, so
+ *   distinct resources are never merged. The serialization is not byte-preserving:
+ *   percent-escapes are canonicalized (a literal space becomes `%20`) and a bare
+ *   origin gains a `/` path. Both are RFC-equivalent rewrites — they change the
+ *   string, never the resource identified — and both sides are normalized the same
+ *   way, so matching stays consistent. See the tests for the exact behavior.
  *
  * Case is deliberately NOT normalized for non-URL values. Whether a code like
  * "34B-2026" is case-insensitive is a source business rule, and AGENTS.md rule 1
@@ -43,8 +47,9 @@ function normalizeUrlIfAbsolute(value: string): string {
     if (url.protocol !== "http:" && url.protocol !== "https:") {
       return value;
     }
-    // The URL parser lowercases scheme and host and removes default ports, while
-    // leaving path, query, and fragment untouched.
+    // Lowercases scheme and host, drops default ports, and canonicalizes the
+    // serialization. Path/query/fragment content and case survive; percent-escapes
+    // and a bare-origin path may be rewritten. See the doc comment above.
     return url.href;
   } catch {
     // Not a URL — a bare code, a title, an id. Use it as-is.
