@@ -1,3 +1,4 @@
+import { readStoredText, writeStoredText } from "../../lib/safe-storage";
 import type { RecordSortColumn } from "./record-table";
 
 export const RECORD_TABLE_COLUMNS: Array<{ id: RecordSortColumn; label: string }> = [
@@ -38,14 +39,10 @@ export function formatGridTemplateColumns(widths: Record<RecordSortColumn, numbe
 }
 
 export function loadRecordColumnWidths(): Record<RecordSortColumn, number> {
-  if (typeof window === "undefined") {
-    return { ...DEFAULT_RECORD_COLUMN_WIDTHS };
-  }
+  const raw = readStoredText(RECORD_COLUMN_WIDTHS_STORAGE_KEY);
+  if (!raw) return { ...DEFAULT_RECORD_COLUMN_WIDTHS };
 
   try {
-    const raw = window.localStorage.getItem(RECORD_COLUMN_WIDTHS_STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_RECORD_COLUMN_WIDTHS };
-
     const parsed = JSON.parse(raw) as Partial<Record<RecordSortColumn, number>>;
     const widths = { ...DEFAULT_RECORD_COLUMN_WIDTHS };
     for (const column of RECORD_TABLE_COLUMNS) {
@@ -61,6 +58,5 @@ export function loadRecordColumnWidths(): Record<RecordSortColumn, number> {
 }
 
 export function saveRecordColumnWidths(widths: Record<RecordSortColumn, number>): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(RECORD_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(widths));
+  writeStoredText(RECORD_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(widths));
 }
