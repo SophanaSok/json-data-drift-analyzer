@@ -73,6 +73,25 @@ export type SourceProfile = {
    */
   recordCountTolerance?: number;
 
+  /**
+   * Fields this source treats as date- or state-sensitive (AGENTS.md rule 6).
+   *
+   * Listing a field here refuses it for automatic backfill. Rule 6 requires
+   * per-source explicit approval, so such a field becomes backfillable only when it
+   * ALSO appears in `safeBackfillFields` — and that combination is recorded in the
+   * audit trail as an explicit rule 6 approval rather than passing silently.
+   *
+   * The list is data, never code: no field name is baked into the engine.
+   */
+  dateSensitiveFields?: string[];
+
+  /**
+   * What a recovered artifact should do with candidate records that have no
+   * reference counterpart. Defaults to "keep": dropping records the candidate run
+   * genuinely scraped would lose data, which is the more damaging error.
+   */
+  candidateOnlyPolicy?: "keep" | "exclude";
+
   /** Optional notes documenting profile decisions and assumptions */
   notes?: string[];
 };
