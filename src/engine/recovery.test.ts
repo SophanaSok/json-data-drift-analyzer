@@ -4,6 +4,7 @@ import { buildRecordProvenance, resolveFieldProvenance } from "./provenance";
 import { matchRecords } from "./matchRecords";
 import { runQa } from "./qa";
 import type { SourceProfile } from "./adapter-types";
+import { BELLINGHAM_PROCUREWARE } from "../profiles";
 import referenceData from "../test/fixtures/bellingham-reference.json";
 import candidateData from "../test/fixtures/bellingham-candidate.json";
 
@@ -13,25 +14,8 @@ const candidateRecords = (candidateData as unknown as { Export: Array<Record<str
 const FIXED_NOW = "2026-08-10T00:00:00.000Z";
 const RUNS = { generatedAt: FIXED_NOW, sourceRun: "candidate.json", referenceRun: "reference.json" };
 
-/**
- * The profile as approved at v2: ContactPhone and ContactEmail are permitted for
- * automatic backfill; everything else, including the five rule 6 date-sensitive
- * fields, remains withheld. See docs/bellingham-source-profile.proposed.json.
- */
-const bellinghamProfile: SourceProfile = {
-  id: "bellingham-procureware",
-  version: 2,
-  collectionPath: "Export",
-  primaryKey: ["AgentID", "BidURL"],
-  fallbackKeys: [["AgentID", "ProjectCode"]],
-  dedupeKey: ["AgentID", "BidURL"],
-  hardRequiredFields: ["AgentID", "ProjectCode", "BidURL"],
-  safeBackfillFields: ["ContactPhone", "ContactEmail"],
-  manualReviewFields: ["Title", "BidStatus", "BidType", "PublishedDate", "DueDate", "AwardDate"],
-  excludedFields: ["Created", "Refreshed"],
-  dateSensitiveFields: ["DueDate", "PublishedDate", "AwardDate", "BidStatus", "ContractValue"],
-  minimumMatchRate: 0.95
-};
+/** The approved Bellingham policy, loaded from the single source of truth. */
+const bellinghamProfile: SourceProfile = BELLINGHAM_PROCUREWARE;
 
 /** Alias retained for readability: the approved contact fields ARE the v2 policy. */
 const approvedContactProfile: SourceProfile = bellinghamProfile;

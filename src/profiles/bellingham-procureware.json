@@ -42,9 +42,17 @@
     "Refreshed"
   ],
   "minimumMatchRate": 0.95,
+  "dateSensitiveFields": [
+    "DueDate",
+    "PublishedDate",
+    "AwardDate",
+    "BidStatus",
+    "ContractValue"
+  ],
   "notes": [
     "STATUS: PARTIALLY APPROVED at v2. ContactPhone and ContactEmail are approved for automatic backfill. Every other field remains unapproved, and per AGENTS.md rule 4 a field is backfillable only when it appears in safeBackfillFields. The five rule 6 date-sensitive fields remain withheld and require their own explicit decision.",
     "Derived from a read-only comparison of reference lambda-20260714-194920-c3177c97_2026-07-15.json (500 records) against candidate lambda-20260715-080212-d3836a0d_2026-07-15.json (500 records). Full evidence: docs/forensic-bellingham-report.md.",
+    "RULE 6 GUARD: dateSensitiveFields names the five fields AGENTS.md rule 6 covers. Listing them here makes the guard explicit -- the recovery engine refuses them for automatic backfill unless the same field also appears in safeBackfillFields, and that combination is recorded in the audit trail as a rule 6 approval. Until this was added the fields were merely absent from safeBackfillFields, which is the same outcome by accident rather than by policy: adding one of them to safeBackfillFields would have been permitted silently, with no rule 6 marker in the provenance.",
     "SCHEMA NOTE: two fields were added to the originally-specified schema. (1) 'version' — AGENTS.md rule 7 requires the rule/profile version on every finding, recovery action, export, and Trello draft, and there is no other field to source it from; bump it on any change below, since decisions audited against v1 are not valid under v2. (2) 'collectionPath' — the records path must be declared, never inferred (rule 1); it follows the same convention as ComparisonConfig.collectionPath in src/engine/types.ts, where a root key name selects that key and '$' means the root itself is the array. Say the word if you want either kept out of the specified schema.",
     "KEY SHAPE: primaryKey and dedupeKey are composite — all listed fields joined in order. fallbackKeys is an array of composite keys, each an array of field names.",
     "FACT: source shape is {\"Export\": [...]}; individual bid records are at $.Export[*]. All 45 fields are present in 100% of records in both runs and every value is a JSON string — including list-valued fields (BidDocuments, BidDocumentHashes, AddendumDocuments, AwardDocuments), which are JSON-encoded strings such as \"[]\" and must be decoded before document-level diffing.",

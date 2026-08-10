@@ -33,9 +33,10 @@ const candidate = candidateData as unknown as Record<string, unknown>;
 const referenceRecords = reference.Export as Array<Record<string, unknown>>;
 const candidateRecords = candidate.Export as Array<Record<string, unknown>>;
 
-// Sample Bellingham ProcureWare profile (derived from bellingham-source-profile.proposed.json)
+// Sample profile. The canonical one lives in src/profiles/bellingham-procureware.json;
+// this literal stays inline so the loader tests do not depend on approval policy.
 const bellinghamProfile: SourceProfile = {
-  id: "bellingham-procureware",
+  id: "loader-test-source",
   version: 1,
   collectionPath: "Export",
   primaryKey: ["AgentID", "BidURL"],
@@ -215,7 +216,7 @@ describe("source-loader: record path location", () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("No records array at 'Export'");
-    expect(result.error).toContain("bellingham-procureware");
+    expect(result.error).toContain("loader-test-source");
     expect(result.error).toContain("Metadata");
   });
 

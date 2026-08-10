@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { runQa, valuesEqual, type QaReport } from "./qa";
 import { resolveRecommendedAction, stableFindingId, summarizeFindings, type Finding, type FindingCategory } from "./findings";
 import type { SourceProfile } from "./adapter-types";
+import { BELLINGHAM_PROCUREWARE } from "../profiles";
 import referenceData from "../test/fixtures/bellingham-reference.json";
 import candidateData from "../test/fixtures/bellingham-candidate.json";
 
@@ -10,26 +11,8 @@ const candidateRecords = (candidateData as unknown as { Export: Array<Record<str
 
 const FIXED_NOW = "2026-08-10T00:00:00.000Z";
 
-const bellinghamProfile: SourceProfile = {
-  id: "bellingham-procureware",
-  version: 2,
-  collectionPath: "Export",
-  primaryKey: ["AgentID", "BidURL"],
-  fallbackKeys: [["AgentID", "ProjectCode"]],
-  dedupeKey: ["AgentID", "BidURL"],
-  hardRequiredFields: ["AgentID", "ProjectCode", "BidURL"],
-  safeBackfillFields: ["ContactPhone", "ContactEmail"],
-  manualReviewFields: [
-    "Title",
-    "BidStatus",
-    "BidType",
-    "PublishedDate",
-    "DueDate",
-    "AwardDate"
-  ],
-  excludedFields: ["Created", "Refreshed"],
-  minimumMatchRate: 0.95
-};
+/** The approved Bellingham policy, loaded from the single source of truth. */
+const bellinghamProfile: SourceProfile = BELLINGHAM_PROCUREWARE;
 
 /** Deliberately generic: no source-specific field names. */
 const genericProfile: SourceProfile = {

@@ -4,7 +4,7 @@
 Design only. Parked for later pickup.
 
 Governed by `AGENTS.md`. Evidence and field-level figures cited here come from
-`docs/forensic-bellingham-report.md` and `docs/bellingham-source-profile.proposed.json`.
+`docs/forensic-bellingham-report.md` and `src/profiles/bellingham-procureware.json`.
 
 ---
 
@@ -296,5 +296,5 @@ files this feature exists to repair.
   (REVIEW lane only, never AUTO).
 - The Trello draft's content or field mapping.
 - Whether `safeBackfillFields` should ever be populated for the Bellingham source. That remains
-  the open approval question in `docs/bellingham-source-profile.proposed.json`, and this proposal
+  the open approval question in `src/profiles/bellingham-procureware.json`, and this proposal
   deliberately does not pre-answer it.
