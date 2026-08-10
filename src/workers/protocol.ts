@@ -1,4 +1,5 @@
 import type { AnalysisResult, ComparisonConfig, QualityProfile } from "../engine/types";
+import type { RecoveryReview } from "../engine/review";
 
 export type WorkerStep =
   /** Emitted by the worker, which is where parsing actually happens. */
@@ -11,6 +12,8 @@ export type WorkerStep =
   | "Comparing fields and documents"
   | "Profiling field health"
   | "Building fast indexes"
+  /** Emitted while the recovery pipeline runs, after the drift analysis. */
+  | "Reviewing recovery"
   | "Ready";
 
 export type AnalyzeRequest = {
@@ -23,10 +26,16 @@ export type AnalyzeRequest = {
     config: ComparisonConfig;
     analysisKey: string;
     profile?: QualityProfile;
+    /** Source profile governing recovery. Absent means no recovery review is produced. */
+    sourceProfileId?: string;
   };
 };
 
 export type WorkerMessage =
   | { type: "progress"; payload: { step: WorkerStep } }
-  | { type: "result"; payload: AnalysisResult }
+  /**
+   * The drift analysis, plus the recovery review when a source profile applied.
+   * Both travel together so a cached run cannot hold one without the other.
+   */
+  | { type: "result"; payload: { analysis: AnalysisResult; review: RecoveryReview | null } }
   | { type: "error"; payload: { message: string } };

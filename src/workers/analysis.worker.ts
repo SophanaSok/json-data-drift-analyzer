@@ -1,6 +1,10 @@
 /// <reference lib="webworker" />
 import { runAnalysis } from "../engine/diff";
+import { getCollection } from "../engine/normalize";
+import { hashInputFile } from "../engine/export";
+import { runRecoveryReview } from "../engine/review";
 import { parseJSON } from "../engine/source-loader";
+import { getProfile } from "../profiles";
 import type { AnalyzeRequest, WorkerMessage } from "./protocol";
 
 function post(message: WorkerMessage): void {
@@ -8,10 +12,16 @@ function post(message: WorkerMessage): void {
 }
 
 self.onmessage = (event: MessageEvent<AnalyzeRequest>) => {
+  void handle(event);
+};
+
+async function handle(event: MessageEvent<AnalyzeRequest>): Promise<void> {
   try {
     if (event.data.type !== "analyze") {
       return;
     }
+
+    const payload = event.data.payload;
 
     // Reported before the work, so a parse failure is attributed to parsing rather
     // than arriving with no progress update at all.
@@ -19,8 +29,8 @@ self.onmessage = (event: MessageEvent<AnalyzeRequest>) => {
 
     // Strips a UTF-8 BOM before parsing. Real scraper exports ship with one, and a
     // bare JSON.parse rejects them outright.
-    const baseline = parseJSON(event.data.payload.baselineText, event.data.payload.baselineFileName);
-    const latest = parseJSON(event.data.payload.latestText, event.data.payload.latestFileName);
+    const baseline = parseJSON(payload.baselineText, payload.baselineFileName);
+    const latest = parseJSON(payload.latestText, payload.latestFileName);
 
     const failed = [baseline, latest].find((result) => !result.success);
     if (failed) {
@@ -31,20 +41,59 @@ self.onmessage = (event: MessageEvent<AnalyzeRequest>) => {
       return;
     }
 
-    const result = runAnalysis({
+    const analysis = runAnalysis({
       baselineData: baseline.dataset,
       latestData: latest.dataset,
-      config: event.data.payload.config,
-      baselineFileName: event.data.payload.baselineFileName,
-      latestFileName: event.data.payload.latestFileName,
-      analysisKey: event.data.payload.analysisKey,
-      profile: event.data.payload.profile,
+      config: payload.config,
+      baselineFileName: payload.baselineFileName,
+      latestFileName: payload.latestFileName,
+      analysisKey: payload.analysisKey,
+      profile: payload.profile,
       onProgress: (step) => post({ type: "progress", payload: { step } })
     });
 
+    // The recovery review runs here rather than on the main thread: it walks every
+    // record several times over, and the worker already holds the parsed data.
+    const review = await buildReview(payload, baseline.dataset, latest.dataset);
+
     post({ type: "progress", payload: { step: "Ready" } });
-    post({ type: "result", payload: result });
+    post({ type: "result", payload: { analysis, review } });
   } catch (error) {
     post({ type: "error", payload: { message: error instanceof Error ? error.message : "Unknown analysis error" } });
   }
-};
+}
+
+async function buildReview(
+  payload: AnalyzeRequest["payload"],
+  baselineData: unknown,
+  latestData: unknown
+): Promise<Awaited<ReturnType<typeof runRecoveryReview>> | null> {
+  if (!payload.sourceProfileId) {
+    return null;
+  }
+
+  const profile = getProfile(payload.sourceProfileId);
+  if (!profile) {
+    return null;
+  }
+
+  post({ type: "progress", payload: { step: "Reviewing recovery" } });
+
+  // Records come from the profile's own collection path, not the comparison config:
+  // the profile is what governs recovery, so it must govern what recovery reads.
+  const referenceRecords = getCollection(baselineData, profile.collectionPath);
+  const candidateRecords = getCollection(latestData, profile.collectionPath);
+
+  // Hashed here because this is where the file text is; SubtleCrypto is available in
+  // a worker, and an insecure context yields a stated reason rather than an error.
+  const inputHashes = await Promise.all([
+    hashInputFile(payload.latestFileName, "candidate", payload.latestText),
+    hashInputFile(payload.baselineFileName, "reference", payload.baselineText)
+  ]);
+
+  return runRecoveryReview(referenceRecords, candidateRecords, profile, {
+    sourceRun: payload.latestFileName,
+    referenceRun: payload.baselineFileName,
+    inputHashes
+  });
+}

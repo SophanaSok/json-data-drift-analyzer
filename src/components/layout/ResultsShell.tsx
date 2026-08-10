@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ExportDateBanner } from "./ExportDateBanner";
 import { DataHealthPage } from "../../features/data-health/DataHealthPage";
@@ -6,11 +7,19 @@ import { OverviewPage } from "../../features/overview/OverviewPage";
 import { RecordsPage } from "../../features/records/RecordsPage";
 import { useUiStore } from "../../stores/ui-store";
 
+// Lazy: this tab pulls in the export engine and the source profile, which nothing
+// else on the results screen needs. Keeping it out of the initial chunk holds the
+// main bundle under the size warning.
+const RecoveryReviewPage = lazy(() =>
+  import("../../features/recovery/RecoveryReviewPage").then((module) => ({ default: module.RecoveryReviewPage }))
+);
+
 const tabs = [
   { id: "overview", label: "Overview" },
   { id: "records", label: "Records" },
   { id: "field-changes", label: "Field Changes" },
-  { id: "data-health", label: "Data Health" }
+  { id: "data-health", label: "Data Health" },
+  { id: "recovery", label: "Recovery" }
 ] as const;
 
 export function ResultsShell() {
@@ -38,6 +47,11 @@ export function ResultsShell() {
       {tab === "records" ? <RecordsPage /> : null}
       {tab === "field-changes" ? <FieldChangesPage /> : null}
       {tab === "data-health" ? <DataHealthPage /> : null}
+      {tab === "recovery" ? (
+        <Suspense fallback={<p className="p-6 text-sm text-slate-600">Loading recovery review…</p>}>
+          <RecoveryReviewPage />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

@@ -1,13 +1,16 @@
 import { create } from "zustand";
 import type { AnalysisResult, FileOrderAssessment, FilterState } from "../engine/types";
+import type { RecoveryReview } from "../engine/review";
 
 type UiState = {
   analysis: AnalysisResult | null;
+  review: RecoveryReview | null;
   filter: FilterState;
   selectedRecordId: string | null;
   workerStep: string | null;
   fileOrderAssessment: FileOrderAssessment | null;
   setAnalysis: (analysis: AnalysisResult | null) => void;
+  setReview: (review: RecoveryReview | null) => void;
   setFilter: (update: Partial<FilterState>) => void;
   resetFilter: () => void;
   setSelectedRecordId: (recordId: string | null) => void;
@@ -30,15 +33,17 @@ const defaultFilter: FilterState = {
 
 export const useUiStore = create<UiState>((set) => ({
   analysis: null,
+  review: null,
   filter: defaultFilter,
   selectedRecordId: null,
   workerStep: null,
   fileOrderAssessment: null,
   setAnalysis: (analysis) => set({ analysis }),
+  setReview: (review) => set({ review }),
   setFilter: (update) => set((state) => ({ filter: { ...state.filter, ...update } })),
   resetFilter: () => set({ filter: defaultFilter }),
   setSelectedRecordId: (selectedRecordId) => set({ selectedRecordId }),
   setWorkerStep: (workerStep) => set({ workerStep }),
   setFileOrderAssessment: (fileOrderAssessment) => set({ fileOrderAssessment }),
-  reset: () => set({ analysis: null, filter: defaultFilter, selectedRecordId: null, workerStep: null, fileOrderAssessment: null })
+  reset: () => set({ analysis: null, review: null, filter: defaultFilter, selectedRecordId: null, workerStep: null, fileOrderAssessment: null })
 }));
