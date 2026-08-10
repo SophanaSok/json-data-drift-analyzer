@@ -1,0 +1,10 @@
+# Downloaded exports. Real pipeline data never belongs in git history.
+incoming/
+
+# Local run history, written by src/run-log.ts.
+run-log.csv
+
+# Credentials. Never committed; see .env.example for the variable names.
+.env
+
+node_modules

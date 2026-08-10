@@ -30,6 +30,7 @@ json-data-drift-analyzer/
 │   ├── workers/
 │   ├── main.tsx
 │   └── vite-env.d.ts
+├── tools/pipeline-downloader/
 ├── index.html
 ├── LICENSE
 ├── package.json
@@ -79,6 +80,14 @@ npm run test:e2e
 2. GitHub Actions runs tests and build.
 3. `deploy` job publishes `dist/` to Pages.
 4. Ensure repository Pages source is set to GitHub Actions.
+
+## Companion tools
+
+`tools/pipeline-downloader/` is a separate manual-run Playwright prototype that downloads
+a single JSON export from the internal pipeline dashboard into a local `incoming/`
+directory. It has its own dependencies and tests, is not imported by the app, and is not
+part of this Vite bundle or of the commands above. See its
+[README](tools/pipeline-downloader/README.md).
 
 ## Recommended repository topics
 
