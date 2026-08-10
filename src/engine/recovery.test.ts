@@ -62,10 +62,10 @@ describe("recovery: profile gates which fields may be backfilled", () => {
     expect(resolved.rule6Approved).toEqual([]);
   });
 
-  it("permits exactly the approved contact fields at v2", () => {
+  it("permits exactly the three approved fields at v3", () => {
     const resolved = resolveBackfillableFields(bellinghamProfile);
-    expect(resolved.allowed).toEqual(["ContactPhone", "ContactEmail"]);
-    // Approving contact fields does not approve any rule 6 field.
+    expect(resolved.allowed).toEqual(["ContactPhone", "ContactEmail", "BidType"]);
+    // No approval so far has approved a rule 6 field.
     expect(resolved.rule6Approved).toEqual([]);
   });
 
@@ -504,11 +504,12 @@ describe("recovery: real Bellingham fixtures", () => {
     expect(result.summary.excludedCount).toBe(0);
   });
 
-  it("recovers exactly the approved contact fields at v2", () => {
+  it("recovers exactly the approved fields at v3", () => {
     const result = recover(referenceRecords, candidateRecords, bellinghamProfile);
 
-    expect(result.summary.backfillableFields).toEqual(["ContactPhone", "ContactEmail"]);
-    expect(result.summary.backfilledFieldCount).toBe(413);
+    expect(result.summary.backfillableFields).toEqual(["ContactPhone", "ContactEmail", "BidType"]);
+    // 495 BidType + 171 ContactPhone + 242 ContactEmail.
+    expect(result.summary.backfilledFieldCount).toBe(908);
     expect(result.containsReferenceDerivedValues).toBe(true);
     expect(result.summary.recoveredCount).toBe(500);
     expect(result.summary.excludedCount).toBe(0);
@@ -519,7 +520,7 @@ describe("recovery: real Bellingham fixtures", () => {
     // backfill at all, and is not valid under v2.
     const result = recover(referenceRecords, candidateRecords, bellinghamProfile);
     for (const entry of result.provenance) {
-      expect(entry.profileVersion).toBe(2);
+      expect(entry.profileVersion).toBe(bellinghamProfile.version);
     }
   });
 
@@ -540,27 +541,29 @@ describe("recovery: real Bellingham fixtures", () => {
     expect(result.summary.recoveredCount).toBe(500);
   });
 
-  it("recovers exactly the contact fields under a hypothetical approval", () => {
+  it("recovers each approved field for exactly the records that lost it", () => {
     const result = recover(referenceRecords, candidateRecords, approvedContactProfile);
 
-    // 242 ContactEmail and 171 ContactPhone were populated in the matched references.
     const byField = new Map<string, number>();
     for (const entry of result.provenance) {
       byField.set(entry.field, (byField.get(entry.field) ?? 0) + 1);
     }
 
+    // Matches the per-field regression counts in the forensic report exactly.
     expect(byField.get("ContactEmail")).toBe(242);
     expect(byField.get("ContactPhone")).toBe(171);
-    expect(result.summary.backfilledFieldCount).toBe(413);
+    expect(byField.get("BidType")).toBe(495);
+    expect(result.summary.backfilledFieldCount).toBe(908);
     expect(result.containsReferenceDerivedValues).toBe(true);
   });
 
-  it("leaves the eight regressed fields untouched even under that approval", () => {
+  it("leaves every unapproved regressed field untouched", () => {
     const result = recover(referenceRecords, candidateRecords, approvedContactProfile);
     const touched = new Set(result.provenance.map((entry) => entry.field));
 
-    for (const field of ["Title", "BidStatus", "BidType", "PublishedDate", "DueDate", "AwardDate"]) {
-      expect(touched.has(field)).toBe(false);
+    // The five rule 6 fields plus Title remain unrecovered at v3.
+    for (const field of ["Title", "BidStatus", "PublishedDate", "DueDate", "AwardDate"]) {
+      expect(touched.has(field), `${field} must not be recovered`).toBe(false);
     }
   });
 

@@ -252,7 +252,7 @@ describe("export: quality report", () => {
     const parsed = JSON.parse(buildQualityReportArtifact(bellinghamInputs()).content);
 
     expect(parsed.run.profileId).toBe("bellingham-procureware");
-    expect(parsed.run.profileVersion).toBe(2);
+    expect(parsed.run.profileVersion).toBe(bellinghamProfile.version);
     expect(parsed.run.generatedAt).toBe(FIXED_NOW);
     expect(parsed.run.hashAlgorithm).toBe("SHA-256");
     expect(parsed.match.candidateCount).toBe(500);
@@ -294,7 +294,7 @@ describe("export: recovery audit", () => {
     expect(Array.isArray(parsed.provenance)).toBe(true);
     expect(Array.isArray(parsed.excluded)).toBe(true);
     expect(Array.isArray(parsed.duplicatesRemoved)).toBe(true);
-    expect(parsed.run.profileVersion).toBe(2);
+    expect(parsed.run.profileVersion).toBe(bellinghamProfile.version);
   });
 
   it("declares JSON as its content type", () => {
@@ -393,7 +393,7 @@ describe("export: contractor ticket", () => {
   it("carries run metadata and hashes", () => {
     const content = buildContractorTicketArtifact(bellinghamInputs()).content;
 
-    expect(content).toContain("bellingham-procureware` v2");
+    expect(content).toContain(`bellingham-procureware\` v${bellinghamProfile.version}`);
     expect(content).toContain(FIXED_NOW);
     expect(content).toContain("candidate SHA-256");
   });
@@ -492,14 +492,14 @@ describe("export: real Bellingham fixtures", () => {
     expect(parsed.Export).toHaveLength(500);
   });
 
-  it("declares the reference-derived values the v2 approval produced", () => {
+  it("declares the reference-derived values the approvals produced", () => {
     // Rule 9: the artifact must not pass as an unmodified candidate scrape.
     const recovered = bundle.artifacts.find((artifact) => artifact.kind === "recovered");
     const parsed = JSON.parse(recovered!.content);
 
     expect(parsed._provenance.containsReferenceDerivedValues).toBe(true);
-    expect(parsed._provenance.referenceDerivedValueCount).toBe(413);
-    expect(parsed._provenance.profileVersion).toBe(2);
+    expect(parsed._provenance.referenceDerivedValueCount).toBe(908);
+    expect(parsed._provenance.profileVersion).toBe(bellinghamProfile.version);
   });
 
   it("writes one CSV row per finding for the whole regression", () => {
