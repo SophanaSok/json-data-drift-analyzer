@@ -1,3 +1,4 @@
+import { readStoredText, writeStoredText } from "../../lib/safe-storage";
 import type { FieldSortColumn } from "./field-changes-table";
 
 export const FIELD_CHANGES_TABLE_COLUMNS: Array<{ id: FieldSortColumn; label: string }> = [
@@ -40,14 +41,10 @@ export function formatGridTemplateColumns(widths: Record<FieldSortColumn, number
 }
 
 export function loadFieldChangesColumnWidths(): Record<FieldSortColumn, number> {
-  if (typeof window === "undefined") {
-    return { ...DEFAULT_FIELD_CHANGES_COLUMN_WIDTHS };
-  }
+  const raw = readStoredText(FIELD_CHANGES_COLUMN_WIDTHS_STORAGE_KEY);
+  if (!raw) return { ...DEFAULT_FIELD_CHANGES_COLUMN_WIDTHS };
 
   try {
-    const raw = window.localStorage.getItem(FIELD_CHANGES_COLUMN_WIDTHS_STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_FIELD_CHANGES_COLUMN_WIDTHS };
-
     const parsed = JSON.parse(raw) as Partial<Record<FieldSortColumn, number>>;
     const widths = { ...DEFAULT_FIELD_CHANGES_COLUMN_WIDTHS };
     for (const column of FIELD_CHANGES_TABLE_COLUMNS) {
@@ -63,6 +60,5 @@ export function loadFieldChangesColumnWidths(): Record<FieldSortColumn, number> 
 }
 
 export function saveFieldChangesColumnWidths(widths: Record<FieldSortColumn, number>): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(FIELD_CHANGES_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(widths));
+  writeStoredText(FIELD_CHANGES_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(widths));
 }
