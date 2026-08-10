@@ -199,6 +199,7 @@ const CATEGORY_LABEL: Partial<Record<FindingCategory, string>> = {
   schema_field_missing: "schema-change",
   duplicate_identity_key: "duplicate-records",
   record_count_anomaly: "record-count",
+  record_missing_from_candidate: "missing-records",
   identity_match_issue: "identity-matching",
   field_validation_failure: "validation"
 };

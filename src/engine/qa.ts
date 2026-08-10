@@ -355,6 +355,37 @@ export function runQa(
     );
   }
 
+  // ---- Record level: reference records with no candidate counterpart -----------
+  // Reported per record, not only via the count anomaly: a run that drops one
+  // record and gains another has EQUAL counts, and the disappearance would
+  // otherwise never reach the findings, the CSV, or the contractor ticket.
+  for (const result of matchReport.results) {
+    if (result.status !== "reference_only") {
+      continue;
+    }
+
+    findings.push(
+      createFinding({
+        severity: "high",
+        category: "record_missing_from_candidate",
+        fieldPath: null,
+        recordKey: result.referenceKey,
+        candidateValue: null,
+        referenceValue: result.referenceKey,
+        message: `A record present in the reference export (key ${result.referenceKey}) is absent from the candidate export.`,
+        evidence: {
+          referenceIndex: result.referenceIndex,
+          referenceKey: result.referenceKey,
+          keyFields: result.keyFields
+        },
+        // Recovery deliberately never reinstates a reference-only record into a
+        // candidate artifact; the remedy is a fixed scraper re-run.
+        recommendedAction: "report_only",
+        discriminator: String(result.referenceIndex)
+      })
+    );
+  }
+
   // ---- Record level: required fields and configured validation ------------------
   candidateRecords.forEach((record, candidateIndex) => {
     const recordKey = candidateKeys[candidateIndex];

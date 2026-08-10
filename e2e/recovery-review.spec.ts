@@ -101,14 +101,14 @@ test.describe("recovery review: findings explorer", () => {
   });
 
   test("filters findings by field and by action", async ({ page }) => {
-    await expect(page.getByTestId("findings-count")).toContainText("Showing 3399 of 3399");
+    await expect(page.getByTestId("findings-count")).toContainText("Showing 3400 of 3400");
 
     await page.getByTestId("filter-field").selectOption("Title");
-    await expect(page.getByTestId("findings-count")).toContainText("Showing 499 of 3399");
+    await expect(page.getByTestId("findings-count")).toContainText("Showing 499 of 3400");
 
     await page.getByTestId("filter-reset").click();
     await page.getByTestId("filter-category").selectOption("field_conflict");
-    await expect(page.getByTestId("findings-count")).toContainText("Showing 5 of 3399");
+    await expect(page.getByTestId("findings-count")).toContainText("Showing 5 of 3400");
   });
 
   test("reports plainly when a filter combination matches nothing", async ({ page }) => {

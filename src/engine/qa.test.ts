@@ -586,3 +586,38 @@ describe("qa: real Bellingham fixtures", () => {
     expect(Object.values(report.counts.byCategory).reduce((a, b) => a + b, 0)).toBe(report.findings.length);
   });
 });
+
+describe("qa: a record that disappeared from the candidate", () => {
+  it("is reported per record even when a 1:1 swap keeps the counts equal", () => {
+    // The regression this covers: reference_only match results produced no finding
+    // at all, so a dropped record with equal record counts was invisible in the
+    // findings, the CSV, and the contractor ticket.
+    const reference = [rec({ Id: "a" }), rec({ Id: "dropped" })];
+    const candidate = [rec({ Id: "a" }), rec({ Id: "gained" })];
+
+    const report = run(reference, candidate);
+    expect(of(report, "record_count_anomaly")).toHaveLength(0);
+
+    const missing = of(report, "record_missing_from_candidate");
+    expect(missing).toHaveLength(1);
+    expect(missing[0].severity).toBe("high");
+    expect(missing[0].recordKey).toContain("dropped");
+    expect(missing[0].message).toContain("absent from the candidate");
+  });
+
+  it("is not reported when every reference record has a counterpart", () => {
+    const report = run([rec()], [rec()]);
+    expect(of(report, "record_missing_from_candidate")).toHaveLength(0);
+  });
+
+  it("names the real dropped record 3B-2018 in the Bellingham pair", () => {
+    const report = runQa(referenceRecords, candidateRecords, bellinghamProfile, { generatedAt: FIXED_NOW });
+    const missing = of(report, "record_missing_from_candidate");
+
+    expect(missing).toHaveLength(1);
+    const dropped = referenceRecords.find(
+      (record) => record.BidURL && missing[0].recordKey?.includes(String(record.BidURL))
+    );
+    expect(dropped?.ProjectCode).toBe("3B-2018");
+  });
+});
