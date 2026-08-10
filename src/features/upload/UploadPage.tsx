@@ -4,6 +4,7 @@ import { DateOrderingAlert } from "../../components/upload/DateOrderingAlert";
 import { ExportDateIndicators } from "../../components/upload/ExportDateIndicators";
 import { db } from "../../db";
 import { defaultProfile } from "../../engine/profile";
+import { BELLINGHAM_PROCUREWARE } from "../../profiles";
 import { hashText } from "../../lib/hash";
 import { assessFileOrderFromJson } from "../../lib/file-order";
 import { useUiStore } from "../../stores/ui-store";
@@ -31,6 +32,9 @@ export function UploadPage() {
   const step = useUiStore((state) => state.workerStep);
   const setStep = useUiStore((state) => state.setWorkerStep);
   const setAnalysis = useUiStore((state) => state.setAnalysis);
+  const setReview = useUiStore((state) => state.setReview);
+  // One registered source profile today; a picker belongs here once there are more.
+  const sourceProfile = BELLINGHAM_PROCUREWARE;
   const showToast = useToastStore((state) => state.showToast);
   const fileOrderAssessment = useUiStore((state) => state.fileOrderAssessment);
   const setFileOrderAssessment = useUiStore((state) => state.setFileOrderAssessment);
@@ -96,13 +100,18 @@ export function UploadPage() {
           identityFields.join("|"),
           ignored.join("|"),
           defaultProfile.id,
-          String(defaultProfile.version)
+          String(defaultProfile.version),
+          // Approving a field bumps the source profile version, which must
+          // invalidate the cache rather than reuse the previous policy's outcome.
+          sourceProfile.id,
+          String(sourceProfile.version)
         ].join("::")
       );
 
       const cached = await db.analyses.get(analysisKey);
       if (cached) {
         setAnalysis(cached.result);
+        setReview(cached.review ?? null);
         navigate(`/results?tab=${cached.result.qualityIssues.some((issue) => ["critical", "high"].includes(issue.severity)) ? "overview" : "records"}`);
         return;
       }
@@ -121,7 +130,8 @@ export function UploadPage() {
             ignoredFields: ignored,
             profileId: defaultProfile.id
           },
-          profile: defaultProfile
+          profile: defaultProfile,
+          sourceProfileId: sourceProfile.id
         }
       };
 
@@ -136,13 +146,15 @@ export function UploadPage() {
           return;
         }
         setStep("Ready");
-        setAnalysis(event.data.payload);
+        const { analysis, review } = event.data.payload;
+        setAnalysis(analysis);
+        setReview(review);
         try {
-          await db.analyses.put({ analysisKey, createdAt: new Date().toISOString(), result: event.data.payload });
+          await db.analyses.put({ analysisKey, createdAt: new Date().toISOString(), result: analysis, review });
         } catch {
           showToast("Result saved in this session but not cached in browser storage.", "warning");
         }
-        navigate(`/results?tab=${event.data.payload.qualityIssues.some((issue) => ["critical", "high"].includes(issue.severity)) ? "overview" : "records"}`);
+        navigate(`/results?tab=${analysis.qualityIssues.some((issue) => ["critical", "high"].includes(issue.severity)) ? "overview" : "records"}`);
       };
     } catch (analysisError) {
       setError(analysisError instanceof Error ? analysisError.message : "Failed to analyze files");
