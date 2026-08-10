@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { runQa, valuesEqual, type QaReport } from "./qa";
 import { resolveRecommendedAction, stableFindingId, summarizeFindings, type Finding, type FindingCategory } from "./findings";
 import type { SourceProfile } from "./adapter-types";
+import { BELLINGHAM_PROCUREWARE } from "../profiles";
 import referenceData from "../test/fixtures/bellingham-reference.json";
 import candidateData from "../test/fixtures/bellingham-candidate.json";
 
@@ -10,28 +11,8 @@ const candidateRecords = (candidateData as unknown as { Export: Array<Record<str
 
 const FIXED_NOW = "2026-08-10T00:00:00.000Z";
 
-const bellinghamProfile: SourceProfile = {
-  id: "bellingham-procureware",
-  version: 1,
-  collectionPath: "Export",
-  primaryKey: ["AgentID", "BidURL"],
-  fallbackKeys: [["AgentID", "ProjectCode"]],
-  dedupeKey: ["AgentID", "BidURL"],
-  hardRequiredFields: ["AgentID", "ProjectCode", "BidURL"],
-  safeBackfillFields: [],
-  manualReviewFields: [
-    "Title",
-    "BidStatus",
-    "BidType",
-    "PublishedDate",
-    "DueDate",
-    "AwardDate",
-    "ContactEmail",
-    "ContactPhone"
-  ],
-  excludedFields: ["Created", "Refreshed"],
-  minimumMatchRate: 0.95
-};
+/** The approved Bellingham policy, loaded from the single source of truth. */
+const bellinghamProfile: SourceProfile = BELLINGHAM_PROCUREWARE;
 
 /** Deliberately generic: no source-specific field names. */
 const genericProfile: SourceProfile = {
@@ -467,7 +448,7 @@ describe("qa: report envelope", () => {
     });
 
     expect(report.profileId).toBe("bellingham-procureware");
-    expect(report.profileVersion).toBe(1);
+    expect(report.profileVersion).toBe(2);
     expect(report.generatedAt).toBe(FIXED_NOW);
     expect(report.sourceRun).toBe("candidate.json");
     expect(report.referenceRun).toBe("reference.json");
@@ -537,10 +518,22 @@ describe("qa: real Bellingham fixtures", () => {
     }
   });
 
-  it("recommends manual review for the regressed fields, never backfill", () => {
-    // safeBackfillFields is empty in the proposed profile, so nothing is auto-permitted.
-    const actions = new Set(of(report, "field_regression").map((f) => f.recommendedAction));
-    expect(actions.has("backfill_allowed")).toBe(false);
+  it("permits backfill only for the two approved contact fields", () => {
+    const permitted = new Set(
+      of(report, "field_regression")
+        .filter((f) => f.recommendedAction === "backfill_allowed")
+        .map((f) => f.fieldPath)
+    );
+    expect(permitted).toEqual(new Set(["ContactPhone", "ContactEmail"]));
+  });
+
+  it("still refuses backfill for every unapproved regressed field", () => {
+    for (const field of ["Title", "BidStatus", "BidType", "PublishedDate", "DueDate", "AwardDate"]) {
+      const actions = new Set(
+        of(report, "field_regression").filter((f) => f.fieldPath === field).map((f) => f.recommendedAction)
+      );
+      expect(actions.has("backfill_allowed"), `${field} must not be backfillable`).toBe(false);
+    }
   });
 
   it("carries reference and candidate values as evidence on each regression", () => {

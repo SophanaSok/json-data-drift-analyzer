@@ -20,6 +20,7 @@ import { runQa } from "./qa";
 import { runRecovery } from "./recovery";
 import { runDedupe } from "./dedupe";
 import type { SourceProfile } from "./adapter-types";
+import { BELLINGHAM_PROCUREWARE } from "../profiles";
 import referenceData from "../test/fixtures/bellingham-reference.json";
 import candidateData from "../test/fixtures/bellingham-candidate.json";
 
@@ -28,20 +29,8 @@ const candidateRecords = (candidateData as unknown as { Export: Array<Record<str
 
 const FIXED_NOW = "2026-08-10T00:00:00.000Z";
 
-const bellinghamProfile: SourceProfile = {
-  id: "bellingham-procureware",
-  version: 1,
-  collectionPath: "Export",
-  primaryKey: ["AgentID", "BidURL"],
-  fallbackKeys: [["AgentID", "ProjectCode"]],
-  dedupeKey: ["AgentID", "BidURL"],
-  hardRequiredFields: ["AgentID", "ProjectCode", "BidURL"],
-  safeBackfillFields: [],
-  manualReviewFields: [],
-  excludedFields: ["Created", "Refreshed"],
-  dateSensitiveFields: ["DueDate", "PublishedDate", "AwardDate", "BidStatus", "ContractValue"],
-  minimumMatchRate: 0.95
-};
+/** The approved Bellingham policy, loaded from the single source of truth. */
+const bellinghamProfile: SourceProfile = BELLINGHAM_PROCUREWARE;
 
 const genericProfile: SourceProfile = {
   id: "generic source",
@@ -263,7 +252,7 @@ describe("export: quality report", () => {
     const parsed = JSON.parse(buildQualityReportArtifact(bellinghamInputs()).content);
 
     expect(parsed.run.profileId).toBe("bellingham-procureware");
-    expect(parsed.run.profileVersion).toBe(1);
+    expect(parsed.run.profileVersion).toBe(2);
     expect(parsed.run.generatedAt).toBe(FIXED_NOW);
     expect(parsed.run.hashAlgorithm).toBe("SHA-256");
     expect(parsed.match.candidateCount).toBe(500);
@@ -305,7 +294,7 @@ describe("export: recovery audit", () => {
     expect(Array.isArray(parsed.provenance)).toBe(true);
     expect(Array.isArray(parsed.excluded)).toBe(true);
     expect(Array.isArray(parsed.duplicatesRemoved)).toBe(true);
-    expect(parsed.run.profileVersion).toBe(1);
+    expect(parsed.run.profileVersion).toBe(2);
   });
 
   it("declares JSON as its content type", () => {
@@ -404,7 +393,7 @@ describe("export: contractor ticket", () => {
   it("carries run metadata and hashes", () => {
     const content = buildContractorTicketArtifact(bellinghamInputs()).content;
 
-    expect(content).toContain("bellingham-procureware` v1");
+    expect(content).toContain("bellingham-procureware` v2");
     expect(content).toContain(FIXED_NOW);
     expect(content).toContain("candidate SHA-256");
   });
@@ -503,12 +492,14 @@ describe("export: real Bellingham fixtures", () => {
     expect(parsed.Export).toHaveLength(500);
   });
 
-  it("declares no reference-derived values, because nothing is approved for backfill", () => {
+  it("declares the reference-derived values the v2 approval produced", () => {
+    // Rule 9: the artifact must not pass as an unmodified candidate scrape.
     const recovered = bundle.artifacts.find((artifact) => artifact.kind === "recovered");
     const parsed = JSON.parse(recovered!.content);
 
-    expect(parsed._provenance.containsReferenceDerivedValues).toBe(false);
-    expect(parsed._provenance.referenceDerivedValueCount).toBe(0);
+    expect(parsed._provenance.containsReferenceDerivedValues).toBe(true);
+    expect(parsed._provenance.referenceDerivedValueCount).toBe(413);
+    expect(parsed._provenance.profileVersion).toBe(2);
   });
 
   it("writes one CSV row per finding for the whole regression", () => {

@@ -4,6 +4,7 @@ import { runRecovery } from "./recovery";
 import { matchRecords } from "./matchRecords";
 import { runQa } from "./qa";
 import type { SourceProfile } from "./adapter-types";
+import { BELLINGHAM_PROCUREWARE } from "../profiles";
 import referenceData from "../test/fixtures/bellingham-reference.json";
 import candidateData from "../test/fixtures/bellingham-candidate.json";
 
@@ -12,21 +13,8 @@ const candidateRecords = (candidateData as unknown as { Export: Array<Record<str
 
 const FIXED_NOW = "2026-08-10T00:00:00.000Z";
 
-/** The Bellingham profile as approved today: nothing is backfillable. */
-const bellinghamProfile: SourceProfile = {
-  id: "bellingham-procureware",
-  version: 1,
-  collectionPath: "Export",
-  primaryKey: ["AgentID", "BidURL"],
-  fallbackKeys: [["AgentID", "ProjectCode"]],
-  dedupeKey: ["AgentID", "BidURL"],
-  hardRequiredFields: ["AgentID", "ProjectCode", "BidURL"],
-  safeBackfillFields: [],
-  manualReviewFields: [],
-  excludedFields: ["Created", "Refreshed"],
-  dateSensitiveFields: ["DueDate", "PublishedDate", "AwardDate", "BidStatus", "ContractValue"],
-  minimumMatchRate: 0.95
-};
+/** The approved Bellingham policy, loaded from the single source of truth. */
+const bellinghamProfile: SourceProfile = BELLINGHAM_PROCUREWARE;
 
 /** Generic profile — dedupe key differs from the primary key so grouping is exercised. */
 const genericProfile: SourceProfile = {

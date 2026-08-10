@@ -2,25 +2,15 @@ import { describe, expect, it } from "vitest";
 import { matchRecords, type MatchReport, type MatchStatus } from "./matchRecords";
 import { buildIdentityKey, normalizeIdentityValue } from "./normalize";
 import type { SourceProfile } from "./adapter-types";
+import { BELLINGHAM_PROCUREWARE } from "../profiles";
 import referenceData from "../test/fixtures/bellingham-reference.json";
 import candidateData from "../test/fixtures/bellingham-candidate.json";
 
 const referenceRecords = (referenceData as unknown as { Export: Array<Record<string, unknown>> }).Export;
 const candidateRecords = (candidateData as unknown as { Export: Array<Record<string, unknown>> }).Export;
 
-const bellinghamProfile: SourceProfile = {
-  id: "bellingham-procureware",
-  version: 1,
-  collectionPath: "Export",
-  primaryKey: ["AgentID", "BidURL"],
-  fallbackKeys: [["AgentID", "ProjectCode"]],
-  dedupeKey: ["AgentID", "BidURL"],
-  hardRequiredFields: ["AgentID", "ProjectCode", "BidURL"],
-  safeBackfillFields: [],
-  manualReviewFields: [],
-  excludedFields: ["Created", "Refreshed"],
-  minimumMatchRate: 0.95
-};
+/** The approved policy, so key changes surface here. */
+const bellinghamProfile: SourceProfile = BELLINGHAM_PROCUREWARE;
 
 const noFallbackProfile: SourceProfile = { ...bellinghamProfile, fallbackKeys: [] };
 
@@ -391,7 +381,8 @@ describe("matchRecords: report shape", () => {
   it("carries profile identity for the audit trail", () => {
     const report = matchRecords([rec()], [rec()], bellinghamProfile);
     expect(report.profileId).toBe("bellingham-procureware");
-    expect(report.profileVersion).toBe(1);
+    // Tracks the canonical profile: an approval that bumps the version surfaces here.
+    expect(report.profileVersion).toBe(bellinghamProfile.version);
     expect(report.primaryKey).toEqual(["AgentID", "BidURL"]);
   });
 
