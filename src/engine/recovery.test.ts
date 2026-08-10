@@ -14,29 +14,30 @@ const FIXED_NOW = "2026-08-10T00:00:00.000Z";
 const RUNS = { generatedAt: FIXED_NOW, sourceRun: "candidate.json", referenceRun: "reference.json" };
 
 /**
- * The profile as actually approved today: safeBackfillFields is empty, and the eight
- * rule 6 fields are declared date-sensitive. See docs/bellingham-source-profile.proposed.json.
+ * The profile as approved at v2: ContactPhone and ContactEmail are permitted for
+ * automatic backfill; everything else, including the five rule 6 date-sensitive
+ * fields, remains withheld. See docs/bellingham-source-profile.proposed.json.
  */
 const bellinghamProfile: SourceProfile = {
   id: "bellingham-procureware",
-  version: 1,
+  version: 2,
   collectionPath: "Export",
   primaryKey: ["AgentID", "BidURL"],
   fallbackKeys: [["AgentID", "ProjectCode"]],
   dedupeKey: ["AgentID", "BidURL"],
   hardRequiredFields: ["AgentID", "ProjectCode", "BidURL"],
-  safeBackfillFields: [],
+  safeBackfillFields: ["ContactPhone", "ContactEmail"],
   manualReviewFields: ["Title", "BidStatus", "BidType", "PublishedDate", "DueDate", "AwardDate"],
   excludedFields: ["Created", "Refreshed"],
   dateSensitiveFields: ["DueDate", "PublishedDate", "AwardDate", "BidStatus", "ContractValue"],
   minimumMatchRate: 0.95
 };
 
-/** A hypothetical future approval, used to exercise the backfill mechanics. */
-const approvedContactProfile: SourceProfile = {
-  ...bellinghamProfile,
-  safeBackfillFields: ["ContactPhone", "ContactEmail"]
-};
+/** Alias retained for readability: the approved contact fields ARE the v2 policy. */
+const approvedContactProfile: SourceProfile = bellinghamProfile;
+
+/** The pre-approval v1 policy, kept to prove the gate is what permits backfill. */
+const unapprovedProfile: SourceProfile = { ...bellinghamProfile, version: 1, safeBackfillFields: [] };
 
 /** Generic profile — no source-specific field names. */
 const genericProfile: SourceProfile = {
@@ -72,8 +73,15 @@ function recover(
 
 describe("recovery: profile gates which fields may be backfilled", () => {
   it("permits nothing when safeBackfillFields is empty", () => {
-    const resolved = resolveBackfillableFields(bellinghamProfile);
+    const resolved = resolveBackfillableFields(unapprovedProfile);
     expect(resolved.allowed).toEqual([]);
+    expect(resolved.rule6Approved).toEqual([]);
+  });
+
+  it("permits exactly the approved contact fields at v2", () => {
+    const resolved = resolveBackfillableFields(bellinghamProfile);
+    expect(resolved.allowed).toEqual(["ContactPhone", "ContactEmail"]);
+    // Approving contact fields does not approve any rule 6 field.
     expect(resolved.rule6Approved).toEqual([]);
   });
 
@@ -499,8 +507,9 @@ describe("recovery: determinism", () => {
 });
 
 describe("recovery: real Bellingham fixtures", () => {
-  it("backfills nothing under the profile as actually approved today", () => {
-    const result = recover(referenceRecords, candidateRecords, bellinghamProfile);
+  it("backfills nothing under the pre-approval v1 policy", () => {
+    // The gate, not the data, is what permits recovery: same inputs, no approval.
+    const result = recover(referenceRecords, candidateRecords, unapprovedProfile);
 
     expect(result.summary.backfillableFields).toEqual([]);
     expect(result.summary.backfilledFieldCount).toBe(0);
@@ -509,6 +518,36 @@ describe("recovery: real Bellingham fixtures", () => {
     // The artifact is still produced: 500 candidate records, none excluded.
     expect(result.summary.recoveredCount).toBe(500);
     expect(result.summary.excludedCount).toBe(0);
+  });
+
+  it("recovers exactly the approved contact fields at v2", () => {
+    const result = recover(referenceRecords, candidateRecords, bellinghamProfile);
+
+    expect(result.summary.backfillableFields).toEqual(["ContactPhone", "ContactEmail"]);
+    expect(result.summary.backfilledFieldCount).toBe(413);
+    expect(result.containsReferenceDerivedValues).toBe(true);
+    expect(result.summary.recoveredCount).toBe(500);
+    expect(result.summary.excludedCount).toBe(0);
+  });
+
+  it("stamps the approving profile version on every provenance entry", () => {
+    // Rule 7: a decision audited under v1 was made under a policy permitting no
+    // backfill at all, and is not valid under v2.
+    const result = recover(referenceRecords, candidateRecords, bellinghamProfile);
+    for (const entry of result.provenance) {
+      expect(entry.profileVersion).toBe(2);
+    }
+  });
+
+  it("copies each matched record's own value, never a modal one", () => {
+    // The single purchasing@cob.org record must not be rewritten to bids@cob.org.
+    const result = recover(referenceRecords, candidateRecords, bellinghamProfile);
+    const emails = new Set(
+      result.provenance.filter((entry) => entry.field === "ContactEmail").map((entry) => String(entry.outputValue))
+    );
+
+    expect(emails.size).toBeGreaterThan(1);
+    expect(emails).toContain("purchasing@cob.org");
   });
 
   it("keeps the one candidate-only record under the default policy", () => {

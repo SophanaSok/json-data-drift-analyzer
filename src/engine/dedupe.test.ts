@@ -12,16 +12,16 @@ const candidateRecords = (candidateData as unknown as { Export: Array<Record<str
 
 const FIXED_NOW = "2026-08-10T00:00:00.000Z";
 
-/** The Bellingham profile as approved today: nothing is backfillable. */
+/** The Bellingham profile at v2: ContactPhone and ContactEmail approved for backfill. */
 const bellinghamProfile: SourceProfile = {
   id: "bellingham-procureware",
-  version: 1,
+  version: 2,
   collectionPath: "Export",
   primaryKey: ["AgentID", "BidURL"],
   fallbackKeys: [["AgentID", "ProjectCode"]],
   dedupeKey: ["AgentID", "BidURL"],
   hardRequiredFields: ["AgentID", "ProjectCode", "BidURL"],
-  safeBackfillFields: [],
+  safeBackfillFields: ["ContactPhone", "ContactEmail"],
   manualReviewFields: [],
   excludedFields: ["Created", "Refreshed"],
   dateSensitiveFields: ["DueDate", "PublishedDate", "AwardDate", "BidStatus", "ContractValue"],
