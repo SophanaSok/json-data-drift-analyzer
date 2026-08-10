@@ -2,6 +2,7 @@ import Dexie, { type Table } from "dexie";
 import type { AnalysisResult } from "../engine/types";
 import type { RecoveryReview } from "../engine/review";
 import type { RecoveryDecision } from "../engine/decisions";
+import type { PostedTicketRecord, TrelloTarget } from "../features/trello/trello-ticket";
 
 export type SavedAnalysis = {
   analysisKey: string;
@@ -26,6 +27,19 @@ export type SavedDecision = RecoveryDecision & {
   analysisKey: string;
 };
 
+/**
+ * Trello posting attempts, append-only. Carries no token, no API key, and no card
+ * body — only a hash of what was sent.
+ */
+export type SavedPostedTicket = PostedTicketRecord;
+
+/**
+ * Non-secret Trello target. The token is deliberately absent: it lives in memory for
+ * the session, or in sessionStorage only if the user opts in. See
+ * docs/trello-integration.proposed.md section 7.
+ */
+export type SavedTrelloTarget = TrelloTarget;
+
 export type TextDiffCache = {
   id: string;
   baselineLength: number;
@@ -35,6 +49,8 @@ export type TextDiffCache = {
 class DriftDatabase extends Dexie {
   analyses!: Table<SavedAnalysis, string>;
   decisions!: Table<SavedDecision, string>;
+  postedTickets!: Table<SavedPostedTicket, string>;
+  trelloTarget!: Table<SavedTrelloTarget, string>;
   textDiffs!: Table<TextDiffCache, string>;
 
   constructor() {
@@ -53,6 +69,15 @@ class DriftDatabase extends Dexie {
     this.version(3).stores({
       analyses: "analysisKey, createdAt",
       decisions: "id, analysisKey, timestamp",
+      textDiffs: "id"
+    });
+    // postedTickets is indexed by fingerprint so the duplicate check is a lookup, not
+    // a scan. trelloTarget holds one row and never holds the token.
+    this.version(4).stores({
+      analyses: "analysisKey, createdAt",
+      decisions: "id, analysisKey, timestamp",
+      postedTickets: "id, runFingerprint, analysisKey, attemptedAt",
+      trelloTarget: "id",
       textDiffs: "id"
     });
   }

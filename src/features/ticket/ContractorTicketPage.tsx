@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   buildDraftFromForm,
@@ -11,11 +11,37 @@ import { getProfile } from "../../profiles";
 import { copyTextToClipboard } from "../../lib/clipboard";
 import { useUiStore } from "../../stores/ui-store";
 import { useToastStore } from "../../stores/toast-store";
+import { TrelloPostPanel } from "../trello/TrelloPostPanel";
+import type { PostedTicketRecord, TrelloTarget } from "../trello/trello-ticket";
+import { db } from "../../db";
 
 export function ContractorTicketPage() {
   const review = useUiStore((state) => state.review);
   const showToast = useToastStore((state) => state.showToast);
   const [form, setForm] = useState<TicketDraftForm>(EMPTY_TICKET_FORM);
+  const [postRecords, setPostRecords] = useState<PostedTicketRecord[]>([]);
+  const [trelloTarget, setTrelloTarget] = useState<TrelloTarget | null>(null);
+
+  const analysisKey = review?.generatedAt ?? "";
+  useEffect(() => {
+    if (!review) return;
+    let cancelled = false;
+    void Promise.all([
+      db.postedTickets.where("analysisKey").equals(analysisKey).toArray(),
+      db.trelloTarget.get("trello-target")
+    ])
+      .then(([records, target]) => {
+        if (cancelled) return;
+        setPostRecords(records);
+        setTrelloTarget(target ?? null);
+      })
+      .catch(() => {
+        // A cache read failure must not hide the draft.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [review, analysisKey]);
 
   const profile = review ? getProfile(review.profileId) : null;
 
@@ -81,8 +107,8 @@ export function ContractorTicketPage() {
       <header className="space-y-1">
         <h2 className="text-xl font-semibold">Contractor ticket</h2>
         <p className="text-sm text-slate-600">
-          A draft to review and paste into Trello. <strong>Nothing is sent from here</strong> — this
-          tool creates no card and contacts no external service.
+          A draft to review, copy, or post. <strong>Nothing is posted automatically</strong> — every
+          card requires an explicit confirmation, and only the title and description are sent.
         </p>
       </header>
 
@@ -209,6 +235,28 @@ export function ContractorTicketPage() {
         </section>
       )}
 
+      {result.ok ? (
+        <TrelloPostPanel
+          review={review}
+          draft={result.draft}
+          analysisKey={analysisKey}
+          records={postRecords}
+          target={trelloTarget}
+          onSaveTarget={(target) => {
+            setTrelloTarget(target);
+            void db.trelloTarget.put(target).catch(() => {
+              showToast("Trello list saved for this session only.", "warning");
+            });
+          }}
+          onRecordAttempt={(record) => {
+            setPostRecords((current) => [...current, record]);
+            void db.postedTickets.put(record).catch(() => {
+              showToast("Post recorded for this session but not saved in browser storage.", "warning");
+            });
+          }}
+        />
+      ) : null}
+
       <section className="rounded border bg-white p-4" data-testid="trello-handoff">
         <h3 className="font-medium">Getting this into Trello</h3>
         <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm">
@@ -217,10 +265,9 @@ export function ContractorTicketPage() {
           ))}
         </ol>
         <p className="mt-3 rounded border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-          This tool does not create Trello cards. Doing so would be a network write, which needs an
-          explicit confirmation step before it runs, and an API token, which must be entered by you
-          at the time rather than stored in this app or committed to the repository. Neither exists
-          yet, so the handoff is manual and nothing leaves your browser.
+          Posting is available above and always requires an explicit confirmation. The steps below
+          remain the manual route, and are still the only way to attach the exported files — the
+          card carries the title and description only.
         </p>
       </section>
     </div>

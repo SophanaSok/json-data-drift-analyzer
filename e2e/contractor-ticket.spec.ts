@@ -23,10 +23,32 @@ test.describe("contractor ticket draft", () => {
     await expect(page.getByTestId("draft-labels")).toContainText("source:bellingham-procureware");
   });
 
-  test("states plainly that nothing is sent", async ({ page }) => {
-    await expect(page.getByTestId("contractor-ticket")).toContainText("Nothing is sent from here");
-    await expect(page.getByTestId("trello-handoff")).toContainText("does not create Trello cards");
-    await expect(page.getByTestId("trello-handoff")).toContainText("entered by you");
+  test("states plainly that nothing is posted automatically", async ({ page }) => {
+    await expect(page.getByTestId("contractor-ticket")).toContainText("Nothing is posted automatically");
+    await expect(page.getByTestId("trello-panel")).toContainText("after you confirm");
+    await expect(page.getByTestId("token-notice")).toContainText("never saved");
+  });
+
+  test("cannot post until configured, and never without confirmation", async ({ page }) => {
+    await expect(page.getByTestId("trello-arm")).toBeDisabled();
+    await expect(page.getByTestId("trello-not-configured")).toBeVisible();
+
+    await page.getByTestId("trello-key").fill("key");
+    await page.getByTestId("trello-token").fill("token");
+    await page.getByTestId("trello-list").fill("list");
+    await expect(page.getByTestId("trello-arm")).toBeEnabled();
+
+    // Arming shows a confirmation; it does not post.
+    await page.getByTestId("trello-arm").click();
+    await expect(page.getByTestId("trello-confirm")).toContainText("Create one card in list");
+    await page.getByTestId("trello-cancel").click();
+    await expect(page.getByTestId("trello-confirm")).toHaveCount(0);
+  });
+
+  test("shows exactly what would be sent", async ({ page }) => {
+    await expect(page.getByTestId("preview-title")).toContainText("bellingham-procureware");
+    await expect(page.getByTestId("preview-body")).toContainText("Observed behaviour suggests");
+    await expect(page.getByTestId("preview-labels")).toContainText("no label is applied");
   });
 
   test("hedges on root cause by default", async ({ page }) => {
