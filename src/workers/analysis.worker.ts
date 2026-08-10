@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { runAnalysis } from "../engine/diff";
+import { parseJSON } from "../engine/source-loader";
 import type { AnalyzeRequest, WorkerMessage } from "./protocol";
 
 function post(message: WorkerMessage): void {
@@ -12,12 +13,23 @@ self.onmessage = (event: MessageEvent<AnalyzeRequest>) => {
       return;
     }
 
-    const baselineData = JSON.parse(event.data.payload.baselineText) as unknown;
-    const latestData = JSON.parse(event.data.payload.latestText) as unknown;
+    // Strips a UTF-8 BOM before parsing. Real scraper exports ship with one, and a
+    // bare JSON.parse rejects them outright.
+    const baseline = parseJSON(event.data.payload.baselineText, event.data.payload.baselineFileName);
+    const latest = parseJSON(event.data.payload.latestText, event.data.payload.latestFileName);
+
+    const failed = [baseline, latest].find((result) => !result.success);
+    if (failed) {
+      post({
+        type: "error",
+        payload: { message: `Could not parse ${failed.source}: ${failed.error ?? "invalid JSON"}` }
+      });
+      return;
+    }
 
     const result = runAnalysis({
-      baselineData,
-      latestData,
+      baselineData: baseline.dataset,
+      latestData: latest.dataset,
       config: event.data.payload.config,
       baselineFileName: event.data.payload.baselineFileName,
       latestFileName: event.data.payload.latestFileName,

@@ -1,5 +1,5 @@
 /**
- * Source loader for json-data-drift-analyzer.
+ * Source loader for json-data-drift-analyzer. 
  *
  * Provides safe parsing of source JSON files with:
  * - UTF-8 BOM detection and stripping

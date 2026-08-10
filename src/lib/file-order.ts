@@ -3,6 +3,7 @@ import {
   BASELINE_DATE_NEWER_TOAST_MESSAGE,
   type FileOrderAssessment
 } from "../engine/export-metadata";
+import { stripBOM } from "../engine/source-loader";
 import { useToastStore } from "../stores/toast-store";
 
 export function assessFileOrderFromJson(
@@ -12,8 +13,10 @@ export function assessFileOrderFromJson(
   latestFileName: string,
   collectionPath = "Export"
 ): FileOrderAssessment {
-  const baseline = JSON.parse(baselineText) as unknown;
-  const latest = JSON.parse(latestText) as unknown;
+  // Strips a UTF-8 BOM before parsing; real scraper exports ship with one. Still
+  // throws on genuinely malformed JSON, which the caller surfaces to the user.
+  const baseline = JSON.parse(stripBOM(baselineText).content) as unknown;
+  const latest = JSON.parse(stripBOM(latestText).content) as unknown;
   return assessFileOrder(
     baseline,
     latest,
