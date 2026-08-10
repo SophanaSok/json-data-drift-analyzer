@@ -62,9 +62,9 @@ describe("recovery: profile gates which fields may be backfilled", () => {
     expect(resolved.rule6Approved).toEqual([]);
   });
 
-  it("permits exactly the three approved fields at v3", () => {
+  it("permits exactly the four approved fields at v4", () => {
     const resolved = resolveBackfillableFields(bellinghamProfile);
-    expect(resolved.allowed).toEqual(["ContactPhone", "ContactEmail", "BidType"]);
+    expect(resolved.allowed).toEqual(["ContactPhone", "ContactEmail", "BidType", "Title"]);
     // No approval so far has approved a rule 6 field.
     expect(resolved.rule6Approved).toEqual([]);
   });
@@ -504,12 +504,12 @@ describe("recovery: real Bellingham fixtures", () => {
     expect(result.summary.excludedCount).toBe(0);
   });
 
-  it("recovers exactly the approved fields at v3", () => {
+  it("recovers exactly the approved fields at v4", () => {
     const result = recover(referenceRecords, candidateRecords, bellinghamProfile);
 
-    expect(result.summary.backfillableFields).toEqual(["ContactPhone", "ContactEmail", "BidType"]);
-    // 495 BidType + 171 ContactPhone + 242 ContactEmail.
-    expect(result.summary.backfilledFieldCount).toBe(908);
+    expect(result.summary.backfillableFields).toEqual(["ContactPhone", "ContactEmail", "BidType", "Title"]);
+    // 499 Title + 495 BidType + 242 ContactEmail + 171 ContactPhone.
+    expect(result.summary.backfilledFieldCount).toBe(1407);
     expect(result.containsReferenceDerivedValues).toBe(true);
     expect(result.summary.recoveredCount).toBe(500);
     expect(result.summary.excludedCount).toBe(0);
@@ -553,7 +553,8 @@ describe("recovery: real Bellingham fixtures", () => {
     expect(byField.get("ContactEmail")).toBe(242);
     expect(byField.get("ContactPhone")).toBe(171);
     expect(byField.get("BidType")).toBe(495);
-    expect(result.summary.backfilledFieldCount).toBe(908);
+    expect(byField.get("Title")).toBe(499);
+    expect(result.summary.backfilledFieldCount).toBe(1407);
     expect(result.containsReferenceDerivedValues).toBe(true);
   });
 
@@ -561,8 +562,8 @@ describe("recovery: real Bellingham fixtures", () => {
     const result = recover(referenceRecords, candidateRecords, approvedContactProfile);
     const touched = new Set(result.provenance.map((entry) => entry.field));
 
-    // The five rule 6 fields plus Title remain unrecovered at v3.
-    for (const field of ["Title", "BidStatus", "PublishedDate", "DueDate", "AwardDate"]) {
+    // The rule 6 fields remain unrecovered at v4.
+    for (const field of ["BidStatus", "PublishedDate", "DueDate", "AwardDate"]) {
       expect(touched.has(field), `${field} must not be recovered`).toBe(false);
     }
   });
