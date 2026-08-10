@@ -1,0 +1,100 @@
+import { expect, test, type ConsoleMessage } from "@playwright/test";
+import path from "node:path";
+
+const root = process.cwd();
+
+/**
+ * Exercises the real Content-Security-Policy against the built output.
+ *
+ * A CSP that is too strict fails silently in ways unit tests cannot see: a blocked
+ * worker, a blocked stylesheet, a download that never starts. These run the actual
+ * flows with violations collected from the console.
+ */
+function collectCspViolations(page: import("@playwright/test").Page): string[] {
+  const violations: string[] = [];
+  page.on("console", (message: ConsoleMessage) => {
+    const text = message.text();
+    if (/content security policy|refused to (load|connect|execute|apply)/i.test(text)) {
+      violations.push(text);
+    }
+  });
+  page.on("pageerror", (error) => {
+    if (/content security policy/i.test(error.message)) violations.push(error.message);
+  });
+  return violations;
+}
+
+test("the built page carries the policy", async ({ page }) => {
+  await page.goto("");
+  const csp = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute("content");
+
+  expect(csp).toBeTruthy();
+  expect(csp).toContain("default-src 'self'");
+  expect(csp).toContain("script-src 'self'");
+  expect(csp).toContain("object-src 'none'");
+  // The directive that stops an injected script exfiltrating the Trello token.
+  expect(csp).toContain("connect-src 'self' https://api.trello.com");
+});
+
+test("the app loads and analyses without violating the policy", async ({ page }) => {
+  const violations = collectCspViolations(page);
+
+  await page.goto("");
+  await page
+    .getByTestId("baseline-input")
+    .setInputFiles(path.join(root, "src/test/fixtures/bellingham-reference.json"));
+  await page
+    .getByTestId("latest-input")
+    .setInputFiles(path.join(root, "src/test/fixtures/bellingham-candidate.json"));
+  await page.getByTestId("analyze-button").click();
+
+  // Reaching results proves the worker ran, which is the load most likely to be
+  // blocked by worker-src.
+  await expect(page.getByText("Deterministic incident narrative")).toBeVisible({ timeout: 30000 });
+  expect(violations).toEqual([]);
+});
+
+test("virtualized rows still position, so inline styles are permitted", async ({ page }) => {
+  const violations = collectCspViolations(page);
+
+  await page.goto("");
+  await page
+    .getByTestId("baseline-input")
+    .setInputFiles(path.join(root, "src/test/fixtures/bellingham-reference.json"));
+  await page
+    .getByTestId("latest-input")
+    .setInputFiles(path.join(root, "src/test/fixtures/bellingham-candidate.json"));
+  await page.getByTestId("analyze-button").click();
+  await page.getByRole("link", { name: "Recovery", exact: true }).click();
+  await expect(page.getByTestId("findings-explorer")).toBeVisible({ timeout: 30000 });
+
+  const row = page.locator('[data-testid^="finding-row-"]').first();
+  await expect(row).toBeVisible();
+  // A blocked style attribute would leave every row stacked at the origin.
+  await expect(row).toHaveAttribute("style", /transform/);
+  expect(violations).toEqual([]);
+});
+
+test("downloads still work under the policy", async ({ page }) => {
+  const violations = collectCspViolations(page);
+
+  await page.goto("");
+  await page
+    .getByTestId("baseline-input")
+    .setInputFiles(path.join(root, "src/test/fixtures/bellingham-reference.json"));
+  await page
+    .getByTestId("latest-input")
+    .setInputFiles(path.join(root, "src/test/fixtures/bellingham-candidate.json"));
+  await page.getByTestId("analyze-button").click();
+  await page.getByRole("link", { name: "Recovery", exact: true }).click();
+  await expect(page.getByTestId("export-section")).toBeVisible({ timeout: 30000 });
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByTestId("download-recovered").click();
+  const download = await downloadPromise;
+
+  // Object URLs are how every export is delivered; a policy that blocked them
+  // would break the feature silently.
+  expect(download.suggestedFilename()).toContain("recovered");
+  expect(violations).toEqual([]);
+});
