@@ -203,6 +203,16 @@ export function runDedupe(
     });
   });
 
+  // Recovery can backfill a record and only then exclude it for a missing
+  // hard-required field, so an excluded record may still carry reference-derived
+  // values. Reading that from the provenance log keeps the candidate-sourced
+  // criterion meaningful when a duplicate group contains excluded records.
+  const referenceDerivedKeys = new Set(
+    recovery.provenance
+      .filter((entry) => entry.source === "reference_backfill")
+      .map((entry) => entry.recordKey)
+  );
+
   recovery.excluded.forEach((record) => {
     const source =
       record.candidateIndex !== null && record.candidateIndex < candidateRecords.length
@@ -214,7 +224,7 @@ export function runDedupe(
       dedupeKey: source === null || dedupeKeyFields.length === 0 ? null : buildIdentityKey(source, dedupeKeyFields).key,
       candidateIndex: record.candidateIndex,
       validity: "excluded",
-      containsReferenceDerivedValues: false,
+      containsReferenceDerivedValues: record.recordKey !== null && referenceDerivedKeys.has(record.recordKey),
       requiredFieldsPresent: countRequiredPresent(source, profile),
       position: participants.length
     });

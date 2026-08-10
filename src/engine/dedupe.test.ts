@@ -223,6 +223,30 @@ describe("dedupe: candidate-sourced beats reference-recovered", () => {
     expect(result.removed[0].removed.containsReferenceDerivedValues).toBe(true);
   });
 
+  it("still sees reference-derived values on a record recovery later excluded", () => {
+    // Recovery backfills Note, then excludes the record for a missing hard-required
+    // Title. The provenance still exists, so the candidate-sourced criterion applies.
+    const excludingProfile: SourceProfile = {
+      ...genericProfile,
+      hardRequiredFields: ["Id", "Group", "Title"],
+      safeBackfillFields: ["Note"]
+    };
+    const reference = [{ Id: "a", Group: "g1", Note: "from reference", Title: "t" }];
+    const candidate = [
+      { Id: "a", Group: "g1", Note: "", Title: "" },
+      { Id: "b", Group: "g1", Note: "", Title: "" }
+    ];
+
+    const result = pipeline(reference, candidate, excludingProfile);
+    const backfilled = result.groups[0].removed
+      .map((entry) => entry.removed)
+      .concat(result.groups[0].winner)
+      .find((participant) => participant.candidateIndex === 0);
+
+    expect(backfilled?.validity).toBe("excluded");
+    expect(backfilled?.containsReferenceDerivedValues).toBe(true);
+  });
+
   it("does not apply when neither record was backfilled", () => {
     const candidate = [
       { Id: "a", Group: "g1", Note: "x" },

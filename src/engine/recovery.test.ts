@@ -176,9 +176,23 @@ describe("recovery: never backfills ambiguous or unkeyable matches", () => {
     expect(result.excluded[0].offendingFields).toContain("Id");
   });
 
-  it("cites the QA findings that justified an exclusion", () => {
-    const result = recover([rec({ Note: "v" })], [{ Id: "   ", Note: "" }]);
-    expect(result.excluded[0].findingIds.length).toBeGreaterThanOrEqual(0);
+  it("cites the QA findings that justified an unkeyable record's exclusion", () => {
+    // An unkeyable record has a null recordKey on both sides, so linking findings by
+    // key alone silently yields none — for exactly the record whose exclusion most
+    // needs justifying.
+    const matchReport = matchRecords([rec({ Note: "v" })], [{ Id: "   ", Note: "" }], genericProfile);
+    const qa = runQa([rec({ Note: "v" })], [{ Id: "   ", Note: "" }], genericProfile, {
+      matchReport,
+      generatedAt: FIXED_NOW
+    });
+    const result = runRecovery([{ Id: "   ", Note: "" }], [rec({ Note: "v" })], genericProfile, matchReport, qa.findings, RUNS);
+
+    const excluded = result.excluded[0];
+    expect(excluded.reason).toBe("invalid_identity");
+    expect(excluded.findingIds.length).toBeGreaterThan(0);
+
+    const cited = qa.findings.filter((finding) => excluded.findingIds.includes(finding.id));
+    expect(cited.some((finding) => finding.category === "identity_match_issue")).toBe(true);
   });
 });
 
@@ -370,6 +384,58 @@ describe("recovery: provenance and rule 9", () => {
     expect(entry.reason).toBe("operator decision");
     // A person may overwrite a non-blank value; rule 3 binds automation.
     expect(entry.originalValue).toBe("c");
+  });
+
+  it("resolves a field overridden after a backfill to manual_override, not the backfill", () => {
+    const profile: SourceProfile = { ...genericProfile, safeBackfillFields: ["Note"] };
+    const reference = [rec({ Note: "from reference" })];
+    const candidate = [rec({ Note: "" })];
+
+    const matchReport = matchRecords(reference, candidate, profile);
+    const qa = runQa(reference, candidate, profile, { matchReport, generatedAt: FIXED_NOW });
+    const key = matchReport.results[0].candidateKey as string;
+
+    const result = runRecovery(candidate, reference, profile, matchReport, qa.findings, {
+      ...RUNS,
+      manualOverrides: [{ recordKey: key, field: "Note", value: "operator value", reason: "operator decision" }]
+    });
+
+    // Two events for one field; the later one is what the value actually is.
+    expect(result.provenance.filter((entry) => entry.field === "Note")).toHaveLength(2);
+    expect(result.recovered[0].record.Note).toBe("operator value");
+    expect(resolveFieldProvenance(key, "Note", result.provenance)).toBe("manual_override");
+    expect(auditRecoveredRecord(result, key)?.fields.Note).toBe("manual_override");
+  });
+
+  it("records the key that actually produced the pairing, not always the primary key", () => {
+    const profile: SourceProfile = {
+      ...genericProfile,
+      primaryKey: ["Url"],
+      fallbackKeys: [["Id"]],
+      safeBackfillFields: ["Note"]
+    };
+    const reference = [{ Id: "a", Url: "https://a.test/1", Note: "v" }];
+    const candidate = [{ Id: "a", Url: "https://a.test/2", Note: "" }];
+
+    const matchReport = matchRecords(reference, candidate, profile);
+    const qa = runQa(reference, candidate, profile, { matchReport, generatedAt: FIXED_NOW });
+    const result = runRecovery(candidate, reference, profile, matchReport, qa.findings, RUNS);
+
+    expect(result.recovered[0].matchStatus).toBe("matched_fallback");
+    expect(result.provenance[0].matchingKey).toEqual(["Id"]);
+  });
+
+  it("refuses a manual override with a blank reason", () => {
+    const matchReport = matchRecords([rec()], [rec()], genericProfile);
+    const qa = runQa([rec()], [rec()], genericProfile, { matchReport, generatedAt: FIXED_NOW });
+    const key = matchReport.results[0].candidateKey as string;
+
+    expect(() =>
+      runRecovery([rec()], [rec()], genericProfile, matchReport, qa.findings, {
+        ...RUNS,
+        manualOverrides: [{ recordKey: key, field: "Note", value: "x", reason: "   " }]
+      })
+    ).toThrow(/reason is required/);
   });
 
   it("builds a total field map for a record", () => {

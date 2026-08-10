@@ -70,15 +70,23 @@ export type ProvenanceEventInput = {
   candidateIndex: number | null;
   referenceIndex: number | null;
   matchStatus: string | null;
+  /**
+   * Fields that actually produced this record's pairing. Rule 7 asks for the
+   * matching key, and a fallback match was not made on the primary key — recording
+   * the profile's primary key there would misstate how the pairing was reached.
+   * Falls back to the envelope's key when the event involved no pairing.
+   */
+  matchingKey?: string[];
 };
 
 export function createProvenanceEntry(
   envelope: ProvenanceEnvelope,
   event: ProvenanceEventInput
 ): ProvenanceEntry {
+  const { matchingKey, ...rest } = event;
   return {
-    ...event,
-    matchingKey: envelope.matchingKey,
+    ...rest,
+    matchingKey: matchingKey ?? envelope.matchingKey,
     profileId: envelope.profileId,
     profileVersion: envelope.profileVersion,
     sourceRun: envelope.sourceRun,
@@ -134,12 +142,23 @@ export function buildRecordProvenance(
   };
 }
 
-/** Source of a single field, defaulting to "candidate" when no event changed it. */
+/**
+ * Source of a single field, defaulting to "candidate" when no event changed it.
+ *
+ * The LAST applicable event wins, matching how `buildRecordProvenance` folds events
+ * into its map and how the value itself was produced: a field that was backfilled and
+ * then manually overridden is a manual_override, not a reference_backfill.
+ */
 export function resolveFieldProvenance(
   recordKey: string,
   field: string,
   entries: ProvenanceEntry[]
 ): ProvenanceSource {
-  const entry = entries.find((candidate) => candidate.recordKey === recordKey && candidate.field === field);
-  return entry?.source ?? "candidate";
+  let source: ProvenanceSource = "candidate";
+  for (const entry of entries) {
+    if (entry.recordKey === recordKey && entry.field === field) {
+      source = entry.source;
+    }
+  }
+  return source;
 }

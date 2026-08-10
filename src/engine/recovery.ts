@@ -166,9 +166,28 @@ export function resolveBackfillableFields(profile: SourceProfile): {
   return { allowed, withheld, rule6Approved };
 }
 
-function findingsForRecord(findings: Finding[], recordKey: string | null): Finding[] {
-  if (recordKey === null) return [];
-  return findings.filter((finding) => finding.recordKey === recordKey);
+/**
+ * QA findings relating to one record.
+ *
+ * An unkeyable record has a null recordKey on BOTH sides, so matching on key alone
+ * would silently return nothing and leave `ExcludedRecord.findingIds` empty for
+ * exactly the records whose exclusion most needs justifying. Fall back to the
+ * candidate index, which findings carry in their evidence.
+ */
+function findingsForRecord(
+  findings: Finding[],
+  recordKey: string | null,
+  candidateIndex: number | null
+): Finding[] {
+  if (recordKey !== null) {
+    return findings.filter((finding) => finding.recordKey === recordKey);
+  }
+  if (candidateIndex === null) {
+    return [];
+  }
+  return findings.filter(
+    (finding) => finding.recordKey === null && finding.evidence.candidateIndex === candidateIndex
+  );
 }
 
 export function runRecovery(
@@ -216,7 +235,7 @@ export function runRecovery(
 
     const candidateIndex = result.candidateIndex;
     const recordKey = result.candidateKey ?? buildIdentityKey(candidateRecords[candidateIndex], profile.primaryKey).key;
-    const relatedFindings = findingsForRecord(findings, recordKey);
+    const relatedFindings = findingsForRecord(findings, recordKey, candidateIndex);
 
     if (result.status === "invalid_identity") {
       excluded.push({
@@ -304,7 +323,10 @@ export function runRecovery(
             actor: "auto",
             candidateIndex,
             referenceIndex: result.referenceIndex,
-            matchStatus: result.status
+            matchStatus: result.status,
+            // The key that actually produced this pairing — a fallback match was
+            // not made on the primary key.
+            matchingKey: result.keyFields ?? profile.primaryKey
           })
         );
       }
@@ -313,6 +335,14 @@ export function runRecovery(
     // ---- Manual overrides ---------------------------------------------------
     // A person may overwrite a non-blank value; rule 3 constrains automation.
     for (const override of overridesByRecord.get(key) ?? []) {
+      // Rule 7 requires a reason on every audited action. An override with a blank
+      // one is not auditable, so refuse it rather than emit a hollow entry.
+      if (override.reason.trim().length === 0) {
+        throw new Error(
+          `Manual override for ${override.recordKey}.${override.field} has no reason; a reason is required for the audit trail.`
+        );
+      }
+
       const originalValue = override.field in output ? output[override.field] : null;
       output[override.field] = override.value;
       overriddenFields.push(override.field);
@@ -329,7 +359,8 @@ export function runRecovery(
           actor: "user",
           candidateIndex,
           referenceIndex: result.referenceIndex,
-          matchStatus: result.status
+          matchStatus: result.status,
+          matchingKey: result.keyFields ?? profile.primaryKey
         })
       );
     }
