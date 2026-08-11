@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { DateOrderingAlert } from "../../components/upload/DateOrderingAlert";
 import { ExportDateIndicators } from "../../components/upload/ExportDateIndicators";
-import { db } from "../../db";
+import { ANALYSIS_CACHE_SCHEMA_VERSION, db } from "../../db";
 import { defaultProfile } from "../../engine/profile";
 import { BELLINGHAM_PROCUREWARE, PROFILES, getProfile } from "../../profiles";
 import { hashText } from "../../lib/hash";
@@ -105,7 +105,10 @@ export function UploadPage() {
           // Approving a field bumps the source profile version, which must
           // invalidate the cache rather than reuse the previous policy's outcome.
           sourceProfile.id,
-          String(sourceProfile.version)
+          String(sourceProfile.version),
+          // A cached entry written under an older persisted shape must be a cache
+          // miss, not a review missing fields the current code assumes exist.
+          String(ANALYSIS_CACHE_SCHEMA_VERSION)
         ].join("::")
       );
 
