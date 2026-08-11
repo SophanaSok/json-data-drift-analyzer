@@ -4,6 +4,14 @@ import type { RecoveryReview } from "../engine/review";
 import type { RecoveryDecision } from "../engine/decisions";
 import type { PostedTicketRecord, TrelloTarget } from "../features/trello/trello-ticket";
 
+/**
+ * Version of the persisted analysis/review shape, folded into the analysis cache
+ * key. Bump it whenever `AnalysisResult` or `RecoveryReview` gains or changes a
+ * field: entries written under the old shape then miss the cache and are rebuilt,
+ * instead of being served with fields the current code assumes exist.
+ */
+export const ANALYSIS_CACHE_SCHEMA_VERSION = 2;
+
 export type SavedAnalysis = {
   analysisKey: string;
   createdAt: string;
