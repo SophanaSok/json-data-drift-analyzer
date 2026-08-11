@@ -118,7 +118,10 @@ export function RecordsTable({ records, selectedRecordId, sort, onSort, onSelect
                 ref={rowVirtualizer.measureElement}
                 role="row"
                 data-index={virtualItem.index}
-                data-testid={`record-${record.id}`}
+                // The human-readable label, not record.id: the id is the
+                // JSON-serialized identity key, and testids are an interface
+                // for humans and tests ("record-91B-2023").
+                data-testid={`record-${record.recordKey}`}
                 data-selected={isSelected ? "true" : "false"}
                 className={`absolute left-0 top-0 grid w-full cursor-pointer border-b border-slate-100 hover:bg-sky-50 ${
                   isSelected ? "bg-sky-100 ring-1 ring-inset ring-sky-300" : "bg-white"
