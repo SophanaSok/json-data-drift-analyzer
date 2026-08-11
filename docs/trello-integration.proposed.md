@@ -1,6 +1,11 @@
 # Proposal — minimal Trello integration
 
-**Status: DESIGN ONLY. No code written, nothing implemented.**
+**Status: IMPLEMENTED.** This design was subsequently built — the client lives in
+`src/lib/trello.ts` and the UI in `src/features/trello/TrelloPostPanel.tsx`. One
+deliberate deviation from §0 below: CORS verification showed Trello accepts an
+`Authorization` header, so credentials travel in that header and never in the URL,
+where a secret reliably leaks into history and logs. Kept as a historical design
+record; where this document and the code disagree, the code and its tests win.
 
 Governed by `AGENTS.md`, in particular rule 8 (browser/local-first, no backend unless
 asked), rule 9 (secrets never committed; Trello tokens user-entered locally or supplied
