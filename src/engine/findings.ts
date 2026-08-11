@@ -21,6 +21,14 @@ export type FindingCategory =
   | "field_validation_failure"
   /** Reference held a value, the matched candidate does not. */
   | "field_regression"
+  /**
+   * A field regressed in EVERY matched record where the reference held a value —
+   * total loss, the signature of a broken extraction routine rather than data
+   * churn. Dataset-level: one finding per field, alongside the per-record
+   * field_regression findings, so the systemic failure is a headline rather than
+   * something to infer from thousands of rows.
+   */
+  | "systemic_field_regression"
   /** Both sides hold different non-blank values. */
   | "field_conflict"
   /** A field present in the reference schema is absent from the candidate schema. */
@@ -155,6 +163,7 @@ const ZERO_CATEGORY: Record<FindingCategory, number> = {
   required_field_missing: 0,
   field_validation_failure: 0,
   field_regression: 0,
+  systemic_field_regression: 0,
   field_conflict: 0,
   schema_field_missing: 0,
   duplicate_identity_key: 0,

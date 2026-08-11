@@ -194,6 +194,7 @@ export function deriveSeverity(groups: TicketFindingGroup[]): FindingSeverity {
 
 const CATEGORY_LABEL: Partial<Record<FindingCategory, string>> = {
   field_regression: "field-regression",
+  systemic_field_regression: "systemic-regression",
   field_conflict: "field-conflict",
   required_field_missing: "required-field-missing",
   schema_field_missing: "schema-change",

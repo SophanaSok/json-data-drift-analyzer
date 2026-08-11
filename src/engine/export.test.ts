@@ -505,12 +505,32 @@ describe("export: bundle and download", () => {
 });
 
 describe("export: real Bellingham fixtures", () => {
-  const bundle = buildExportBundle(bellinghamInputs());
+  const inputsForGate = bellinghamInputs();
+  const bundle = buildExportBundle(inputsForGate);
 
-  it("blocks nothing — the run is clean under the approved profile", () => {
+  it("permits the export while naming the systemic loss — deliberate, not an oversight", () => {
+    // The gate stays open by design: the recovered artifact is the stopgap this
+    // profile explicitly authorizes, and blocking it for the very regression it
+    // exists to mitigate would defeat the tool. The catastrophe is NOT silent —
+    // the same QA report carries one systemic_field_regression finding per wiped
+    // field, and the UI banner states what the gate did and did not check.
     expect(bundle.gate.recoveredExportAllowed).toBe(true);
     expect(bundle.gate.criticalFindingCount).toBe(0);
     expect(bundle.blocked).toHaveLength(0);
+
+    const systemic = inputsForGate.qa.findings.filter(
+      (finding) => finding.category === "systemic_field_regression"
+    );
+    expect(systemic.map((finding) => finding.fieldPath).sort()).toEqual([
+      "AwardDate",
+      "BidStatus",
+      "BidType",
+      "ContactEmail",
+      "ContactPhone",
+      "DueDate",
+      "PublishedDate",
+      "Title"
+    ]);
   });
 
   it("exports all 500 deduplicated records", () => {
@@ -532,7 +552,7 @@ describe("export: real Bellingham fixtures", () => {
   it("writes one CSV row per finding for the whole regression", () => {
     const csv = bundle.artifacts.find((artifact) => artifact.kind === "findings");
     const rows = csv!.content.trimEnd().split("\r\n");
-    expect(rows).toHaveLength(3401); // 3,400 findings (incl. the dropped-record row for 3B-2018) plus the header
+    expect(rows).toHaveLength(3409); // 3,408 findings (dropped-record row plus 8 systemic-loss rows included) and the header
   });
 });
 

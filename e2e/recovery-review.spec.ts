@@ -89,10 +89,17 @@ test.describe("recovery review: findings explorer", () => {
     await expect(page.getByTestId("recovery-review")).toBeVisible({ timeout: 30000 });
   });
 
-  test("shows an unmistakable safe-to-export state", async ({ page }) => {
+  test("states the gate verdict with its scope, and names the systemic loss", async ({ page }) => {
     const state = page.getByTestId("export-state");
     await expect(state).toHaveAttribute("data-state", "safe");
-    await expect(state).toContainText("Safe to export");
+    await expect(state).toContainText("Export permitted");
+    // The verdict must not read as "clean data": the residual queue is named…
+    await expect(state).toContainText("1992 cell(s) still await manual review");
+    // …and the eight-field wipe is a headline, not something to infer from rows.
+    const systemic = page.getByTestId("systemic-regression-warning");
+    await expect(systemic).toContainText("Title");
+    await expect(systemic).toContainText("DueDate");
+    await expect(systemic).toContainText("broken extraction routine");
   });
 
   test("names the recoverable fields", async ({ page }) => {
@@ -101,14 +108,14 @@ test.describe("recovery review: findings explorer", () => {
   });
 
   test("filters findings by field and by action", async ({ page }) => {
-    await expect(page.getByTestId("findings-count")).toContainText("Showing 3400 of 3400");
+    await expect(page.getByTestId("findings-count")).toContainText("Showing 3408 of 3408");
 
     await page.getByTestId("filter-field").selectOption("Title");
-    await expect(page.getByTestId("findings-count")).toContainText("Showing 499 of 3400");
+    await expect(page.getByTestId("findings-count")).toContainText("Showing 500 of 3408");
 
     await page.getByTestId("filter-reset").click();
     await page.getByTestId("filter-category").selectOption("field_conflict");
-    await expect(page.getByTestId("findings-count")).toContainText("Showing 5 of 3400");
+    await expect(page.getByTestId("findings-count")).toContainText("Showing 5 of 3408");
   });
 
   test("reports plainly when a filter combination matches nothing", async ({ page }) => {
@@ -244,7 +251,23 @@ test.describe("recovery review: bulk decisions", () => {
     await page.getByTestId("bulk-backfill").click();
 
     await expect(page.getByTestId("bulk-confirm")).toContainText("Record 499 decision(s)");
+    // Scoped to one date-sensitive field: allowed, and the breakdown says so.
+    await expect(page.getByTestId("bulk-breakdown")).toContainText("DueDate (499)");
+    await expect(page.getByTestId("bulk-breakdown")).toContainText("this one field");
     await expect(page.getByTestId("decision-log")).toHaveCount(0);
+  });
+
+  test("skips rule-6 fields from an unscoped bulk backfill and says so upfront", async ({ page }) => {
+    await page.getByTestId("bulk-reason").fill("apply everything");
+    await page.getByTestId("bulk-backfill").click();
+
+    const breakdown = page.getByTestId("bulk-breakdown");
+    await expect(breakdown).toContainText("overwrite a populated candidate value");
+    await expect(breakdown).toContainText("DueDate (499)");
+    await expect(breakdown).toContainText("SKIPPED; filter to a single field");
+
+    await page.getByTestId("bulk-confirm-apply").click();
+    await expect(page.getByTestId("bulk-outcome")).toContainText("Skipped 1984");
   });
 
   test("records the whole batch and persists it", async ({ page }) => {

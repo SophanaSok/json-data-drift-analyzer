@@ -122,3 +122,22 @@ describe("RecoveryReviewPage: recorded decisions reach the export", () => {
     expect(unapplied.textContent).toContain("DueDate");
   });
 });
+
+describe("RecoveryReviewPage: the gate verdict states its scope", () => {
+  it("says export is permitted, names the residual review queue, and calls out systemic loss", () => {
+    renderPage();
+    const state = screen.getByTestId("export-state");
+
+    expect(state.getAttribute("data-state")).toBe("safe");
+    expect(state.textContent).toContain("Export permitted");
+    // "Passes the gate" must not read as "clean data": the unrecovered cells are named.
+    expect(state.textContent).toContain("cell(s) still await manual review");
+    expect(state.textContent).not.toContain("Safe to export");
+
+    // Title, BidType, and DueDate were lost in every matched record of this pair.
+    const warning = screen.getByTestId("systemic-regression-warning").textContent ?? "";
+    expect(warning).toContain("Title");
+    expect(warning).toContain("DueDate");
+    expect(warning).toContain("every matched record");
+  });
+});

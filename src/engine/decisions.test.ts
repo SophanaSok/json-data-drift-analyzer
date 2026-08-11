@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   appendDecision,
   appendDecisions,
+  assessBulkImpact,
   createBulkDecisions,
   cellId,
   classifyCells,
@@ -593,5 +594,66 @@ describe("orderDecisionLog: reload cannot flip which decision is in force", () =
       { ...context, sequence: 7 }
     );
     expect(decision.sequence).toBe(7);
+  });
+});
+
+describe("bulk decisions over a mixed batch", () => {
+  const reviewCellsAll = cells.filter((cell) => cell.lane === "review");
+  const impact = assessBulkImpact(reviewCellsAll, BELLINGHAM_PROCUREWARE);
+
+  it("breaks the batch down into fills, overwrites, and rule-6 fields", () => {
+    // A flat count hides that "use reference for all" mixes three different acts.
+    expect(impact.eligible).toBe(reviewCellsAll.length);
+    expect(impact.fillBlank + impact.overwritePopulated).toBe(impact.eligible);
+    // The document "[]" conflicts and the 38B-2026 description conflict hold
+    // populated candidate values a backfill would overwrite.
+    expect(impact.overwritePopulated).toBeGreaterThan(0);
+    expect(impact.dateSensitive.map((entry) => entry.field)).toEqual([
+      "AwardDate",
+      "BidStatus",
+      "DueDate",
+      "PublishedDate"
+    ]);
+    expect(impact.dateSensitiveRequiresPerField).toBe(true);
+  });
+
+  it("scopes the breakdown to a single-field batch without the per-field demand", () => {
+    const dueDateOnly = reviewCellsAll.filter((cell) => cell.field === "DueDate");
+    const scoped = assessBulkImpact(dueDateOnly, BELLINGHAM_PROCUREWARE);
+
+    expect(scoped.fields).toEqual(["DueDate"]);
+    expect(scoped.dateSensitive).toEqual([{ field: "DueDate", count: dueDateOnly.length }]);
+    expect(scoped.dateSensitiveRequiresPerField).toBe(false);
+  });
+
+  it("skips date-sensitive cells from a mixed bulk backfill, each with a stated reason", () => {
+    // Deciding DueDate as a side effect of "use reference for all" is not a
+    // per-field decision; the cells are skipped, never silently recorded.
+    const result = createBulkDecisions(reviewCellsAll, { action: "backfill", reason: "bulk apply" }, context);
+
+    const decidedFields = new Set(result.decisions.map((decision) => decision.field));
+    for (const entry of impact.dateSensitive) {
+      expect(decidedFields.has(entry.field)).toBe(false);
+    }
+    const sensitiveSkips = result.skipped.filter((cell) => cell.reason.includes("date-sensitive"));
+    expect(sensitiveSkips.length).toBe(
+      impact.dateSensitive.reduce((total, entry) => total + entry.count, 0)
+    );
+    expect(sensitiveSkips[0].reason).toContain("filter the queue");
+    expect(result.applied + result.skipped.length).toBe(reviewCellsAll.length);
+  });
+
+  it("still allows a bulk backfill scoped to one date-sensitive field", () => {
+    const dueDateOnly = reviewCellsAll.filter((cell) => cell.field === "DueDate");
+    const result = createBulkDecisions(dueDateOnly, { action: "backfill", reason: "confirmed" }, context);
+
+    expect(result.applied).toBe(dueDateOnly.length);
+    expect(result.skipped).toEqual([]);
+  });
+
+  it("does not restrict a mixed bulk keep_candidate, which changes nothing", () => {
+    const result = createBulkDecisions(reviewCellsAll, { action: "keep_candidate", reason: "leave all" }, context);
+    expect(result.applied).toBe(reviewCellsAll.length);
+    expect(result.skipped).toEqual([]);
   });
 });
