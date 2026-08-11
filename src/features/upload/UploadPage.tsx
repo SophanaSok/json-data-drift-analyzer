@@ -91,14 +91,10 @@ export function UploadPage() {
     try {
       const baselineText = await baselineFile.text();
       const latestText = await latestFile.text();
-      const assessment = assessFileOrderFromJson(
-        baselineText,
-        latestText,
-        baselineFile.name,
-        latestFile.name,
-        collectionPath
-      );
-      setFileOrderAssessment(assessment);
+      // The file-order assessment already in the store was computed from these same
+      // files when they were selected (the Analyze button is disabled until it
+      // exists). Recomputing it here parsed both files a second time on the main
+      // thread — pure jank at large file sizes.
       const identityFields = parseCsvInput(identityKeys);
       const ignored = parseCsvInput(ignoredFields);
       const analysisKey = await hashText(

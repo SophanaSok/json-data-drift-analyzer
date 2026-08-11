@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyOverridesToRecovery, auditRecoveredRecord, resolveBackfillableFields, runRecovery, type RecoveryResult } from "./recovery";
 import { buildRecordProvenance, resolveFieldProvenance } from "./provenance";
 import { matchRecords } from "./matchRecords";
+import { runRecoveryReview } from "./review";
 import { runQa } from "./qa";
 import type { SourceProfile } from "./adapter-types";
 import { BELLINGHAM_PROCUREWARE } from "../profiles";
@@ -691,5 +692,73 @@ describe("recovery: no backfill from an ambiguous fallback group", () => {
     expect(result.summary.backfilledFieldCount).toBe(0);
     // Nothing in the artifact carries the sibling's value.
     expect(result.recovered.every((entry) => entry.record.Note !== "sibling")).toBe(true);
+  });
+});
+
+describe("recovery: findings lookup stays fast and complete at scale", () => {
+  it("links an ambiguous-fallback exclusion to its finding through the fallback key", () => {
+    // The finding for an ambiguous fallback carries the FALLBACK key, while the
+    // record's identity is its primary key — the lookup must match on both, and
+    // the grouped index must preserve that behaviour.
+    const profile: SourceProfile = {
+      ...genericProfile,
+      primaryKey: ["Url"],
+      fallbackKeys: [["Id"]],
+      hardRequiredFields: []
+    };
+    const reference = [
+      { Id: "k", Url: "https://a.test/1", Note: "original" },
+      { Id: "k", Url: "https://a.test/2", Note: "sibling" }
+    ];
+    const candidate = [
+      { Id: "k", Url: "https://a.test/1", Note: "kept" },
+      { Id: "k", Url: "https://a.test/3", Note: "" }
+    ];
+
+    const matchReport = matchRecords(reference, candidate, profile);
+    const qa = runQa(reference, candidate, profile, { matchReport, generatedAt: FIXED_NOW });
+    const result = runRecovery(candidate, reference, profile, matchReport, qa.findings, RUNS);
+
+    const excluded = result.excluded.find((entry) => entry.reason === "ambiguous_identity")!;
+    const ambiguityFindingIds = qa.findings
+      .filter((finding) => finding.category === "identity_match_issue")
+      .map((finding) => finding.id);
+
+    expect(ambiguityFindingIds.length).toBeGreaterThan(0);
+    // The exclusion cites the ambiguity finding — plus everything else QA knows
+    // about the colliding key, such as the duplicate-key findings.
+    expect(excluded.findingIds).toEqual(expect.arrayContaining(ambiguityFindingIds));
+  });
+
+  it("processes 8,000 fully-regressed records well under the old quadratic time", () => {
+    // Coarse tripwire, deliberately generous: the per-record findings lookup used
+    // to filter the full findings array once per record — O(records x findings),
+    // ~4.7s for this input on a dev machine. The grouped index runs it in ~0.7s;
+    // the 3s bound fails the quadratic version on any hardware that matters while
+    // leaving the linear one wide margin against CI jitter.
+    const size = 8000;
+    const record = (index: number, blank: boolean): Record<string, unknown> => ({
+      AgentID: "1431",
+      ProjectCode: `${index}B-2026`,
+      BidURL: `https://cob.procureware.com/Bids/${index}`,
+      Title: blank ? "" : `Project ${index}`,
+      BidType: blank ? "" : "RFP",
+      BidStatus: blank ? "" : "Awarded",
+      DueDate: blank ? "" : "7/29/2026",
+      PublishedDate: blank ? "" : "1/1/2026",
+      AwardDate: blank ? "" : "8/1/2026",
+      ContactEmail: blank ? "" : "bids@cob.org",
+      ContactPhone: blank ? "" : "(360) 778-7750"
+    });
+    const reference = Array.from({ length: size }, (_, index) => record(index, false));
+    const candidate = Array.from({ length: size }, (_, index) => record(index, true));
+
+    const started = performance.now();
+    const review = runRecoveryReview(reference, candidate, bellinghamProfile, { generatedAt: FIXED_NOW });
+    const elapsed = performance.now() - started;
+
+    expect(review.recovery.recovered).toHaveLength(size);
+    expect(review.qa.findings.length).toBeGreaterThan(size * 8);
+    expect(elapsed).toBeLessThan(3000);
   });
 });

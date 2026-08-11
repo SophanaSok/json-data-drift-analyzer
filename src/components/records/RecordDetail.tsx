@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useUiStore } from "../../stores/ui-store";
+import { baselineSnapshot } from "../../engine/diff";
 import {
   changeKindLabel,
   changeKindStyles,
@@ -7,7 +8,6 @@ import {
   formatDiffValue,
   isFieldPathChanged
 } from "../../lib/diff-display";
-import type { DiffRecord } from "../../engine/types";
 
 type RecordDetailProps = {
   recordId: string;
@@ -18,9 +18,12 @@ export function RecordDetail({ recordId, onClose }: RecordDetailProps) {
   const analysis = useUiStore((state) => state.analysis);
   const [showDocs, setShowDocs] = useState(false);
 
-  if (!analysis) return null;
-  const record = analysis.recordsById[recordId];
-  if (!record) return null;
+  const record = analysis?.recordsById[recordId];
+  // The baseline body is not stored on changed records; it is derived from the
+  // latest body plus the recorded changes. Memoized so toggling the document view
+  // does not rebuild it.
+  const baseline = useMemo(() => (record ? baselineSnapshot(record) : undefined), [record]);
+  if (!analysis || !record) return null;
 
   const bidDocs = record.documentDiffs.BidDocuments;
   const changedPaths = new Set(record.changedFields.map((change) => change.path));
@@ -76,8 +79,20 @@ export function RecordDetail({ recordId, onClose }: RecordDetailProps) {
       )}
 
       <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-        <RecordSnapshot title="Baseline" record={record} side="baseline" changedPaths={changedPaths} />
-        <RecordSnapshot title="Latest" record={record} side="latest" changedPaths={changedPaths} />
+        <RecordSnapshot
+          title="Baseline"
+          snapshot={baseline}
+          keys={collectTopLevelKeys(baseline, record.latest)}
+          side="baseline"
+          changedPaths={changedPaths}
+        />
+        <RecordSnapshot
+          title="Latest"
+          snapshot={record.latest}
+          keys={collectTopLevelKeys(baseline, record.latest)}
+          side="latest"
+          changedPaths={changedPaths}
+        />
       </div>
 
       {bidDocs ? (
@@ -113,18 +128,17 @@ export function RecordDetail({ recordId, onClose }: RecordDetailProps) {
 
 function RecordSnapshot({
   title,
-  record,
+  snapshot,
+  keys,
   side,
   changedPaths
 }: {
   title: string;
-  record: DiffRecord;
+  snapshot: Record<string, unknown> | undefined;
+  keys: string[];
   side: "baseline" | "latest";
   changedPaths: Set<string>;
 }) {
-  const snapshot = side === "baseline" ? record.baseline : record.latest;
-  const keys = collectTopLevelKeys(record.baseline, record.latest);
-
   return (
     <div>
       <h4 className="font-medium">{title}</h4>
