@@ -42,6 +42,12 @@ export type DiffRecord = {
   id: string;
   recordKey: string;
   status: RecordStatus;
+  /**
+   * Stored only for removed records, which have no latest side. For changed and
+   * unchanged records the baseline is derived on demand — see `baselineSnapshot`
+   * in ./diff.ts — because embedding both bodies doubled the payload cloned to the
+   * main thread and cached in IndexedDB.
+   */
   baseline?: Record<string, unknown>;
   latest?: Record<string, unknown>;
   changedFields: FieldChange[];

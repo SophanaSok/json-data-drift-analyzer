@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   appendDecision,
   appendDecisions,
+  assessBulkImpact,
   createBulkDecisions,
   cellId,
   classifyCells,
@@ -9,6 +10,7 @@ import {
   createDecision,
   decisionHistory,
   decisionsToOverrides,
+  orderDecisionLog,
   resolveDecisions,
   summarizeDecisions,
   type CellClassification,
@@ -241,7 +243,15 @@ describe("applying decisions", () => {
     const overrides = decisionsToOverrides(resolveDecisions([decision]));
 
     expect(overrides).toEqual([
-      { recordKey: "record-1", field: "DueDate", value: reviewCell.referenceValue, reason: "confirmed" }
+      {
+        recordKey: "record-1",
+        field: "DueDate",
+        value: reviewCell.referenceValue,
+        reason: "confirmed",
+        // The decision's own time rides along so the provenance entry records when
+        // the person acted, not when the analysis ran.
+        timestamp: FIXED_NOW
+      }
     ]);
   });
 
@@ -442,5 +452,208 @@ describe("decision ids stay unique across a reversal", () => {
     );
 
     expect(new Set([first.id, reverted.id, remade.id]).size).toBe(3);
+  });
+});
+
+describe("decisions on fallback-matched records", () => {
+  // The regression this covers: recovery used to key a fallback-matched record by
+  // the FALLBACK key while QA findings — and therefore cells and overrides — carry
+  // the PRIMARY key, so a person's decision was recorded as in force but silently
+  // never reached the artifact, and the auto-backfilled cells showed as "review".
+  const profile: SourceProfile = {
+    ...BELLINGHAM_PROCUREWARE,
+    minimumMatchRate: 0
+  };
+  const reference = [
+    {
+      AgentID: "1431",
+      ProjectCode: "10B-2026",
+      BidURL: "https://cob.procureware.com/Bids/aaa",
+      Title: "Water Main",
+      BidType: "RFP",
+      DueDate: "7/29/2026",
+      Description: "x"
+    }
+  ];
+  // Same ProjectCode, changed BidURL: primary match fails, fallback pairs it.
+  const candidate = [
+    {
+      AgentID: "1431",
+      ProjectCode: "10B-2026",
+      BidURL: "https://cob.procureware.com/Bids/bbb",
+      Title: "",
+      BidType: "",
+      DueDate: "",
+      Description: "x"
+    }
+  ];
+
+  const fallbackReview = runRecoveryReview(reference, candidate, profile, { generatedAt: FIXED_NOW });
+  const fallbackCells = classifyCells(fallbackReview, profile);
+  const fallbackContext = { review: fallbackReview, profile, timestamp: FIXED_NOW, sequence: 0 };
+
+  it("is the scenario: the record matched on the fallback key", () => {
+    expect(fallbackReview.match.results[0].status).toBe("matched_fallback");
+    expect(fallbackReview.recovery.recovered[0].matchedKeyFields).toEqual(["AgentID", "ProjectCode"]);
+  });
+
+  it("keys the recovered record by the identity QA and cells use", () => {
+    const recordKeys = new Set(fallbackCells.map((cell) => cell.recordKey));
+    expect(recordKeys.has(fallbackReview.recovery.recovered[0].recordKey)).toBe(true);
+  });
+
+  it("classifies its auto-backfilled cells as auto, not review", () => {
+    const titleCell = fallbackCells.find((cell) => cell.field === "Title")!;
+    const bidTypeCell = fallbackCells.find((cell) => cell.field === "BidType")!;
+
+    expect(fallbackReview.recovery.recovered[0].backfilledFields).toContain("Title");
+    expect(titleCell.lane).toBe("auto");
+    expect(bidTypeCell.lane).toBe("auto");
+  });
+
+  it("applies a recorded decision to the artifact instead of silently dropping it", () => {
+    const dueDateCell = fallbackCells.find((cell) => cell.field === "DueDate")!;
+    expect(dueDateCell.lane).toBe("review");
+
+    const decision = createDecision(
+      { recordKey: dueDateCell.recordKey, field: "DueDate", action: "backfill", reason: "confirmed with agency" },
+      dueDateCell,
+      fallbackContext
+    );
+    const applied = runRecoveryReview(reference, candidate, profile, {
+      generatedAt: FIXED_NOW,
+      manualOverrides: decisionsToOverrides(resolveDecisions([decision]))
+    });
+
+    const record = applied.recovery.recovered[0];
+    expect(record.record.DueDate).toBe("7/29/2026");
+    expect(record.overriddenFields).toEqual(["DueDate"]);
+    expect(applied.recovery.unappliedOverrides).toEqual([]);
+  });
+
+  it("reports an override that reaches no record instead of ignoring it", () => {
+    const applied = runRecoveryReview(reference, candidate, profile, {
+      generatedAt: FIXED_NOW,
+      manualOverrides: [
+        { recordKey: "no-such-record", field: "DueDate", value: "x", reason: "typo in the key" }
+      ]
+    });
+
+    expect(applied.recovery.recovered[0].overriddenFields).toEqual([]);
+    expect(applied.recovery.unappliedOverrides).toHaveLength(1);
+    expect(applied.recovery.unappliedOverrides[0].recordKey).toBe("no-such-record");
+  });
+});
+
+describe("orderDecisionLog: reload cannot flip which decision is in force", () => {
+  const entry = (id: string, sequence: number, action: RecoveryDecision["action"], timestamp = FIXED_NOW): RecoveryDecision => ({
+    id,
+    recordKey: "r",
+    field: "DueDate",
+    action,
+    originalValue: "",
+    outputValue: "8/4/2026",
+    actor: "user",
+    reason: "because",
+    sourceRun: null,
+    referenceRun: null,
+    matchingKey: [],
+    profileId: BELLINGHAM_PROCUREWARE.id,
+    profileVersion: BELLINGHAM_PROCUREWARE.version,
+    timestamp,
+    sequence
+  });
+
+  it("restores append order when the store returned id order and timestamps tie", () => {
+    // Ids deliberately sort OPPOSITE to append order — the shape of an IndexedDB
+    // primary-key scan — and the timestamps are identical.
+    const first = entry("decision:zzz", 0, "backfill");
+    const second = entry("decision:aaa", 1, "keep_candidate");
+    const asStoredByIdOrder = [second, first];
+
+    const resolved = resolveDecisions(orderDecisionLog(asStoredByIdOrder));
+    expect(resolved.get(cellId("r", "DueDate"))?.action).toBe("keep_candidate");
+  });
+
+  it("falls back to timestamp order for rows persisted before sequences existed", () => {
+    const legacy = (id: string, timestamp: string, action: RecoveryDecision["action"]) => {
+      const { sequence: _dropped, ...row } = entry(id, 0, action, timestamp);
+      return row as RecoveryDecision;
+    };
+    const first = legacy("decision:zzz", FIXED_NOW, "backfill");
+    const second = legacy("decision:aaa", LATER, "keep_candidate");
+
+    const resolved = resolveDecisions(orderDecisionLog([second, first]));
+    expect(resolved.get(cellId("r", "DueDate"))?.action).toBe("keep_candidate");
+  });
+
+  it("stamps each decision with its position in the log", () => {
+    const decision = createDecision(
+      { recordKey: "r", field: "DueDate", action: "backfill", reason: "x" },
+      reviewCell,
+      { ...context, sequence: 7 }
+    );
+    expect(decision.sequence).toBe(7);
+  });
+});
+
+describe("bulk decisions over a mixed batch", () => {
+  const reviewCellsAll = cells.filter((cell) => cell.lane === "review");
+  const impact = assessBulkImpact(reviewCellsAll, BELLINGHAM_PROCUREWARE);
+
+  it("breaks the batch down into fills, overwrites, and rule-6 fields", () => {
+    // A flat count hides that "use reference for all" mixes three different acts.
+    expect(impact.eligible).toBe(reviewCellsAll.length);
+    expect(impact.fillBlank + impact.overwritePopulated).toBe(impact.eligible);
+    // The document "[]" conflicts and the 38B-2026 description conflict hold
+    // populated candidate values a backfill would overwrite.
+    expect(impact.overwritePopulated).toBeGreaterThan(0);
+    expect(impact.dateSensitive.map((entry) => entry.field)).toEqual([
+      "AwardDate",
+      "BidStatus",
+      "DueDate",
+      "PublishedDate"
+    ]);
+    expect(impact.dateSensitiveRequiresPerField).toBe(true);
+  });
+
+  it("scopes the breakdown to a single-field batch without the per-field demand", () => {
+    const dueDateOnly = reviewCellsAll.filter((cell) => cell.field === "DueDate");
+    const scoped = assessBulkImpact(dueDateOnly, BELLINGHAM_PROCUREWARE);
+
+    expect(scoped.fields).toEqual(["DueDate"]);
+    expect(scoped.dateSensitive).toEqual([{ field: "DueDate", count: dueDateOnly.length }]);
+    expect(scoped.dateSensitiveRequiresPerField).toBe(false);
+  });
+
+  it("skips date-sensitive cells from a mixed bulk backfill, each with a stated reason", () => {
+    // Deciding DueDate as a side effect of "use reference for all" is not a
+    // per-field decision; the cells are skipped, never silently recorded.
+    const result = createBulkDecisions(reviewCellsAll, { action: "backfill", reason: "bulk apply" }, context);
+
+    const decidedFields = new Set(result.decisions.map((decision) => decision.field));
+    for (const entry of impact.dateSensitive) {
+      expect(decidedFields.has(entry.field)).toBe(false);
+    }
+    const sensitiveSkips = result.skipped.filter((cell) => cell.reason.includes("date-sensitive"));
+    expect(sensitiveSkips.length).toBe(
+      impact.dateSensitive.reduce((total, entry) => total + entry.count, 0)
+    );
+    expect(sensitiveSkips[0].reason).toContain("filter the queue");
+    expect(result.applied + result.skipped.length).toBe(reviewCellsAll.length);
+  });
+
+  it("still allows a bulk backfill scoped to one date-sensitive field", () => {
+    const dueDateOnly = reviewCellsAll.filter((cell) => cell.field === "DueDate");
+    const result = createBulkDecisions(dueDateOnly, { action: "backfill", reason: "confirmed" }, context);
+
+    expect(result.applied).toBe(dueDateOnly.length);
+    expect(result.skipped).toEqual([]);
+  });
+
+  it("does not restrict a mixed bulk keep_candidate, which changes nothing", () => {
+    const result = createBulkDecisions(reviewCellsAll, { action: "keep_candidate", reason: "leave all" }, context);
+    expect(result.applied).toBe(reviewCellsAll.length);
+    expect(result.skipped).toEqual([]);
   });
 });

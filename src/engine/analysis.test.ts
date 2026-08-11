@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import baseline from "../test/fixtures/baseline.json";
 import latest from "../test/fixtures/latest.json";
-import { runAnalysis } from "./diff";
+import { baselineSnapshot, runAnalysis } from "./diff";
 import { intersectSets } from "../lib/sets";
 
 function getAnalysis() {
@@ -152,5 +152,61 @@ describe("analysis engine", () => {
     const reorderLatest = { Export: [{ ProjectCode: "R1", BidDocuments: [{ Title: "B", URL: "u2", Hash: "h2" }, { Title: "A", URL: "u1", Hash: "h1" }], BidDocumentHashes: ["h1", "h2"] }] };
     const result = runAnalysis({ baselineData: reorderBaseline, latestData: reorderLatest, baselineFileName: "b", latestFileName: "l", analysisKey: "r", config: { collectionPath: "Export", identityFields: ["ProjectCode"], ignoredFields: [], profileId: "default-government-bids" } });
     expect(result.recordsById.R1.documentDiffs.BidDocuments.modifiedCount).toBe(0);
+  });
+});
+
+describe("record bodies are stored once, not per side", () => {
+  // The regression this covers: every DiffRecord embedded BOTH full record bodies,
+  // so the result graph structured-cloned to the main thread — and written to
+  // IndexedDB — carried the datasets several times over.
+  const analysis = getAnalysis();
+  const records = Object.values(analysis.recordsById);
+
+  it("keeps the baseline body only on removed records", () => {
+    for (const record of records) {
+      if (record.status === "removed") {
+        expect(record.baseline).toBeDefined();
+        expect(record.latest).toBeUndefined();
+      } else {
+        expect(record.baseline).toBeUndefined();
+        expect(record.latest).toBeDefined();
+      }
+    }
+    // The fixture exercises every branch this test asserts on.
+    const statuses = new Set(records.map((record) => record.status));
+    expect(statuses.has("removed")).toBe(true);
+    expect(statuses.has("changed")).toBe(true);
+  });
+
+  it("derives the baseline snapshot for a changed record from latest + changes", () => {
+    const changed = records.find((record) => record.status === "changed")!;
+    const derived = baselineSnapshot(changed)!;
+    const original = (baseline as { Export: Array<Record<string, unknown>> }).Export.find(
+      (record) => record.ProjectCode === changed.recordKey
+    );
+
+    expect(derived).toEqual(original);
+    // Derivation must not touch the stored latest body.
+    expect(changed.latest).not.toEqual(derived);
+  });
+
+  it("returns the latest body itself for an unchanged record", () => {
+    const unchanged = records.find((record) => record.status === "unchanged");
+    if (!unchanged) return; // fixture-dependent; the real-fixture suite covers scale
+    expect(baselineSnapshot(unchanged)).toBe(unchanged.latest);
+  });
+
+  it("returns undefined for an added record and the stored body for a removed one", () => {
+    const added = records.find((record) => record.status === "added")!;
+    const removed = records.find((record) => record.status === "removed")!;
+
+    expect(baselineSnapshot(added)).toBeUndefined();
+    expect(baselineSnapshot(removed)).toBe(removed.baseline);
+  });
+
+  it("prefers a stored baseline body, so results cached before the slimming still render", () => {
+    const changed = records.find((record) => record.status === "changed")!;
+    const legacyShape = { ...changed, baseline: { Marker: "stored" } };
+    expect(baselineSnapshot(legacyShape)).toBe(legacyShape.baseline);
   });
 });

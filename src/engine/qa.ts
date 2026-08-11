@@ -355,6 +355,37 @@ export function runQa(
     );
   }
 
+  // ---- Record level: reference records with no candidate counterpart -----------
+  // Reported per record, not only via the count anomaly: a run that drops one
+  // record and gains another has EQUAL counts, and the disappearance would
+  // otherwise never reach the findings, the CSV, or the contractor ticket.
+  for (const result of matchReport.results) {
+    if (result.status !== "reference_only") {
+      continue;
+    }
+
+    findings.push(
+      createFinding({
+        severity: "high",
+        category: "record_missing_from_candidate",
+        fieldPath: null,
+        recordKey: result.referenceKey,
+        candidateValue: null,
+        referenceValue: result.referenceKey,
+        message: `A record present in the reference export (key ${result.referenceKey}) is absent from the candidate export.`,
+        evidence: {
+          referenceIndex: result.referenceIndex,
+          referenceKey: result.referenceKey,
+          keyFields: result.keyFields
+        },
+        // Recovery deliberately never reinstates a reference-only record into a
+        // candidate artifact; the remedy is a fixed scraper re-run.
+        recommendedAction: "report_only",
+        discriminator: String(result.referenceIndex)
+      })
+    );
+  }
+
   // ---- Record level: required fields and configured validation ------------------
   candidateRecords.forEach((record, candidateIndex) => {
     const recordKey = candidateKeys[candidateIndex];
@@ -437,6 +468,10 @@ export function runQa(
       result.referenceIndex !== null
   );
 
+  // Per field, across all matched pairs: how often the reference held a value, and
+  // how often the candidate lost it. Feeds the systemic-regression check below.
+  const fieldLoss = new Map<string, { referencePopulated: number; regressed: number }>();
+
   for (const pair of matchedPairs) {
     const candidate = candidateRecords[pair.candidateIndex as number];
     const reference = referenceRecords[pair.referenceIndex as number];
@@ -452,6 +487,11 @@ export function runQa(
       const candidateBlank = isEmpty(candidateValue);
 
       if (referenceBlank) continue;
+
+      const loss = fieldLoss.get(field) ?? { referencePopulated: 0, regressed: 0 };
+      loss.referencePopulated += 1;
+      if (candidateBlank) loss.regressed += 1;
+      fieldLoss.set(field, loss);
 
       if (candidateBlank) {
         findings.push(
@@ -501,6 +541,38 @@ export function runQa(
         );
       }
     }
+  }
+
+  // ---- Dataset level: total field loss ------------------------------------------
+  // Emitted only at 100% loss: a field blank in the candidate for EVERY matched
+  // record where the reference held a value is the signature of a broken extraction
+  // routine, not churn. No partial-loss threshold is invented here (rule 1) — the
+  // per-record findings above already carry the counts for anything below total.
+  for (const [field, loss] of [...fieldLoss.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+    if (loss.referencePopulated === 0 || loss.regressed !== loss.referencePopulated) {
+      continue;
+    }
+
+    findings.push(
+      createFinding({
+        severity: "high",
+        category: "systemic_field_regression",
+        fieldPath: field,
+        recordKey: null,
+        candidateValue: null,
+        referenceValue: null,
+        message: `Field "${field}" is unpopulated in the candidate for all ${loss.referencePopulated} matched record(s) where the reference held a value — total loss.`,
+        evidence: {
+          referencePopulated: loss.referencePopulated,
+          regressed: loss.regressed,
+          lossRate: 1,
+          matchedPairCount: matchedPairs.length
+        },
+        // A systemic loss is a scraper defect; the per-record findings carry the
+        // per-cell recovery actions.
+        recommendedAction: "report_only"
+      })
+    );
   }
 
   return {

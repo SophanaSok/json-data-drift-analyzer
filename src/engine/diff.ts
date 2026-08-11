@@ -68,6 +68,55 @@ function deepDiff(
   return changes;
 }
 
+/**
+ * The record's baseline-side body.
+ *
+ * Stored bodies exist only on removed records (and in results cached before bodies
+ * were slimmed, which this reads first). For everything else the baseline is derived:
+ * it IS the latest body when the record is unchanged, and otherwise it is the latest
+ * body with every changed path set back to its baselineValue. deepDiff recurses into
+ * a path only when both sides are plain objects, so every intermediate segment of a
+ * dotted path exists as an object on the latest side.
+ *
+ * @returns a NEW object (or the stored/latest reference when nothing differs);
+ *   undefined for added records, which have no baseline side
+ */
+export function baselineSnapshot(record: DiffRecord): Record<string, unknown> | undefined {
+  if (record.baseline) return record.baseline;
+  if (record.status === "added" || !record.latest) return undefined;
+  if (record.status === "unchanged") return record.latest;
+
+  const snapshot =
+    typeof structuredClone === "function"
+      ? structuredClone(record.latest)
+      : (JSON.parse(JSON.stringify(record.latest)) as Record<string, unknown>);
+
+  for (const change of record.changedFields) {
+    if (change.path === "$record") continue;
+    revertPath(snapshot, change.path.split("."), change.baselineValue);
+  }
+  return snapshot;
+}
+
+function revertPath(target: Record<string, unknown>, segments: string[], baselineValue: unknown): void {
+  const [head, ...rest] = segments;
+  if (rest.length === 0) {
+    if (baselineValue === undefined) delete target[head];
+    else target[head] = baselineValue;
+    return;
+  }
+  const next = target[head];
+  if (next === null || typeof next !== "object" || Array.isArray(next)) {
+    // Defensive: deepDiff only nests through objects present on both sides, so this
+    // should not occur; materializing the parent beats silently dropping the value.
+    const created: Record<string, unknown> = {};
+    target[head] = created;
+    revertPath(created, rest, baselineValue);
+    return;
+  }
+  revertPath(next as Record<string, unknown>, rest, baselineValue);
+}
+
 function recordSeverity(changes: FieldChange[], requiredFields: string[]): Severity {
   if (changes.some((change) => requiredFields.includes(change.path) && ["emptied", "removed"].includes(change.kind))) return "critical";
   if (changes.some((change) => change.kind === "emptied")) return "high";
@@ -152,7 +201,12 @@ export function runAnalysis(input: {
       id: key,
       recordKey: key,
       status,
-      baseline,
+      // The baseline body is stored ONLY for removed records, which have no latest
+      // side. For every other status it is derivable — identical to latest when
+      // unchanged, reconstructable from latest + changedFields when changed (see
+      // baselineSnapshot) — and embedding it doubled the record payload that gets
+      // structured-cloned to the main thread and written to IndexedDB.
+      baseline: status === "removed" ? baseline : undefined,
       latest,
       changedFields,
       changedFieldCount: changedFields.length,

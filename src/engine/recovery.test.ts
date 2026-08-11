@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { auditRecoveredRecord, resolveBackfillableFields, runRecovery, type RecoveryResult } from "./recovery";
+import { applyOverridesToRecovery, auditRecoveredRecord, resolveBackfillableFields, runRecovery, type RecoveryResult } from "./recovery";
 import { buildRecordProvenance, resolveFieldProvenance } from "./provenance";
 import { matchRecords } from "./matchRecords";
+import { runRecoveryReview } from "./review";
 import { runQa } from "./qa";
 import type { SourceProfile } from "./adapter-types";
 import { BELLINGHAM_PROCUREWARE } from "../profiles";
@@ -13,6 +14,7 @@ const candidateRecords = (candidateData as unknown as { Export: Array<Record<str
 
 const FIXED_NOW = "2026-08-10T00:00:00.000Z";
 const RUNS = { generatedAt: FIXED_NOW, sourceRun: "candidate.json", referenceRun: "reference.json" };
+const LATER_DECISION = "2026-08-10T02:00:00.000Z";
 
 /** The approved Bellingham policy, loaded from the single source of truth. */
 const bellinghamProfile: SourceProfile = BELLINGHAM_PROCUREWARE;
@@ -575,5 +577,188 @@ describe("recovery: real Bellingham fixtures", () => {
       expect(entry.actor).toBe("auto");
       expect(entry.matchStatus).toBe("matched_primary");
     }
+  });
+});
+
+describe("recovery: applying overrides to a finished result", () => {
+  // The review UI holds a finished RecoveryResult but not the raw record arrays, so
+  // recorded decisions are applied post-hoc. These tests prove the applied artifact
+  // and its audit trail move together — the decision log and the export can never
+  // silently disagree.
+  const baseResult = () => recover([rec({ Note: "from reference" })], [rec({ Note: "" })]);
+  const key = () => baseResult().recovered[0].recordKey;
+
+  it("applies an override to the recovered record with full provenance", () => {
+    const result = baseResult();
+    const applied = applyOverridesToRecovery(
+      result,
+      [{ recordKey: key(), field: "Note", value: "operator value", reason: "operator decision", timestamp: LATER_DECISION }],
+      genericProfile
+    );
+
+    expect(applied.appliedCount).toBe(1);
+    expect(applied.unapplied).toEqual([]);
+
+    const record = applied.recovery.recovered[0];
+    expect(record.record.Note).toBe("operator value");
+    expect(record.overriddenFields).toEqual(["Note"]);
+    expect(applied.recovery.summary.overriddenFieldCount).toBe(1);
+
+    const entry = applied.recovery.provenance.find((item) => item.source === "manual_override");
+    expect(entry?.actor).toBe("user");
+    expect(entry?.reason).toBe("operator decision");
+    expect(entry?.outputValue).toBe("operator value");
+    // The decision's own time, not the analysis time.
+    expect(entry?.timestamp).toBe(LATER_DECISION);
+  });
+
+  it("does not mutate the input result", () => {
+    const result = baseResult();
+    const before = JSON.stringify(result);
+    applyOverridesToRecovery(
+      result,
+      [{ recordKey: key(), field: "Note", value: "changed", reason: "r" }],
+      genericProfile
+    );
+    expect(JSON.stringify(result)).toBe(before);
+  });
+
+  it("reports an override addressing no recovered record instead of dropping it", () => {
+    const applied = applyOverridesToRecovery(
+      baseResult(),
+      [{ recordKey: "no-such-key", field: "Note", value: "x", reason: "r" }],
+      genericProfile
+    );
+
+    expect(applied.appliedCount).toBe(0);
+    expect(applied.unapplied).toHaveLength(1);
+    expect(applied.unapplied[0].reason).toMatch(/No recovered record/);
+    expect(applied.recovery.unappliedOverrides).toHaveLength(1);
+  });
+
+  it("refuses an override that would blank a hard-required field", () => {
+    const applied = applyOverridesToRecovery(
+      baseResult(),
+      [{ recordKey: key(), field: "Id", value: "", reason: "r" }],
+      genericProfile
+    );
+
+    expect(applied.appliedCount).toBe(0);
+    expect(applied.unapplied[0].reason).toMatch(/hard-required/);
+    expect(applied.recovery.recovered[0].record.Id).toBe("a");
+  });
+
+  it("refuses an override with a blank reason", () => {
+    expect(() =>
+      applyOverridesToRecovery(baseResult(), [{ recordKey: key(), field: "Note", value: "x", reason: " " }], genericProfile)
+    ).toThrow(/reason is required/);
+  });
+
+  it("refuses to apply decisions resolved under a different profile version", () => {
+    expect(() =>
+      applyOverridesToRecovery(
+        baseResult(),
+        [{ recordKey: key(), field: "Note", value: "x", reason: "r" }],
+        { ...genericProfile, version: genericProfile.version + 1 }
+      )
+    ).toThrow(/Re-run the analysis/);
+  });
+});
+
+describe("recovery: no backfill from an ambiguous fallback group", () => {
+  it("excludes the record instead of backfilling from the leftover sibling", () => {
+    // Two references share the fallback key; one is claimed by a primary match.
+    // The masked version of this used to pair the second candidate with the
+    // leftover sibling and backfill Note from it.
+    const profile: SourceProfile = {
+      ...genericProfile,
+      primaryKey: ["Url"],
+      fallbackKeys: [["Id"]],
+      hardRequiredFields: []
+    };
+    const reference = [
+      { Id: "k", Url: "https://a.test/1", Note: "original" },
+      { Id: "k", Url: "https://a.test/2", Note: "sibling" }
+    ];
+    const candidate = [
+      { Id: "k", Url: "https://a.test/1", Note: "kept" },
+      { Id: "k", Url: "https://a.test/3", Note: "" }
+    ];
+
+    const result = recover(reference, candidate, profile);
+
+    const excluded = result.excluded.find((entry) => entry.candidateIndex === 1);
+    expect(excluded?.reason).toBe("ambiguous_identity");
+    expect(result.summary.backfilledFieldCount).toBe(0);
+    // Nothing in the artifact carries the sibling's value.
+    expect(result.recovered.every((entry) => entry.record.Note !== "sibling")).toBe(true);
+  });
+});
+
+describe("recovery: findings lookup stays fast and complete at scale", () => {
+  it("links an ambiguous-fallback exclusion to its finding through the fallback key", () => {
+    // The finding for an ambiguous fallback carries the FALLBACK key, while the
+    // record's identity is its primary key — the lookup must match on both, and
+    // the grouped index must preserve that behaviour.
+    const profile: SourceProfile = {
+      ...genericProfile,
+      primaryKey: ["Url"],
+      fallbackKeys: [["Id"]],
+      hardRequiredFields: []
+    };
+    const reference = [
+      { Id: "k", Url: "https://a.test/1", Note: "original" },
+      { Id: "k", Url: "https://a.test/2", Note: "sibling" }
+    ];
+    const candidate = [
+      { Id: "k", Url: "https://a.test/1", Note: "kept" },
+      { Id: "k", Url: "https://a.test/3", Note: "" }
+    ];
+
+    const matchReport = matchRecords(reference, candidate, profile);
+    const qa = runQa(reference, candidate, profile, { matchReport, generatedAt: FIXED_NOW });
+    const result = runRecovery(candidate, reference, profile, matchReport, qa.findings, RUNS);
+
+    const excluded = result.excluded.find((entry) => entry.reason === "ambiguous_identity")!;
+    const ambiguityFindingIds = qa.findings
+      .filter((finding) => finding.category === "identity_match_issue")
+      .map((finding) => finding.id);
+
+    expect(ambiguityFindingIds.length).toBeGreaterThan(0);
+    // The exclusion cites the ambiguity finding — plus everything else QA knows
+    // about the colliding key, such as the duplicate-key findings.
+    expect(excluded.findingIds).toEqual(expect.arrayContaining(ambiguityFindingIds));
+  });
+
+  it("processes 8,000 fully-regressed records well under the old quadratic time", () => {
+    // Coarse tripwire, deliberately generous: the per-record findings lookup used
+    // to filter the full findings array once per record — O(records x findings),
+    // ~4.7s for this input on a dev machine. The grouped index runs it in ~0.7s;
+    // the 3s bound fails the quadratic version on any hardware that matters while
+    // leaving the linear one wide margin against CI jitter.
+    const size = 8000;
+    const record = (index: number, blank: boolean): Record<string, unknown> => ({
+      AgentID: "1431",
+      ProjectCode: `${index}B-2026`,
+      BidURL: `https://cob.procureware.com/Bids/${index}`,
+      Title: blank ? "" : `Project ${index}`,
+      BidType: blank ? "" : "RFP",
+      BidStatus: blank ? "" : "Awarded",
+      DueDate: blank ? "" : "7/29/2026",
+      PublishedDate: blank ? "" : "1/1/2026",
+      AwardDate: blank ? "" : "8/1/2026",
+      ContactEmail: blank ? "" : "bids@cob.org",
+      ContactPhone: blank ? "" : "(360) 778-7750"
+    });
+    const reference = Array.from({ length: size }, (_, index) => record(index, false));
+    const candidate = Array.from({ length: size }, (_, index) => record(index, true));
+
+    const started = performance.now();
+    const review = runRecoveryReview(reference, candidate, bellinghamProfile, { generatedAt: FIXED_NOW });
+    const elapsed = performance.now() - started;
+
+    expect(review.recovery.recovered).toHaveLength(size);
+    expect(review.qa.findings.length).toBeGreaterThan(size * 8);
+    expect(elapsed).toBeLessThan(3000);
   });
 });

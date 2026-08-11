@@ -48,7 +48,7 @@ describe("FindingsExplorer: filter controls", () => {
 
   it("starts unfiltered and shows the full count", () => {
     render(<FindingsExplorer findings={findings} />);
-    expect(count()).toBe("Showing 3399 of 3399");
+    expect(count()).toBe("Showing 3408 of 3408");
   });
 });
 
@@ -58,7 +58,7 @@ describe("FindingsExplorer: filtering", () => {
     render(<FindingsExplorer findings={findings} />);
 
     await user.selectOptions(screen.getByTestId("filter-field"), "Title");
-    expect(count()).toBe("Showing 499 of 3399");
+    expect(count()).toBe("Showing 500 of 3408");
   });
 
   it("narrows by category", async () => {
@@ -66,7 +66,7 @@ describe("FindingsExplorer: filtering", () => {
     render(<FindingsExplorer findings={findings} />);
 
     await user.selectOptions(screen.getByTestId("filter-category"), "field_conflict");
-    expect(count()).toBe("Showing 5 of 3399");
+    expect(count()).toBe("Showing 5 of 3408");
   });
 
   it("combines filters as AND, down to nothing when they contradict", async () => {
@@ -76,7 +76,7 @@ describe("FindingsExplorer: filtering", () => {
     await user.selectOptions(screen.getByTestId("filter-field"), "Title");
     await user.selectOptions(screen.getByTestId("filter-category"), "field_conflict");
 
-    expect(count()).toBe("Showing 0 of 3399");
+    expect(count()).toBe("Showing 0 of 3408");
     expect(screen.getByTestId("findings-empty").textContent).toContain("No findings match");
   });
 
@@ -85,8 +85,8 @@ describe("FindingsExplorer: filtering", () => {
     render(<FindingsExplorer findings={findings} />);
 
     await user.type(screen.getByTestId("filter-search"), "DueDate");
-    expect(count()).not.toBe("Showing 3399 of 3399");
-    expect(count()).not.toBe("Showing 0 of 3399");
+    expect(count()).not.toBe("Showing 3408 of 3408");
+    expect(count()).not.toBe("Showing 0 of 3408");
   });
 });
 
@@ -108,7 +108,7 @@ describe("FindingsExplorer: reset", () => {
     await user.selectOptions(screen.getByTestId("filter-field"), "Title");
     await user.click(screen.getByTestId("filter-reset"));
 
-    expect(count()).toBe("Showing 3399 of 3399");
+    expect(count()).toBe("Showing 3408 of 3408");
     expect(screen.queryByTestId("filter-reset")).toBeNull();
   });
 });

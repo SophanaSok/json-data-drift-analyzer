@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   appendDecisions,
+  assessBulkImpact,
   cellId,
   classifyCells,
   countLanes,
@@ -29,14 +30,18 @@ export function DecisionQueue({
   profile,
   log,
   onRecord,
-  timestamp
+  now
 }: {
   review: RecoveryReview;
   profile: SourceProfile;
   log: RecoveryDecision[];
   onRecord: (log: RecoveryDecision[]) => void;
-  /** Injected so the same inputs always produce the same entry. */
-  timestamp: string;
+  /**
+   * Clock for decision timestamps, read at the moment a decision is recorded — the
+   * audit trail carries when the person acted, not when the page rendered. Injected
+   * so tests can freeze it.
+   */
+  now: () => string;
 }) {
   const [fieldFilter, setFieldFilter] = useState<string>("all");
   const [bulkReason, setBulkReason] = useState("");
@@ -54,6 +59,7 @@ export function DecisionQueue({
     () => cells.filter((cell) => cell.lane === "review" && (fieldFilter === "all" || cell.field === fieldFilter)),
     [cells, fieldFilter]
   );
+  const bulkImpact = useMemo(() => assessBulkImpact(reviewCells, profile), [profile, reviewCells]);
   const fields = useMemo(
     () => [...new Set(cells.filter((cell) => cell.lane === "review").map((cell) => cell.field))].sort(),
     [cells]
@@ -66,19 +72,19 @@ export function DecisionQueue({
     overscan: 6
   });
 
+  // Built at recording time, not render time: the timestamp is the decision's, and
+  // the sequence is the log length the entry is appended at.
+  const makeContext = () => ({ review, profile, timestamp: now(), sequence: log.length });
+
   const applyBulk = (action: BulkDecisionInput["action"]) => {
     setBulkError(null);
     try {
-      const result = createBulkDecisions(reviewCells, { action, reason: bulkReason }, {
-        review,
-        profile,
-        timestamp,
-        sequence: log.length
-      });
+      const result = createBulkDecisions(reviewCells, { action, reason: bulkReason }, makeContext());
       onRecord(appendDecisions(log, result.decisions));
+      const skipReasons = [...new Set(result.skipped.map((cell) => cell.reason))];
       setBulkOutcome(
         `Recorded ${result.applied} decision(s).` +
-          (result.skipped.length > 0 ? ` Skipped ${result.skipped.length} with no reference value.` : "")
+          (result.skipped.length > 0 ? ` Skipped ${result.skipped.length}: ${skipReasons.join(" ")}` : "")
       );
       setBulkReason("");
       setPendingBulk(null);
@@ -173,6 +179,26 @@ export function DecisionQueue({
               {fieldFilter === "all" ? " across every queued field" : ` for ${fieldFilter}`}? This appends
               {" "}{reviewCells.length} entries to the log.
             </p>
+            {pendingBulk === "backfill" ? (
+              // Not just a count: filling blanks, overwriting populated values, and
+              // deciding rule-6 fields are different acts, and the person confirms
+              // what will actually happen.
+              <ul className="mt-1 list-disc pl-5 text-xs text-amber-900" data-testid="bulk-breakdown">
+                <li>{bulkImpact.fillBlank} fill a blank candidate value</li>
+                <li>
+                  {bulkImpact.overwritePopulated} <strong>overwrite a populated candidate value</strong>
+                </li>
+                {bulkImpact.dateSensitive.length > 0 ? (
+                  <li>
+                    date-sensitive (rule 6):{" "}
+                    {bulkImpact.dateSensitive.map((entry) => `${entry.field} (${entry.count})`).join(", ")}
+                    {bulkImpact.dateSensitiveRequiresPerField
+                      ? " — these will be SKIPPED; filter to a single field to bulk-decide them"
+                      : " — every cell in this batch is this one field"}
+                  </li>
+                ) : null}
+              </ul>
+            ) : null}
             <div className="mt-2 flex gap-2">
               <button
                 className="rounded border border-amber-500 px-2 py-1 text-xs text-amber-900 hover:bg-amber-100"
@@ -224,7 +250,7 @@ export function DecisionQueue({
                     cell={cell}
                     decision={resolved.get(id)}
                     log={log}
-                    context={{ review, profile, timestamp, sequence: log.length }}
+                    makeContext={makeContext}
                     onRecord={onRecord}
                     index={row.index}
                   />

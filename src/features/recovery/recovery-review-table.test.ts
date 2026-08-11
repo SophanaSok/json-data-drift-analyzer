@@ -182,7 +182,7 @@ describe("findings explorer: filter options", () => {
     // conclude the data is missing.
     expect(options.severities).not.toContain("critical");
     expect(options.severities).toEqual(["high", "medium"]);
-    expect(options.categories).toEqual(["field_conflict", "field_regression"]);
+    expect(options.categories).toEqual(["field_conflict", "field_regression", "record_missing_from_candidate", "systemic_field_regression"]);
   });
 
   it("sorts severities by seriousness, not alphabetically", () => {
@@ -211,7 +211,7 @@ describe("findings explorer: filtering", () => {
 
   it("filters by field", () => {
     const filtered = applyFindingFilters(findings, { ...DEFAULT_FINDING_FILTER, field: "Title" });
-    expect(filtered).toHaveLength(499);
+    expect(filtered).toHaveLength(500);
     expect(filtered.every((finding) => finding.fieldPath === "Title")).toBe(true);
   });
 

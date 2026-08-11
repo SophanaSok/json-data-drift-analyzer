@@ -11,10 +11,18 @@ import { FindingsExplorer } from "./FindingsExplorer";
 import { RecordInspector } from "./RecordInspector";
 import { DecisionQueue } from "./DecisionQueue";
 import { buildExportBundle, downloadArtifact, type ExportArtifact } from "../../engine/export";
+import { applyOverridesToRecovery, type OverrideApplication } from "../../engine/recovery";
 import { getProfile } from "../../profiles";
 import { useUiStore } from "../../stores/ui-store";
 import { db } from "../../db";
-import type { RecoveryDecision } from "../../engine/decisions";
+import {
+  classifyCells,
+  countLanes,
+  decisionsToOverrides,
+  orderDecisionLog,
+  resolveDecisions,
+  type RecoveryDecision
+} from "../../engine/decisions";
 import { useToastStore } from "../../stores/toast-store";
 
 const TONE_CLASS = {
@@ -37,9 +45,12 @@ export function RecoveryReviewPage() {
     void db.decisions
       .where("analysisKey")
       .equals(analysisKey)
-      .sortBy("timestamp")
+      .toArray()
+      // Storage returns rows in ITS order, not append order — and resolution is
+      // last-entry-wins, so the order must be reconstructed from the recorded
+      // sequence or a reload could flip which decision is in force.
       .then((rows) => {
-        if (!cancelled) setDecisionLog(rows);
+        if (!cancelled) setDecisionLog(orderDecisionLog(rows));
       })
       .catch(() => {
         // A cache read failure must not hide the review; the log simply starts empty.
@@ -75,20 +86,42 @@ export function RecoveryReviewPage() {
     const profile = getProfile(review.profileId);
     const staleUnderProfile = profile !== null && profile.version !== review.profileVersion;
 
+    // Decisions in force are applied to the recovery result the exports are built
+    // from, so the artifact and the decision log cannot silently disagree. A stale
+    // profile blocks application: the decisions were resolved under a policy the
+    // current profile no longer describes.
+    const overrides = decisionsToOverrides(resolveDecisions(decisionLog));
+    let application: OverrideApplication | null = null;
+    if (profile && !staleUnderProfile && overrides.length > 0) {
+      application = applyOverridesToRecovery(review.recovery, overrides, profile);
+    }
+    const recovery = application?.recovery ?? review.recovery;
+
+    // What the gate's verdict does NOT cover: cells still awaiting review, and
+    // fields lost systemically. "Passes the gate" must not read as "clean data".
+    const reviewLaneCount = profile ? countLanes(classifyCells(review, profile)).review : 0;
+    const systemicFields = review.qa.findings
+      .filter((finding) => finding.category === "systemic_field_regression" && finding.fieldPath !== null)
+      .map((finding) => finding.fieldPath as string);
+
     return {
       profile,
       staleUnderProfile,
+      reviewLaneCount,
+      systemicFields,
       tiles: buildSummaryTiles(review),
       backfills: groupBackfillsByField(review),
       withheld: withheldFields(review),
       exclusions: groupExclusions(review),
       records: changedRecords(review),
       recoverableFields: review.recovery.summary.backfillableFields,
+      overrideCount: overrides.length,
+      application,
       bundle: profile
         ? buildExportBundle({
             profile,
             qa: review.qa,
-            recovery: review.recovery,
+            recovery,
             dedupe: review.dedupe,
             generatedAt: review.generatedAt,
             inputHashes: review.inputHashes,
@@ -97,7 +130,7 @@ export function RecoveryReviewPage() {
           })
         : null
     };
-  }, [review]);
+  }, [review, decisionLog]);
 
   if (!review || !model) {
     return (
@@ -124,8 +157,9 @@ export function RecoveryReviewPage() {
       <header className="space-y-1">
         <h2 className="text-xl font-semibold">Recovery review</h2>
         <p className="text-sm text-slate-600">
-          What recovery <strong>would</strong> do. Nothing here changes your source files, and no
-          decision is recorded — this view is read-only.
+          What recovery <strong>would</strong> do. Nothing here changes your source files. Decisions
+          you record in the review queue are saved in this browser and applied to the exported
+          artifacts below.
         </p>
         <p className="text-xs text-slate-500">
           Profile <code className="rounded bg-slate-100 px-1">{review.profileId}</code> v
@@ -136,12 +170,19 @@ export function RecoveryReviewPage() {
 
       {model.bundle ? (
         model.bundle.gate.recoveredExportAllowed ? (
+          // States what the gate actually checked, plus what it does NOT vouch for.
+          // "Passes the gate" is not "clean data": cells awaiting review stay
+          // unrecovered, and a systemic loss is named rather than averaged away.
           <p
             className="rounded border-2 border-emerald-500 bg-emerald-50 p-3 text-sm font-semibold text-emerald-900"
             data-testid="export-state"
             data-state="safe"
           >
-            ✓ Safe to export — the recovered data artifact passes this profile&rsquo;s safety gate.
+            ✓ Export permitted — the match rate meets the profile minimum and no critical findings
+            are open.
+            {model.reviewLaneCount > 0
+              ? ` ${model.reviewLaneCount} cell(s) still await manual review and are not recovered automatically.`
+              : ""}
           </p>
         ) : (
           <p
@@ -153,6 +194,17 @@ export function RecoveryReviewPage() {
             {model.bundle.gate.blockingReasons.join(" ")} Reports and audits remain available.
           </p>
         )
+      ) : null}
+
+      {model.systemicFields.length > 0 ? (
+        <p
+          className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-900"
+          data-testid="systemic-regression-warning"
+        >
+          Systemic regression: {model.systemicFields.join(", ")} — lost in every matched record
+          where the reference held a value. This is the signature of a broken extraction routine;
+          the primary remedy is a fixed scraper re-run.
+        </p>
       ) : null}
 
       <section className="grid gap-3 md:grid-cols-5" data-testid="review-summary">
@@ -194,7 +246,7 @@ export function RecoveryReviewPage() {
           profile={model.profile}
           log={decisionLog}
           onRecord={onRecordDecisions}
-          timestamp={review.generatedAt}
+          now={() => new Date().toISOString()}
         />
       ) : null}
 
@@ -305,6 +357,40 @@ export function RecoveryReviewPage() {
         <p className="mt-1 text-xs text-slate-500">
           Files download to this browser. Nothing is uploaded and no external system is contacted.
         </p>
+        {model.application ? (
+          <p className="mt-2 text-xs text-emerald-800" data-testid="decisions-applied">
+            {model.application.appliedCount} recorded decision(s) applied to the recovered artifact;
+            each is logged as <code>manual_override</code> in the recovery audit.
+          </p>
+        ) : null}
+        {model.application && model.application.unapplied.length > 0 ? (
+          <div
+            className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900"
+            data-testid="decisions-unapplied"
+          >
+            <p className="font-medium">
+              {model.application.unapplied.length} decision(s) could NOT be applied and are not in the
+              exported artifact:
+            </p>
+            <ul className="mt-1 list-disc pl-5">
+              {model.application.unapplied.slice(0, 10).map((entry) => (
+                <li key={`${entry.override.recordKey}-${entry.override.field}`}>
+                  <code>{entry.override.field}</code> — {entry.reason}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {model.staleUnderProfile && model.overrideCount > 0 ? (
+          <p
+            className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900"
+            data-testid="decisions-stale"
+          >
+            {model.overrideCount} recorded decision(s) are NOT applied to these artifacts: they were
+            resolved under profile v{review.profileVersion}, which is no longer current. Re-run the
+            analysis.
+          </p>
+        ) : null}
         {model.bundle === null ? (
           <p className="mt-2 text-sm text-slate-600" data-testid="export-unavailable">
             Profile <code>{review.profileId}</code> is not registered in this build, so artifacts

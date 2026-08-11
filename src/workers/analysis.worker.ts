@@ -16,16 +16,19 @@ self.onmessage = (event: MessageEvent<AnalyzeRequest>) => {
 };
 
 async function handle(event: MessageEvent<AnalyzeRequest>): Promise<void> {
+  if (event.data.type !== "analyze") {
+    return;
+  }
+
+  const payload = event.data.payload;
+  // Echoed on every message so the listener can correlate answers to requests; the
+  // worker is shared across runs and closure identity is not enough.
+  const analysisKey = payload.analysisKey;
+
   try {
-    if (event.data.type !== "analyze") {
-      return;
-    }
-
-    const payload = event.data.payload;
-
     // Reported before the work, so a parse failure is attributed to parsing rather
     // than arriving with no progress update at all.
-    post({ type: "progress", payload: { step: "Parsing files" } });
+    post({ type: "progress", payload: { analysisKey, step: "Parsing files" } });
 
     // Strips a UTF-8 BOM before parsing. Real scraper exports ship with one, and a
     // bare JSON.parse rejects them outright.
@@ -36,7 +39,7 @@ async function handle(event: MessageEvent<AnalyzeRequest>): Promise<void> {
     if (failed) {
       post({
         type: "error",
-        payload: { message: `Could not parse ${failed.source}: ${failed.error ?? "invalid JSON"}` }
+        payload: { analysisKey, message: `Could not parse ${failed.source}: ${failed.error ?? "invalid JSON"}` }
       });
       return;
     }
@@ -49,17 +52,20 @@ async function handle(event: MessageEvent<AnalyzeRequest>): Promise<void> {
       latestFileName: payload.latestFileName,
       analysisKey: payload.analysisKey,
       profile: payload.profile,
-      onProgress: (step) => post({ type: "progress", payload: { step } })
+      onProgress: (step) => post({ type: "progress", payload: { analysisKey, step } })
     });
 
     // The recovery review runs here rather than on the main thread: it walks every
     // record several times over, and the worker already holds the parsed data.
     const review = await buildReview(payload, baseline.dataset, latest.dataset);
 
-    post({ type: "progress", payload: { step: "Ready" } });
-    post({ type: "result", payload: { analysis, review } });
+    post({ type: "progress", payload: { analysisKey, step: "Ready" } });
+    post({ type: "result", payload: { analysisKey, analysis, review } });
   } catch (error) {
-    post({ type: "error", payload: { message: error instanceof Error ? error.message : "Unknown analysis error" } });
+    post({
+      type: "error",
+      payload: { analysisKey, message: error instanceof Error ? error.message : "Unknown analysis error" }
+    });
   }
 }
 
@@ -77,7 +83,7 @@ async function buildReview(
     return null;
   }
 
-  post({ type: "progress", payload: { step: "Reviewing recovery" } });
+  post({ type: "progress", payload: { analysisKey: payload.analysisKey, step: "Reviewing recovery" } });
 
   // Records come from the profile's own collection path, not the comparison config:
   // the profile is what governs recovery, so it must govern what recovery reads.

@@ -20,14 +20,15 @@ export function DecisionRow({
   cell,
   decision,
   log,
-  context,
+  makeContext,
   onRecord,
   index
 }: {
   cell: CellClassification;
   decision: RecoveryDecision | undefined;
   log: RecoveryDecision[];
-  context: DecisionContext;
+  /** Called at recording time, so the entry carries the decision's own timestamp. */
+  makeContext: () => DecisionContext;
   onRecord: (log: RecoveryDecision[]) => void;
   index: number;
 }) {
@@ -50,7 +51,7 @@ export function DecisionRow({
           reason
         },
         cell,
-        context
+        makeContext()
       );
       onRecord(appendDecision(log, entry));
       setReason("");

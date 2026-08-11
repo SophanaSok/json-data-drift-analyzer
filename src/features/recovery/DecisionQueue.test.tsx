@@ -32,7 +32,7 @@ function renderQueue(log: RecoveryDecision[] = []) {
       profile={BELLINGHAM_PROCUREWARE}
       log={log}
       onRecord={onRecord}
-      timestamp={FIXED_NOW}
+      now={() => FIXED_NOW}
     />
   );
   return onRecord;
@@ -90,7 +90,8 @@ describe("DecisionQueue: the log", () => {
       matchingKey: [],
       profileId: BELLINGHAM_PROCUREWARE.id,
       profileVersion: 4,
-      timestamp: FIXED_NOW
+      timestamp: FIXED_NOW,
+      sequence: 0
     };
     renderQueue([entry]);
 
@@ -171,5 +172,98 @@ describe("DecisionQueue: bulk", () => {
     // Applying one literal everywhere is the modal-value mistake; it stays per-cell.
     expect(screen.queryByTestId("bulk-custom")).toBeNull();
     expect(screen.getByTestId("bulk-panel").textContent).toContain("custom value stays a");
+  });
+});
+
+describe("DecisionQueue: decision timestamps are the decision's, not the render's", () => {
+  // The regression this covers: every entry used to be stamped with the review's
+  // generatedAt, so all decisions in a run carried one identical timestamp — false
+  // as an audit record, and ambiguous to reorder after a reload.
+  it("reads the clock when the decision is recorded, and stamps the log position", async () => {
+    const user = userEvent.setup();
+    const onRecord = vi.fn();
+    const clock = vi.fn(() => "2026-08-10T04:05:06.000Z");
+    render(
+      <DecisionQueue
+        review={review}
+        profile={BELLINGHAM_PROCUREWARE}
+        log={[]}
+        onRecord={onRecord}
+        now={clock}
+      />
+    );
+
+    // Rendering alone decides nothing, so it consults no clock.
+    expect(clock).not.toHaveBeenCalled();
+
+    await user.selectOptions(screen.getByTestId("decision-field-filter"), "DueDate");
+    await user.type(screen.getByTestId("bulk-reason"), "confirmed by phone");
+    await user.click(screen.getByTestId("bulk-backfill"));
+    expect(clock).not.toHaveBeenCalled();
+    await user.click(screen.getByTestId("bulk-confirm-apply"));
+
+    expect(clock).toHaveBeenCalled();
+    const [next] = onRecord.mock.calls[0] as [RecoveryDecision[]];
+    expect(next[0].timestamp).toBe("2026-08-10T04:05:06.000Z");
+    // Positions are the log length each entry is appended at, so a reload can
+    // reconstruct append order even though the batch shares one timestamp.
+    expect(next.map((entry) => entry.sequence)).toEqual(next.map((_, index) => index));
+  });
+});
+
+describe("DecisionQueue: the bulk confirm says what will actually happen", () => {
+  it("enumerates fills, overwrites, and skipped rule-6 fields for a mixed batch", async () => {
+    // A bare count hides that "use reference for all" would overwrite populated
+    // values and rubber-stamp date-sensitive fields; the confirm breaks it down.
+    const user = userEvent.setup();
+    renderQueue();
+
+    await user.type(screen.getByTestId("bulk-reason"), "apply everything");
+    await user.click(screen.getByTestId("bulk-backfill"));
+
+    const breakdown = screen.getByTestId("bulk-breakdown").textContent ?? "";
+    expect(breakdown).toContain("overwrite a populated candidate value");
+    expect(breakdown).toContain("date-sensitive (rule 6):");
+    expect(breakdown).toContain("DueDate (499)");
+    expect(breakdown).toContain("BidStatus (499)");
+    expect(breakdown).toContain("SKIPPED; filter to a single field");
+  });
+
+  it("marks a single-field date-sensitive batch as scoped rather than skipped", async () => {
+    const user = userEvent.setup();
+    renderQueue();
+
+    await user.selectOptions(screen.getByTestId("decision-field-filter"), "DueDate");
+    await user.type(screen.getByTestId("bulk-reason"), "confirmed in writing");
+    await user.click(screen.getByTestId("bulk-backfill"));
+
+    const breakdown = screen.getByTestId("bulk-breakdown").textContent ?? "";
+    expect(breakdown).toContain("DueDate (499)");
+    expect(breakdown).toContain("every cell in this batch is this one field");
+    expect(breakdown).not.toContain("SKIPPED");
+  });
+
+  it("shows no breakdown for keep_candidate, which changes nothing", async () => {
+    const user = userEvent.setup();
+    renderQueue();
+
+    await user.type(screen.getByTestId("bulk-reason"), "leave everything");
+    await user.click(screen.getByTestId("bulk-keep"));
+
+    expect(screen.getByTestId("bulk-confirm")).toBeTruthy();
+    expect(screen.queryByTestId("bulk-breakdown")).toBeNull();
+  });
+
+  it("reports the rule-6 skips in the outcome after a mixed bulk backfill", async () => {
+    const user = userEvent.setup();
+    renderQueue();
+
+    await user.type(screen.getByTestId("bulk-reason"), "apply everything");
+    await user.click(screen.getByTestId("bulk-backfill"));
+    await user.click(screen.getByTestId("bulk-confirm-apply"));
+
+    const outcome = screen.getByTestId("bulk-outcome").textContent ?? "";
+    expect(outcome).toMatch(/Recorded \d+ decision\(s\)\. Skipped 1984:/);
+    expect(outcome).toContain("date-sensitive (rule 6)");
   });
 });

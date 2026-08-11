@@ -39,6 +39,12 @@ export type ManualOverride = {
   value: unknown;
   /** Required: a manual override with no stated reason is not auditable. */
   reason: string;
+  /**
+   * When the person decided, ISO-8601. Recorded on the provenance entry so the audit
+   * trail carries the decision time, not the analysis time. Absent, the envelope
+   * timestamp is used.
+   */
+  timestamp?: string;
 };
 
 export type RecoveryOptions = {
@@ -61,6 +67,8 @@ export type RecoveredRecord = {
   candidateIndex: number;
   referenceIndex: number | null;
   matchStatus: MatchResult["status"];
+  /** Fields that actually produced the pairing; null when the record was not matched. */
+  matchedKeyFields: string[] | null;
   /** A new object. Never a reference to an input record. */
   record: Record<string, unknown>;
   /** Fields whose value did not come from the candidate run. */
@@ -119,6 +127,12 @@ export type RecoveryResult = {
   excluded: ExcludedRecord[];
   candidateOnly: CandidateOnlyRecord[];
   provenance: ProvenanceEntry[];
+  /**
+   * Overrides that applied to no recovered record. Never silently dropped: a person's
+   * decision that did not reach the artifact must be visible, or the decision log and
+   * the artifact disagree without anyone knowing (rule 7).
+   */
+  unappliedOverrides: ManualOverride[];
   summary: RecoverySummary;
 };
 
@@ -167,7 +181,52 @@ export function resolveBackfillableFields(profile: SourceProfile): {
 }
 
 /**
+ * Findings grouped for per-record lookup.
+ *
+ * Built ONCE per recovery run. The lookup runs once per match result, and filtering
+ * the whole findings array each time is O(records × findings) — at ten times the
+ * current fixture size that one line dominates the entire pipeline's CPU time.
+ */
+type FindingIndex = {
+  byRecordKey: Map<string, Finding[]>;
+  /** Findings with a null recordKey, by the candidate index their evidence carries. */
+  unkeyedByCandidateIndex: Map<number, Finding[]>;
+  /** Position of each finding in the source array, to keep merged results in order. */
+  positions: Map<Finding, number>;
+};
+
+function indexFindings(findings: Finding[]): FindingIndex {
+  const byRecordKey = new Map<string, Finding[]>();
+  const unkeyedByCandidateIndex = new Map<number, Finding[]>();
+  const positions = new Map<Finding, number>();
+
+  findings.forEach((finding, position) => {
+    positions.set(finding, position);
+    if (finding.recordKey !== null) {
+      const bucket = byRecordKey.get(finding.recordKey);
+      if (bucket) bucket.push(finding);
+      else byRecordKey.set(finding.recordKey, [finding]);
+      return;
+    }
+    const candidateIndex = finding.evidence.candidateIndex;
+    if (typeof candidateIndex === "number") {
+      const bucket = unkeyedByCandidateIndex.get(candidateIndex);
+      if (bucket) bucket.push(finding);
+      else unkeyedByCandidateIndex.set(candidateIndex, [finding]);
+    }
+  });
+
+  return { byRecordKey, unkeyedByCandidateIndex, positions };
+}
+
+/**
  * QA findings relating to one record.
+ *
+ * A record can be known to QA under more than one key: field-level findings carry the
+ * primary identity key, while an ambiguous-fallback finding carries the fallback key
+ * that collided. Matching on any of the record's keys keeps `findingIds` populated in
+ * both cases; when more than one key contributed, the merge is re-sorted into the
+ * findings array's original order so the result is identical to a full filter.
  *
  * An unkeyable record has a null recordKey on BOTH sides, so matching on key alone
  * would silently return nothing and leave `ExcludedRecord.findingIds` empty for
@@ -175,19 +234,21 @@ export function resolveBackfillableFields(profile: SourceProfile): {
  * candidate index, which findings carry in their evidence.
  */
 function findingsForRecord(
-  findings: Finding[],
-  recordKey: string | null,
+  index: FindingIndex,
+  recordKeys: ReadonlySet<string>,
   candidateIndex: number | null
 ): Finding[] {
-  if (recordKey !== null) {
-    return findings.filter((finding) => finding.recordKey === recordKey);
+  if (recordKeys.size > 0) {
+    const merged = [...recordKeys].flatMap((key) => index.byRecordKey.get(key) ?? []);
+    if (recordKeys.size > 1) {
+      merged.sort((left, right) => (index.positions.get(left) ?? 0) - (index.positions.get(right) ?? 0));
+    }
+    return merged;
   }
   if (candidateIndex === null) {
     return [];
   }
-  return findings.filter(
-    (finding) => finding.recordKey === null && finding.evidence.candidateIndex === candidateIndex
-  );
+  return index.unkeyedByCandidateIndex.get(candidateIndex) ?? [];
 }
 
 export function runRecovery(
@@ -224,6 +285,9 @@ export function runRecovery(
     else overridesByRecord.set(override.recordKey, [override]);
   }
 
+  const consumedOverrideKeys = new Set<string>();
+  const findingIndex = indexFindings(findings);
+
   // Results are already in a deterministic order: candidates by index, then unmatched
   // references by index. Iterating them keeps the artifact order deterministic too.
   for (const result of matchReport.results) {
@@ -234,8 +298,18 @@ export function runRecovery(
     }
 
     const candidateIndex = result.candidateIndex;
-    const recordKey = result.candidateKey ?? buildIdentityKey(candidateRecords[candidateIndex], profile.primaryKey).key;
-    const relatedFindings = findingsForRecord(findings, recordKey, candidateIndex);
+    // The record's identity is its PRIMARY key — the same key QA stamps on findings,
+    // so decision cells and manual overrides address the same record recovery does.
+    // A fallback-matched record is still identified by its primary key (falling back
+    // to the matched reference's, as QA does); the key that produced the PAIRING is
+    // recorded separately in matchedKeyFields and in each provenance entry.
+    const recordKey =
+      buildIdentityKey(candidateRecords[candidateIndex], profile.primaryKey).key ??
+      (result.referenceIndex !== null
+        ? buildIdentityKey(referenceRecords[result.referenceIndex], profile.primaryKey).key
+        : null);
+    const knownKeys = new Set([recordKey, result.candidateKey].filter((key): key is string => key !== null));
+    const relatedFindings = findingsForRecord(findingIndex, knownKeys, candidateIndex);
 
     if (result.status === "invalid_identity") {
       excluded.push({
@@ -334,7 +408,11 @@ export function runRecovery(
 
     // ---- Manual overrides ---------------------------------------------------
     // A person may overwrite a non-blank value; rule 3 constrains automation.
-    for (const override of overridesByRecord.get(key) ?? []) {
+    const overridesForRecord = overridesByRecord.get(key);
+    if (overridesForRecord) {
+      consumedOverrideKeys.add(key);
+    }
+    for (const override of overridesForRecord ?? []) {
       // Rule 7 requires a reason on every audited action. An override with a blank
       // one is not auditable, so refuse it rather than emit a hollow entry.
       if (override.reason.trim().length === 0) {
@@ -348,20 +426,25 @@ export function runRecovery(
       overriddenFields.push(override.field);
 
       provenance.push(
-        createProvenanceEntry(envelope, {
-          recordKey: key,
-          field: override.field,
-          source: "manual_override",
-          originalValue,
-          outputValue: override.value,
-          reason: override.reason,
-          ruleId: `${profile.id}@${profile.version}:manual_override`,
-          actor: "user",
-          candidateIndex,
-          referenceIndex: result.referenceIndex,
-          matchStatus: result.status,
-          matchingKey: result.keyFields ?? profile.primaryKey
-        })
+        createProvenanceEntry(
+          // The decision's own time, when it carries one — the audit trail records
+          // when the person acted, not when the analysis ran.
+          { ...envelope, timestamp: override.timestamp ?? envelope.timestamp },
+          {
+            recordKey: key,
+            field: override.field,
+            source: "manual_override",
+            originalValue,
+            outputValue: override.value,
+            reason: override.reason,
+            ruleId: `${profile.id}@${profile.version}:manual_override`,
+            actor: "user",
+            candidateIndex,
+            referenceIndex: result.referenceIndex,
+            matchStatus: result.status,
+            matchingKey: result.keyFields ?? profile.primaryKey
+          }
+        )
       );
     }
 
@@ -390,12 +473,17 @@ export function runRecovery(
       candidateIndex,
       referenceIndex: result.referenceIndex,
       matchStatus: result.status,
+      matchedKeyFields: reference !== null ? result.keyFields : null,
       record: output,
       backfilledFields,
       overriddenFields,
       containsReferenceDerivedValues: backfilledFields.length > 0
     });
   }
+
+  const unappliedOverrides = [...overridesByRecord.entries()]
+    .filter(([recordKey]) => !consumedOverrideKeys.has(recordKey))
+    .flatMap(([, entries]) => entries);
 
   const excludedByReason = { ...ZERO_EXCLUSIONS };
   for (const record of excluded) {
@@ -417,6 +505,7 @@ export function runRecovery(
     excluded,
     candidateOnly,
     provenance,
+    unappliedOverrides,
     summary: {
       candidateCount: candidateRecords.length,
       referenceCount: referenceRecords.length,
@@ -430,6 +519,133 @@ export function runRecovery(
       backfillableFields: allowed,
       dateSensitiveFieldsWithheld: withheld
     }
+  };
+}
+
+export type OverrideApplication = {
+  /** A new RecoveryResult. The input result is never written to. */
+  recovery: RecoveryResult;
+  appliedCount: number;
+  /** Overrides that could not be applied, each with why. Never silently dropped. */
+  unapplied: Array<{ override: ManualOverride; reason: string }>;
+};
+
+/**
+ * Apply manual overrides to an already-computed RecoveryResult.
+ *
+ * This exists for the review UI, which holds a finished RecoveryReview but not the
+ * raw candidate/reference arrays a full `runRecovery` re-run would need. It applies
+ * overrides only to RECOVERED records: an override addressing an excluded or unknown
+ * record is reported in `unapplied`, never silently dropped, because rescuing an
+ * excluded record requires re-running recovery against the raw inputs.
+ *
+ * Dedupe outcomes computed from the input result remain valid: overrides never touch
+ * excluded records, never change `containsReferenceDerivedValues` (a manual override
+ * is not a reference backfill), and among valid records the dedupe completeness
+ * criterion always ties (see runDedupe), so no winner choice can change.
+ *
+ * Everything is deep-copied; the input result and its records are never mutated.
+ *
+ * @throws when an override has a blank reason (rule 7) or the profile does not match
+ *   the result's recorded policy identity
+ */
+export function applyOverridesToRecovery(
+  recovery: RecoveryResult,
+  overrides: ManualOverride[],
+  profile: SourceProfile
+): OverrideApplication {
+  if (profile.id !== recovery.profileId || profile.version !== recovery.profileVersion) {
+    throw new Error(
+      `Overrides were resolved under profile ${profile.id}@${profile.version}, but this recovery ran under ` +
+        `${recovery.profileId}@${recovery.profileVersion}. Re-run the analysis before applying decisions.`
+    );
+  }
+
+  const envelope: ProvenanceEnvelope = {
+    profileId: recovery.profileId,
+    profileVersion: recovery.profileVersion,
+    matchingKey: recovery.matchingKey,
+    sourceRun: recovery.sourceRun,
+    referenceRun: recovery.referenceRun,
+    timestamp: recovery.generatedAt
+  };
+  const hardRequired = new Set(profile.hardRequiredFields);
+
+  const recovered = recovery.recovered.map((record) => ({ ...record }));
+  const byRecordKey = new Map(recovered.map((record) => [record.recordKey, record]));
+  const provenance = [...recovery.provenance];
+  const unapplied: OverrideApplication["unapplied"] = [];
+  let appliedCount = 0;
+
+  for (const override of overrides) {
+    if (override.reason.trim().length === 0) {
+      throw new Error(
+        `Manual override for ${override.recordKey}.${override.field} has no reason; a reason is required for the audit trail.`
+      );
+    }
+
+    const target = byRecordKey.get(override.recordKey);
+    if (!target) {
+      unapplied.push({
+        override,
+        reason:
+          "No recovered record has this key. The record may have been excluded or matched under a different policy; re-run the analysis to apply this decision."
+      });
+      continue;
+    }
+
+    // A recovered record has passed the hard-required gate; an override that would
+    // blank a hard-required field cannot be applied post-hoc without re-running the
+    // exclusion decision, so it is refused rather than smuggled past the gate.
+    if (hardRequired.has(override.field) && isEmpty(override.value)) {
+      unapplied.push({
+        override,
+        reason: `Would blank hard-required field "${override.field}"; re-run recovery to decide this record's exclusion.`
+      });
+      continue;
+    }
+
+    const output = cloneRecord(target.record);
+    const originalValue = override.field in output ? output[override.field] : null;
+    output[override.field] = override.value;
+
+    target.record = output;
+    target.overriddenFields = [...target.overriddenFields, override.field];
+    appliedCount += 1;
+
+    provenance.push(
+      createProvenanceEntry(
+        { ...envelope, timestamp: override.timestamp ?? envelope.timestamp },
+        {
+          recordKey: target.recordKey,
+          field: override.field,
+          source: "manual_override",
+          originalValue,
+          outputValue: override.value,
+          reason: override.reason,
+          ruleId: `${recovery.profileId}@${recovery.profileVersion}:manual_override`,
+          actor: "user",
+          candidateIndex: target.candidateIndex,
+          referenceIndex: target.referenceIndex,
+          matchStatus: target.matchStatus,
+          matchingKey: target.matchedKeyFields ?? recovery.matchingKey
+        }
+      )
+    );
+  }
+
+  const overriddenFieldCount = recovered.reduce((total, record) => total + record.overriddenFields.length, 0);
+
+  return {
+    recovery: {
+      ...recovery,
+      recovered,
+      provenance,
+      unappliedOverrides: [...recovery.unappliedOverrides, ...unapplied.map((entry) => entry.override)],
+      summary: { ...recovery.summary, overriddenFieldCount }
+    },
+    appliedCount,
+    unapplied
   };
 }
 

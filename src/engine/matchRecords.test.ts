@@ -299,6 +299,43 @@ describe("matchRecords: fallback keys", () => {
     expect(new Set(usedReferences).size).toBe(usedReferences.length);
   });
 
+  it("flags ambiguous_fallback even when one colliding reference was claimed on the primary key", () => {
+    // The regression this covers: fallback uniqueness used to be judged only over
+    // still-unclaimed references, so with refs 0 and 1 sharing the fallback key and
+    // ref 0 claimed in pass 1, ref 1 looked unique and was silently paired — and
+    // backfilled from — without any ambiguity flag.
+    const reference = [
+      rec({ BidURL: "https://a.test/Bids/1" }),
+      rec({ BidURL: "https://a.test/Bids/2" })
+    ];
+    const candidate = [
+      rec({ BidURL: "https://a.test/Bids/1" }), // primary-matches reference 0
+      rec({ BidURL: "https://a.test/Bids/3" }) // changed URL; falls back on ProjectCode
+    ];
+
+    const report = matchRecords(reference, candidate, bellinghamProfile);
+    const ambiguous = only(report, "ambiguous_fallback")[0];
+
+    expect(report.counts.matched_primary).toBe(1);
+    expect(report.counts.matched_fallback).toBe(0);
+    expect(ambiguous.candidateIndex).toBe(1);
+    // The evidence names EVERY reference carrying the key, the claimed one included.
+    expect(ambiguous.ambiguity?.referenceIndexes).toEqual([0, 1]);
+  });
+
+  it("leaves a candidate unmatched when the sole fallback carrier is already claimed", () => {
+    // One reference, claimed on the primary key by candidate 0. Candidate 1's
+    // fallback key points only at it: that means "no counterpart", never "take
+    // the leftover".
+    const reference = [rec()];
+    const candidate = [rec(), rec(differentUrl)];
+
+    const report = matchRecords(reference, candidate, bellinghamProfile);
+    expect(report.counts.matched_fallback).toBe(0);
+    expect(report.counts.ambiguous_fallback).toBe(0);
+    expect(report.counts.candidate_only).toBe(1);
+  });
+
   it("skips a fallback the candidate cannot be keyed on", () => {
     const reference = [rec()];
     const candidate = [rec({ ...differentUrl, ProjectCode: "   " })];

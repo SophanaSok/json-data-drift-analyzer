@@ -69,6 +69,13 @@ export type RecoveryDecision = {
   profileId: string;
   profileVersion: number;
   timestamp: string;
+  /**
+   * Position in the append-only log at recording time. Persisted because it is what
+   * makes "the latest decision for a cell" reconstructible: timestamps can tie (two
+   * clicks in one millisecond, a bulk batch), and a store's iteration order is not
+   * append order. Resolution order must come from here, never from storage order.
+   */
+  sequence: number;
 };
 
 export type DecisionInput = {
@@ -226,13 +233,34 @@ export function createDecision(
     matchingKey: context.profile.primaryKey,
     profileId: context.profile.id,
     profileVersion: context.profile.version,
-    timestamp: context.timestamp
+    timestamp: context.timestamp,
+    sequence: context.sequence
   };
 }
 
 /** Append, never replace. The previous entry for a cell stays in the history. */
 export function appendDecision(log: RecoveryDecision[], decision: RecoveryDecision): RecoveryDecision[] {
   return [...log, decision];
+}
+
+/**
+ * Reconstruct append order from persisted rows.
+ *
+ * A keyed store returns rows in ITS order (primary-key order for an IndexedDB index
+ * scan), which has nothing to do with the order decisions were made — and
+ * `resolveDecisions` is last-entry-wins, so feeding it storage order can silently
+ * flip which decision is in force. Sort by the recorded sequence; timestamp and id
+ * are tie-breakers only for rows persisted before sequences existed.
+ */
+export function orderDecisionLog<T extends RecoveryDecision>(rows: T[]): T[] {
+  const sequenceOf = (row: T): number => (Number.isFinite(row.sequence) ? row.sequence : -1);
+  return [...rows].sort((left, right) => {
+    const bySequence = sequenceOf(left) - sequenceOf(right);
+    if (bySequence !== 0) return bySequence;
+    const byTimestamp = left.timestamp.localeCompare(right.timestamp);
+    if (byTimestamp !== 0) return byTimestamp;
+    return left.id.localeCompare(right.id);
+  });
 }
 
 /**
@@ -273,7 +301,10 @@ export function decisionsToOverrides(resolved: Map<string, RecoveryDecision>): M
       recordKey: decision.recordKey,
       field: decision.field,
       value: decision.outputValue,
-      reason: decision.reason
+      reason: decision.reason,
+      // Carried onto the provenance entry: the audit records when the person
+      // decided, not when the analysis ran.
+      timestamp: decision.timestamp
     }));
 }
 
@@ -345,12 +376,77 @@ export type BulkDecisionInput = {
   reason: string;
 };
 
+export type BulkImpact = {
+  /** Cells a bulk action would record decisions for. */
+  eligible: number;
+  /** Cells with no reference value; always skipped. */
+  ineligible: number;
+  /** Eligible cells whose candidate value is blank — a backfill fills a gap. */
+  fillBlank: number;
+  /** Eligible cells holding a value — a backfill OVERWRITES it. */
+  overwritePopulated: number;
+  /** Distinct eligible fields, sorted. */
+  fields: string[];
+  /** Rule-6 date-sensitive fields in the batch, each with its cell count, sorted. */
+  dateSensitive: Array<{ field: string; count: number }>;
+  /**
+   * True when a bulk BACKFILL would skip the date-sensitive cells: the batch spans
+   * more than one field, so deciding a rule-6 field here would be a side effect of
+   * a blanket action rather than a decision about that field.
+   */
+  dateSensitiveRequiresPerField: boolean;
+};
+
+/**
+ * What a bulk action over these cells actually covers.
+ *
+ * A flat count hides that "use reference for all" mixes three different acts:
+ * filling blanks, overwriting populated values (the thing rule 3 exists to make
+ * deliberate), and deciding rule-6 date/status-sensitive fields. The confirmation
+ * step renders this breakdown so the person approves what will happen, not a number.
+ */
+export function assessBulkImpact(cells: CellClassification[], profile: SourceProfile): BulkImpact {
+  const dateSensitiveFields = new Set(profile.dateSensitiveFields ?? []);
+  const eligibleCells = cells.filter((cell) => cell.lane !== "ineligible");
+
+  const byField = new Map<string, number>();
+  let fillBlank = 0;
+  let overwritePopulated = 0;
+  for (const cell of eligibleCells) {
+    byField.set(cell.field, (byField.get(cell.field) ?? 0) + 1);
+    if (cell.candidateIsBlank) fillBlank += 1;
+    else overwritePopulated += 1;
+  }
+
+  const fields = [...byField.keys()].sort();
+  const dateSensitive = fields
+    .filter((field) => dateSensitiveFields.has(field))
+    .map((field) => ({ field, count: byField.get(field) ?? 0 }));
+
+  return {
+    eligible: eligibleCells.length,
+    ineligible: cells.length - eligibleCells.length,
+    fillBlank,
+    overwritePopulated,
+    fields,
+    dateSensitive,
+    dateSensitiveRequiresPerField: dateSensitive.length > 0 && fields.length > 1
+  };
+}
+
 /**
  * Record the same decision across many cells, one entry each.
  *
  * `backfill` copies each cell's OWN reference value — never a shared or modal value.
  * That distinction is the whole reason bulk is safe here: the action is uniform, the
  * values are not.
+ *
+ * A bulk BACKFILL over a batch spanning several fields skips any rule-6
+ * date-sensitive cells, each with a stated reason: those fields are review-only
+ * precisely because each needs a deliberate per-field decision, and a blanket
+ * "use reference for all" is not one. Filtering the batch to that single field —
+ * naming it — is, and is allowed. `keep_candidate` changes nothing, so it carries
+ * no such restriction.
  *
  * @throws when the reason is blank, or a custom action is attempted in bulk
  */
@@ -369,6 +465,10 @@ export function createBulkDecisions(
     );
   }
 
+  const impact = assessBulkImpact(cells, context.profile);
+  const dateSensitiveFields = new Set(context.profile.dateSensitiveFields ?? []);
+  const skipDateSensitive = input.action === "backfill" && impact.dateSensitiveRequiresPerField;
+
   const decisions: RecoveryDecision[] = [];
   const skipped: SkippedCell[] = [];
 
@@ -378,6 +478,15 @@ export function createBulkDecisions(
         recordKey: cell.recordKey,
         field: cell.field,
         reason: "No reference value was recorded for this cell."
+      });
+      continue;
+    }
+
+    if (skipDateSensitive && dateSensitiveFields.has(cell.field)) {
+      skipped.push({
+        recordKey: cell.recordKey,
+        field: cell.field,
+        reason: `"${cell.field}" is date-sensitive (rule 6); filter the queue to ${cell.field} alone to bulk-decide it.`
       });
       continue;
     }

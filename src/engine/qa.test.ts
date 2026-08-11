@@ -586,3 +586,89 @@ describe("qa: real Bellingham fixtures", () => {
     expect(Object.values(report.counts.byCategory).reduce((a, b) => a + b, 0)).toBe(report.findings.length);
   });
 });
+
+describe("qa: a record that disappeared from the candidate", () => {
+  it("is reported per record even when a 1:1 swap keeps the counts equal", () => {
+    // The regression this covers: reference_only match results produced no finding
+    // at all, so a dropped record with equal record counts was invisible in the
+    // findings, the CSV, and the contractor ticket.
+    const reference = [rec({ Id: "a" }), rec({ Id: "dropped" })];
+    const candidate = [rec({ Id: "a" }), rec({ Id: "gained" })];
+
+    const report = run(reference, candidate);
+    expect(of(report, "record_count_anomaly")).toHaveLength(0);
+
+    const missing = of(report, "record_missing_from_candidate");
+    expect(missing).toHaveLength(1);
+    expect(missing[0].severity).toBe("high");
+    expect(missing[0].recordKey).toContain("dropped");
+    expect(missing[0].message).toContain("absent from the candidate");
+  });
+
+  it("is not reported when every reference record has a counterpart", () => {
+    const report = run([rec()], [rec()]);
+    expect(of(report, "record_missing_from_candidate")).toHaveLength(0);
+  });
+
+  it("names the real dropped record 3B-2018 in the Bellingham pair", () => {
+    const report = runQa(referenceRecords, candidateRecords, bellinghamProfile, { generatedAt: FIXED_NOW });
+    const missing = of(report, "record_missing_from_candidate");
+
+    expect(missing).toHaveLength(1);
+    const dropped = referenceRecords.find(
+      (record) => record.BidURL && missing[0].recordKey?.includes(String(record.BidURL))
+    );
+    expect(dropped?.ProjectCode).toBe("3B-2018");
+  });
+});
+
+describe("qa: systemic field regression", () => {
+  it("reports total loss of a field as a dataset-level finding", () => {
+    const reference = [rec({ Note: "a" }), rec({ Id: "b", Note: "b" })];
+    const candidate = [rec({ Note: "" }), rec({ Id: "b", Note: "" })];
+
+    const report = run(reference, candidate);
+    const systemic = of(report, "systemic_field_regression");
+
+    expect(systemic).toHaveLength(1);
+    expect(systemic[0].fieldPath).toBe("Note");
+    expect(systemic[0].severity).toBe("high");
+    expect(systemic[0].message).toContain("all 2 matched record(s)");
+    expect(systemic[0].evidence.referencePopulated).toBe(2);
+  });
+
+  it("does not fire below total loss — partial loss stays per-record only", () => {
+    // No invented threshold: one surviving value means the extraction routine is
+    // not uniformly broken, and the per-record findings already carry the counts.
+    const reference = [rec({ Note: "a" }), rec({ Id: "b", Note: "b" })];
+    const candidate = [rec({ Note: "" }), rec({ Id: "b", Note: "kept" })];
+
+    const report = run(reference, candidate);
+    expect(of(report, "field_regression")).toHaveLength(1);
+    expect(of(report, "systemic_field_regression")).toHaveLength(0);
+  });
+
+  it("does not fire for a field the reference never populated", () => {
+    const report = run([rec({ Note: "" })], [rec({ Note: "" })]);
+    expect(of(report, "systemic_field_regression")).toHaveLength(0);
+  });
+
+  it("names exactly the eight wiped fields on the real Bellingham pair", () => {
+    const report = runQa(referenceRecords, candidateRecords, bellinghamProfile, { generatedAt: FIXED_NOW });
+    const systemic = of(report, "systemic_field_regression");
+
+    expect(systemic.map((finding) => finding.fieldPath).sort()).toEqual([
+      "AwardDate",
+      "BidStatus",
+      "BidType",
+      "ContactEmail",
+      "ContactPhone",
+      "DueDate",
+      "PublishedDate",
+      "Title"
+    ]);
+    // Loss is measured against populated reference values, per the forensic report.
+    const contactPhone = systemic.find((finding) => finding.fieldPath === "ContactPhone");
+    expect(contactPhone?.evidence.referencePopulated).toBe(171);
+  });
+});
