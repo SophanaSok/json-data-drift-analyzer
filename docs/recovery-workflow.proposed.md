@@ -1,7 +1,10 @@
 # Proposal — user-controlled backfill policy and per-field recovery review
 
-**Status: PROPOSAL. Not approved, not scheduled, no application code written.**
-Design only. Parked for later pickup.
+**Status: IMPLEMENTED.** This design was subsequently built — the decision engine lives
+in `src/engine/decisions.ts`, recovery and overrides in `src/engine/recovery.ts`, and
+the review UI (decision queue, bulk decisions, findings explorer) in
+`src/features/recovery/`. Kept as a historical design record; where this document and
+the code disagree, the code and its tests win.
 
 Governed by `AGENTS.md`. Evidence and field-level figures cited here come from
 `docs/forensic-bellingham-report.md` and `src/profiles/bellingham-procureware.json`.
