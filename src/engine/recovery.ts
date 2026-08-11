@@ -181,12 +181,52 @@ export function resolveBackfillableFields(profile: SourceProfile): {
 }
 
 /**
+ * Findings grouped for per-record lookup.
+ *
+ * Built ONCE per recovery run. The lookup runs once per match result, and filtering
+ * the whole findings array each time is O(records × findings) — at ten times the
+ * current fixture size that one line dominates the entire pipeline's CPU time.
+ */
+type FindingIndex = {
+  byRecordKey: Map<string, Finding[]>;
+  /** Findings with a null recordKey, by the candidate index their evidence carries. */
+  unkeyedByCandidateIndex: Map<number, Finding[]>;
+  /** Position of each finding in the source array, to keep merged results in order. */
+  positions: Map<Finding, number>;
+};
+
+function indexFindings(findings: Finding[]): FindingIndex {
+  const byRecordKey = new Map<string, Finding[]>();
+  const unkeyedByCandidateIndex = new Map<number, Finding[]>();
+  const positions = new Map<Finding, number>();
+
+  findings.forEach((finding, position) => {
+    positions.set(finding, position);
+    if (finding.recordKey !== null) {
+      const bucket = byRecordKey.get(finding.recordKey);
+      if (bucket) bucket.push(finding);
+      else byRecordKey.set(finding.recordKey, [finding]);
+      return;
+    }
+    const candidateIndex = finding.evidence.candidateIndex;
+    if (typeof candidateIndex === "number") {
+      const bucket = unkeyedByCandidateIndex.get(candidateIndex);
+      if (bucket) bucket.push(finding);
+      else unkeyedByCandidateIndex.set(candidateIndex, [finding]);
+    }
+  });
+
+  return { byRecordKey, unkeyedByCandidateIndex, positions };
+}
+
+/**
  * QA findings relating to one record.
  *
  * A record can be known to QA under more than one key: field-level findings carry the
  * primary identity key, while an ambiguous-fallback finding carries the fallback key
  * that collided. Matching on any of the record's keys keeps `findingIds` populated in
- * both cases.
+ * both cases; when more than one key contributed, the merge is re-sorted into the
+ * findings array's original order so the result is identical to a full filter.
  *
  * An unkeyable record has a null recordKey on BOTH sides, so matching on key alone
  * would silently return nothing and leave `ExcludedRecord.findingIds` empty for
@@ -194,19 +234,21 @@ export function resolveBackfillableFields(profile: SourceProfile): {
  * candidate index, which findings carry in their evidence.
  */
 function findingsForRecord(
-  findings: Finding[],
+  index: FindingIndex,
   recordKeys: ReadonlySet<string>,
   candidateIndex: number | null
 ): Finding[] {
   if (recordKeys.size > 0) {
-    return findings.filter((finding) => finding.recordKey !== null && recordKeys.has(finding.recordKey));
+    const merged = [...recordKeys].flatMap((key) => index.byRecordKey.get(key) ?? []);
+    if (recordKeys.size > 1) {
+      merged.sort((left, right) => (index.positions.get(left) ?? 0) - (index.positions.get(right) ?? 0));
+    }
+    return merged;
   }
   if (candidateIndex === null) {
     return [];
   }
-  return findings.filter(
-    (finding) => finding.recordKey === null && finding.evidence.candidateIndex === candidateIndex
-  );
+  return index.unkeyedByCandidateIndex.get(candidateIndex) ?? [];
 }
 
 export function runRecovery(
@@ -244,6 +286,7 @@ export function runRecovery(
   }
 
   const consumedOverrideKeys = new Set<string>();
+  const findingIndex = indexFindings(findings);
 
   // Results are already in a deterministic order: candidates by index, then unmatched
   // references by index. Iterating them keeps the artifact order deterministic too.
@@ -266,7 +309,7 @@ export function runRecovery(
         ? buildIdentityKey(referenceRecords[result.referenceIndex], profile.primaryKey).key
         : null);
     const knownKeys = new Set([recordKey, result.candidateKey].filter((key): key is string => key !== null));
-    const relatedFindings = findingsForRecord(findings, knownKeys, candidateIndex);
+    const relatedFindings = findingsForRecord(findingIndex, knownKeys, candidateIndex);
 
     if (result.status === "invalid_identity") {
       excluded.push({
