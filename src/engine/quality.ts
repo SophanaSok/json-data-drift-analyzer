@@ -1,4 +1,5 @@
 import { isEmpty } from "./empty";
+import { buildRecordKey } from "./identity";
 import type { DiffRecord, FieldStats, QualityIssue, QualityProfile, Severity } from "./types";
 
 function getSeverityFromPopulationDrop(drop: number, affected: number, baselineRate: number, latestRate: number): Severity {
@@ -17,11 +18,29 @@ function getSeverityFromPopulationDrop(drop: number, affected: number, baselineR
 export function computeFieldStats(
   baselineRecords: Array<Record<string, unknown>>,
   latestRecords: Array<Record<string, unknown>>,
-  profile: QualityProfile
+  profile: QualityProfile,
+  identityFields: string[]
 ): FieldStats[] {
   const fields = new Set<string>();
   for (const record of [...baselineRecords, ...latestRecords]) {
     Object.keys(record).forEach((key) => fields.add(key));
+  }
+
+  // Pair records by identity, exactly as the diff pass does. Array position is
+  // meaningless in reordered exports (the common case), and regression counts
+  // computed between unrelated records are noise — noise that fed the severity
+  // gate. Aggregate fill rates still cover every record; only the per-record
+  // regression pairing is restricted to records present on both sides.
+  const latestByKey = new Map<string, Record<string, unknown>>();
+  for (const record of latestRecords) {
+    const { key } = buildRecordKey(record, identityFields);
+    if (key !== null) latestByKey.set(key, record);
+  }
+  const matchedPairs: Array<[Record<string, unknown>, Record<string, unknown>]> = [];
+  for (const record of baselineRecords) {
+    const { key } = buildRecordKey(record, identityFields);
+    const latest = key !== null ? latestByKey.get(key) : undefined;
+    if (latest) matchedPairs.push([record, latest]);
   }
 
   const stats: FieldStats[] = [];
@@ -32,17 +51,26 @@ export function computeFieldStats(
     const typeSummaryBaseline: Record<string, number> = {};
     const typeSummaryLatest: Record<string, number> = {};
 
-    const length = Math.max(baselineRecords.length, latestRecords.length);
-    for (let index = 0; index < length; index += 1) {
-      const baselineValue = baselineRecords[index]?.[field];
-      const latestValue = latestRecords[index]?.[field];
-      if (!isEmpty(baselineValue, profile.emptyRules[field])) baselinePresentCount += 1;
-      if (!isEmpty(latestValue, profile.emptyRules[field])) latestPresentCount += 1;
-      if (!isEmpty(baselineValue, profile.emptyRules[field]) && isEmpty(latestValue, profile.emptyRules[field])) {
+    for (const record of baselineRecords) {
+      const value = record[field];
+      if (!isEmpty(value, profile.emptyRules[field])) baselinePresentCount += 1;
+      if (value !== undefined) {
+        const type = Array.isArray(value) ? "array" : typeof value;
+        typeSummaryBaseline[type] = (typeSummaryBaseline[type] ?? 0) + 1;
+      }
+    }
+    for (const record of latestRecords) {
+      const value = record[field];
+      if (!isEmpty(value, profile.emptyRules[field])) latestPresentCount += 1;
+      if (value !== undefined) {
+        const type = Array.isArray(value) ? "array" : typeof value;
+        typeSummaryLatest[type] = (typeSummaryLatest[type] ?? 0) + 1;
+      }
+    }
+    for (const [baselineRecord, latestRecord] of matchedPairs) {
+      if (!isEmpty(baselineRecord[field], profile.emptyRules[field]) && isEmpty(latestRecord[field], profile.emptyRules[field])) {
         emptyRegressionCount += 1;
       }
-      if (baselineValue !== undefined) typeSummaryBaseline[Array.isArray(baselineValue) ? "array" : typeof baselineValue] = (typeSummaryBaseline[Array.isArray(baselineValue) ? "array" : typeof baselineValue] ?? 0) + 1;
-      if (latestValue !== undefined) typeSummaryLatest[Array.isArray(latestValue) ? "array" : typeof latestValue] = (typeSummaryLatest[Array.isArray(latestValue) ? "array" : typeof latestValue] ?? 0) + 1;
     }
 
     const baselinePresentRate = baselineRecords.length ? baselinePresentCount / baselineRecords.length : 0;
@@ -76,9 +104,28 @@ export function buildQualityIssues(
   profile: QualityProfile,
   duplicateKeys: string[],
   baselineCount: number,
-  latestCount: number
+  latestCount: number,
+  identityFields: string[] = [],
+  unkeyedRecordIds: string[] = []
 ): QualityIssue[] {
   const issues: QualityIssue[] = [];
+
+  if (unkeyedRecordIds.length > 0) {
+    // Every record unkeyed means the identity configuration itself is broken (a
+    // typo'd field name does exactly this) — quarantine rather than warn.
+    const allUnkeyed = unkeyedRecordIds.length >= baselineCount + latestCount;
+    issues.push({
+      id: "unkeyed-records",
+      kind: "unkeyed-records",
+      severity: allUnkeyed ? "critical" : "warning",
+      title: allUnkeyed ? "No record could be identity-keyed" : "Records missing identity values",
+      description: allUnkeyed
+        ? `None of the ${unkeyedRecordIds.length} records produced an identity key from [${identityFields.join(", ")}] — check the identity field names.`
+        : `${unkeyedRecordIds.length} record(s) have missing or blank identity values and cannot be matched across runs; they are shown as added/removed.`,
+      relatedFields: identityFields,
+      relatedRecordIds: unkeyedRecordIds
+    });
+  }
 
   if (latestCount < baselineCount) {
     issues.push({

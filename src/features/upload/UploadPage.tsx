@@ -116,7 +116,10 @@ export function UploadPage() {
         ].join("::")
       );
 
-      const cached = await db.analyses.get(analysisKey);
+      // The cache is an optimization, never a requirement: a failing IndexedDB
+      // (private browsing, corrupted DB) must degrade to a cache miss, not block
+      // the analysis — every other db call in this file already degrades this way.
+      const cached = await db.analyses.get(analysisKey).catch(() => undefined);
       if (cached) {
         setAnalysis(cached.result);
         setReview(cached.review ?? null);

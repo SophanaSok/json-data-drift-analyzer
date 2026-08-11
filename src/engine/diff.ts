@@ -117,6 +117,44 @@ function revertPath(target: Record<string, unknown>, segments: string[], baselin
   revertPath(next as Record<string, unknown>, rest, baselineValue);
 }
 
+type KeyedRecord = {
+  /** Map key: collision-proof identity key, or a unique synthetic id when unkeyable. */
+  id: string;
+  /** Human-readable identity, shown as the record's key in the UI and exports. */
+  label: string;
+  /** True when the identity fields could not produce a stable key for this record. */
+  unkeyed: boolean;
+  record: Record<string, unknown>;
+};
+
+/**
+ * Key one side's records for matching.
+ *
+ * Records whose identity fields are missing, blank, or non-scalar cannot be
+ * matched — they used to all collapse under the key "" (one survivor, the rest
+ * silently dropped; a typo'd identity field collapsed the WHOLE analysis into one
+ * record). Each now gets a unique synthetic id so it stays visible as its own
+ * added/removed record, and the unkeyed count is surfaced as a quality issue.
+ */
+function keyRecords(
+  records: Array<Record<string, unknown>>,
+  identityFields: string[],
+  side: "baseline" | "latest"
+): KeyedRecord[] {
+  return records.map((record, index) => {
+    const { key, label } = buildRecordKey(record, identityFields);
+    if (key !== null) {
+      return { id: key, label, unkeyed: false, record };
+    }
+    return {
+      id: `$unkeyed:${side}:${index}`,
+      label: `(no identity — ${side} record #${index + 1})`,
+      unkeyed: true,
+      record
+    };
+  });
+}
+
 function recordSeverity(changes: FieldChange[], requiredFields: string[]): Severity {
   if (changes.some((change) => requiredFields.includes(change.path) && ["emptied", "removed"].includes(change.kind))) return "critical";
   if (changes.some((change) => change.kind === "emptied")) return "high";
@@ -148,8 +186,10 @@ export function runAnalysis(input: {
   const latestRecords = getCollection(input.latestData, input.config.collectionPath).map((record) => normalizeRecord(record, input.config.ignoredFields));
 
   onProgress("Matching records");
-  const baselineByKey = new Map(baselineRecords.map((record) => [buildRecordKey(record, input.config.identityFields), record]));
-  const latestByKey = new Map(latestRecords.map((record) => [buildRecordKey(record, input.config.identityFields), record]));
+  const baselineKeyed = keyRecords(baselineRecords, input.config.identityFields, "baseline");
+  const latestKeyed = keyRecords(latestRecords, input.config.identityFields, "latest");
+  const baselineByKey = new Map(baselineKeyed.map((keyed) => [keyed.id, keyed]));
+  const latestByKey = new Map(latestKeyed.map((keyed) => [keyed.id, keyed]));
   const allKeys = new Set([...baselineByKey.keys(), ...latestByKey.keys()]);
 
   const recordsById: Record<string, DiffRecord> = {};
@@ -159,8 +199,10 @@ export function runAnalysis(input: {
   // record or announce a phase that does not exist.
   onProgress("Comparing fields and documents");
   for (const key of allKeys) {
-    const baseline = baselineByKey.get(key);
-    const latest = latestByKey.get(key);
+    const baselineKeyedRecord = baselineByKey.get(key);
+    const latestKeyedRecord = latestByKey.get(key);
+    const baseline = baselineKeyedRecord?.record;
+    const latest = latestKeyedRecord?.record;
     let status: RecordStatus = "unchanged";
     const changedFields: FieldChange[] = [];
 
@@ -199,7 +241,8 @@ export function runAnalysis(input: {
 
     recordsById[key] = {
       id: key,
-      recordKey: key,
+      // Display form of the identity; the id above is the collision-proof key.
+      recordKey: (latestKeyedRecord ?? baselineKeyedRecord)?.label ?? key,
       status,
       // The baseline body is stored ONLY for removed records, which have no latest
       // side. For every other status it is derivable — identical to latest when
@@ -221,8 +264,18 @@ export function runAnalysis(input: {
   const duplicateKeys = [...new Set([...duplicateBaseline, ...duplicateLatest])];
 
   onProgress("Profiling field health");
-  const fieldStats = computeFieldStats(baselineRecords, latestRecords, profile);
-  const qualityIssues = buildQualityIssues(fieldStats, recordsById, profile, duplicateKeys, baselineRecords.length, latestRecords.length);
+  const fieldStats = computeFieldStats(baselineRecords, latestRecords, profile, input.config.identityFields);
+  const unkeyedRecordIds = [...baselineKeyed, ...latestKeyed].filter((keyed) => keyed.unkeyed).map((keyed) => keyed.id);
+  const qualityIssues = buildQualityIssues(
+    fieldStats,
+    recordsById,
+    profile,
+    duplicateKeys,
+    baselineRecords.length,
+    latestRecords.length,
+    input.config.identityFields,
+    unkeyedRecordIds
+  );
 
   for (const issue of qualityIssues) {
     for (const recordId of issue.relatedRecordIds) {

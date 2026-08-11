@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import baseline from "../../test/fixtures/baseline.json";
 import latest from "../../test/fixtures/latest.json";
 import { runAnalysis } from "../../engine/diff";
+import { buildRecordKey } from "../../engine/identity";
 import type { DiffRecord } from "../../engine/types";
 import { getRecordFieldValue, sortRecordIds } from "./record-table";
+
+// Record ids are collision-proof identity keys; recordKey is the display label.
+const idOf = (code: string) => buildRecordKey({ ProjectCode: code }, ["ProjectCode"]).key!;
 
 function getAnalysis() {
   return runAnalysis({
@@ -27,8 +31,8 @@ describe("record-table sorting", () => {
   const ids = analysis.allRecordIds;
 
   it("reads published and due dates from the active snapshot", () => {
-    const changed = recordsById["91B-2023"] as DiffRecord;
-    const removed = recordsById["92C-2023"] as DiffRecord;
+    const changed = recordsById[idOf("91B-2023")] as DiffRecord;
+    const removed = recordsById[idOf("92C-2023")] as DiffRecord;
     expect(getRecordFieldValue(changed, "PublishedDate")).toBe("");
     expect(getRecordFieldValue(changed, "DueDate")).toBe("");
     expect(getRecordFieldValue(removed, "PublishedDate")).toBe("2023-05-01");
