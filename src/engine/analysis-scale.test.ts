@@ -45,9 +45,22 @@ describe("drift analysis on the real Bellingham pair", () => {
     expect(analysis.qualityIssues.some((issue) => issue.id === "group-header-metadata")).toBe(true);
   });
 
+  it("document diffing is live on the real export shape (JSON-encoded lists)", () => {
+    // The regression: list-valued fields in the real export are JSON-encoded
+    // STRINGS ("[]", "[{…}]"), and normalizeDocuments only accepted real arrays —
+    // so every document diff on this exact data was silently all-zeros. 350 of the
+    // 500 reference records carry at least one bid document.
+    const totalBaselineDocs = Object.values(analysis.recordsById).reduce(
+      (sum, record) => sum + (record.documentDiffs.BidDocuments?.baselineCount ?? 0),
+      0
+    );
+    expect(totalBaselineDocs).toBeGreaterThanOrEqual(350);
+  });
+
   it("reconstructs the exact baseline body for every changed record", () => {
     const baselineByKey = new Map(
-      referenceRecords.map((record) => [buildRecordKey(record, ["ProjectCode"]), record])
+      // recordKey is the display label; the collision-proof key is the record id.
+      referenceRecords.map((record) => [buildRecordKey(record, ["ProjectCode"]).label, record])
     );
 
     let checked = 0;

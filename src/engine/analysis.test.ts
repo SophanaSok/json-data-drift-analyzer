@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import baseline from "../test/fixtures/baseline.json";
 import latest from "../test/fixtures/latest.json";
 import { baselineSnapshot, runAnalysis } from "./diff";
+import { buildRecordKey } from "./identity";
 import { intersectSets } from "../lib/sets";
+
+// Record ids are the collision-proof identity keys, not the raw field values;
+// recordKey remains the human-readable label ("91B-2023").
+const idOf = (code: string) => buildRecordKey({ ProjectCode: code }, ["ProjectCode"]).key!;
 
 function getAnalysis() {
   return runAnalysis({
@@ -77,14 +82,14 @@ describe("analysis engine", () => {
 
   it("classifies emptied and restored changes", () => {
     const result = getAnalysis();
-    const changed = result.recordsById["91B-2023"];
+    const changed = result.recordsById[idOf("91B-2023")];
     const titleChange = changed.changedFields.find((change) => change.path === "Title");
     expect(titleChange?.kind).toBe("emptied");
   });
 
   it("detects document modifications and incomplete docs", () => {
     const result = getAnalysis();
-    const changed = result.recordsById["91B-2023"];
+    const changed = result.recordsById[idOf("91B-2023")];
     const diff = changed.documentDiffs.BidDocuments;
     expect(diff.modifiedCount).toBeGreaterThan(0);
     expect(diff.incompleteCount).toBeGreaterThan(0);
@@ -105,7 +110,7 @@ describe("analysis engine", () => {
   it("builds set-based filter indexes", () => {
     const result = getAnalysis();
     const ids = intersectSets([result.indexes.byStatus.changed, result.indexes.byChangeKind.emptied]);
-    expect(ids.has("91B-2023")).toBe(true);
+    expect(ids.has(idOf("91B-2023"))).toBe(true);
   });
 
   it("produces stable analysis cache key usage", () => {
@@ -151,7 +156,55 @@ describe("analysis engine", () => {
     const reorderBaseline = { Export: [{ ProjectCode: "R1", BidDocuments: [{ Title: "A", URL: "u1", Hash: "h1" }, { Title: "B", URL: "u2", Hash: "h2" }], BidDocumentHashes: ["h1", "h2"] }] };
     const reorderLatest = { Export: [{ ProjectCode: "R1", BidDocuments: [{ Title: "B", URL: "u2", Hash: "h2" }, { Title: "A", URL: "u1", Hash: "h1" }], BidDocumentHashes: ["h1", "h2"] }] };
     const result = runAnalysis({ baselineData: reorderBaseline, latestData: reorderLatest, baselineFileName: "b", latestFileName: "l", analysisKey: "r", config: { collectionPath: "Export", identityFields: ["ProjectCode"], ignoredFields: [], profileId: "default-government-bids" } });
-    expect(result.recordsById.R1.documentDiffs.BidDocuments.modifiedCount).toBe(0);
+    expect(result.recordsById[idOf("R1")].documentDiffs.BidDocuments.modifiedCount).toBe(0);
+  });
+});
+
+describe("records that cannot be identity-keyed", () => {
+  // The regression: records with a missing/blank identity all got the key "", so
+  // they merged into ONE record (Map last-wins) and the rest silently vanished.
+  // A typo'd identity field name collapsed the WHOLE analysis into one record.
+  function analyze(baselineData: unknown, latestData: unknown, identityFields: string[]) {
+    return runAnalysis({
+      baselineData,
+      latestData,
+      baselineFileName: "b",
+      latestFileName: "l",
+      analysisKey: "unkeyed",
+      config: { collectionPath: "Export", identityFields, ignoredFields: [], profileId: "default-government-bids" }
+    });
+  }
+
+  it("keeps each unkeyable record visible instead of collapsing them into one", () => {
+    const result = analyze(
+      { Export: [{ ProjectCode: "", Title: "first" }, { ProjectCode: "", Title: "second" }] },
+      { Export: [] },
+      ["ProjectCode"]
+    );
+    expect(result.summary.removedCount).toBe(2);
+    expect(result.qualityIssues.some((issue) => issue.id === "unkeyed-records")).toBe(true);
+  });
+
+  it("quarantines the run when no record can be keyed — the typo'd-field case", () => {
+    const result = analyze(
+      { Export: [{ ProjectCode: "A", Title: "x" }] },
+      { Export: [{ ProjectCode: "A", Title: "x" }] },
+      ["ProjectCod"]
+    );
+    const issue = result.qualityIssues.find((item) => item.id === "unkeyed-records");
+    expect(issue?.severity).toBe("critical");
+    expect(issue?.description).toContain("ProjectCod");
+    expect(result.summary.qualityGate).toBe("Quarantined");
+  });
+
+  it("does not merge records whose identity values forge the old separator", () => {
+    const result = analyze(
+      { Export: [{ A: "a::b", B: "c" }, { A: "a", B: "b::c" }] },
+      { Export: [{ A: "a::b", B: "c" }, { A: "a", B: "b::c" }] },
+      ["A", "B"]
+    );
+    expect(result.summary.unchangedCount).toBe(2);
+    expect(result.summary.baselineRecordCount).toBe(2);
   });
 });
 

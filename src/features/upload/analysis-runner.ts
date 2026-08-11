@@ -24,6 +24,8 @@ export type AnalysisRunHandlers = {
 export type AnalysisWorkerLike = {
   postMessage: (request: AnalyzeRequest) => void;
   onmessage: ((event: MessageEvent<WorkerMessage>) => void) | null;
+  onerror: ((event: ErrorEvent) => void) | null;
+  onmessageerror: ((event: MessageEvent) => void) | null;
 };
 
 export type AnalysisRunner = {
@@ -59,6 +61,31 @@ export function createAnalysisRunner(worker: AnalysisWorkerLike): AnalysisRunner
       return;
     }
     void handlers.onResult(message.payload);
+  };
+
+  // A worker-level failure (module failed to load, worker killed by the browser,
+  // uncaught error before any message could be posted) carries no analysisKey to
+  // correlate on — but only one run is live at a time, so it can only belong to
+  // the active run. Without these handlers a crashed worker stranded the UI in
+  // "running" forever: progress frozen, Analyze disabled, no message.
+  worker.onerror = (event) => {
+    if (!active) {
+      return;
+    }
+    const { handlers } = active;
+    active = null;
+    handlers.onError(
+      event.message ? `The analysis worker failed: ${event.message}` : "The analysis worker failed unexpectedly. Try analyzing again."
+    );
+  };
+
+  worker.onmessageerror = () => {
+    if (!active) {
+      return;
+    }
+    const { handlers } = active;
+    active = null;
+    handlers.onError("The analysis worker sent a response that could not be read. Try analyzing again.");
   };
 
   return {

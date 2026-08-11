@@ -30,11 +30,15 @@ function fakeWorker() {
   const posted: AnalyzeRequest[] = [];
   const worker: AnalysisWorkerLike = {
     postMessage: (message) => posted.push(message),
-    onmessage: null
+    onmessage: null,
+    onerror: null,
+    onmessageerror: null
   };
   const deliver = (message: WorkerMessage) =>
     worker.onmessage?.({ data: message } as MessageEvent<WorkerMessage>);
-  return { worker, posted, deliver };
+  const crash = (message?: string) => worker.onerror?.({ message } as ErrorEvent);
+  const garble = () => worker.onmessageerror?.({} as MessageEvent);
+  return { worker, posted, deliver, crash, garble };
 }
 
 function handlers(): AnalysisRunHandlers & {
@@ -109,6 +113,59 @@ describe("analysis runner: results reach only the run that asked for them", () =
     deliver({ type: "error", payload: { analysisKey: "key-A", message: "boom" } });
     expect(run.onError).toHaveBeenCalledWith("boom");
     expect(runner.isRunning()).toBe(false);
+  });
+
+  it("ends the run with an error when the worker itself crashes, instead of stranding the UI", () => {
+    // The bug this proves fixed: only onmessage was attached, so a worker that
+    // failed to load, got OOM-killed, or threw before posting left the UI in
+    // "running" forever — progress frozen, Analyze disabled, no message.
+    const { worker, deliver, crash } = fakeWorker();
+    const runner = createAnalysisRunner(worker);
+    const run = handlers();
+
+    runner.start(request("key-A"), run);
+    crash("worker exploded");
+
+    expect(run.onError).toHaveBeenCalledTimes(1);
+    expect(run.onError.mock.calls[0][0]).toContain("worker exploded");
+    expect(runner.isRunning()).toBe(false);
+
+    // A late message from the dead run must not resurrect it.
+    deliver(resultMessage("key-A", "stale"));
+    expect(run.onResult).not.toHaveBeenCalled();
+  });
+
+  it("reports a worker crash without details as a generic failure", () => {
+    const { worker, crash } = fakeWorker();
+    const runner = createAnalysisRunner(worker);
+    const run = handlers();
+
+    runner.start(request("key-A"), run);
+    crash();
+
+    expect(run.onError).toHaveBeenCalledTimes(1);
+    expect(runner.isRunning()).toBe(false);
+  });
+
+  it("ends the run when a worker response cannot be deserialized", () => {
+    const { worker, garble } = fakeWorker();
+    const runner = createAnalysisRunner(worker);
+    const run = handlers();
+
+    runner.start(request("key-A"), run);
+    garble();
+
+    expect(run.onError).toHaveBeenCalledTimes(1);
+    expect(runner.isRunning()).toBe(false);
+  });
+
+  it("ignores worker-level errors when no run is live", () => {
+    const { worker, crash, garble } = fakeWorker();
+    createAnalysisRunner(worker);
+
+    // Nothing to notify; must not throw.
+    crash("idle crash");
+    garble();
   });
 
   it("allows a new run once the previous one finished", () => {

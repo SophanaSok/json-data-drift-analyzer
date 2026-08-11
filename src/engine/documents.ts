@@ -26,7 +26,33 @@ function getCaseInsensitive(record: Record<string, unknown>, key: string): unkno
   return undefined;
 }
 
-export function normalizeDocuments(value: unknown): BidDocument[] {
+/**
+ * Decode a list value that may arrive as a JSON-encoded string.
+ *
+ * The Bellingham export serializes every field value as a JSON string: list-valued
+ * fields (BidDocuments, BidDocumentHashes, …) arrive as "[]" or "[{…}]" and must be
+ * decoded before document-level diffing — the profile's evidence notes record this
+ * as fact. Without decoding, every document diff on that data is silently all-zeros.
+ * Non-strings and strings that do not parse pass through unchanged, so the
+ * Array.isArray checks below remain the single gate on shape.
+ */
+function decodeListValue(value: unknown): unknown {
+  if (typeof value !== "string") {
+    return value;
+  }
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("[")) {
+    return value;
+  }
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+export function normalizeDocuments(rawValue: unknown): BidDocument[] {
+  const value = decodeListValue(rawValue);
   if (!Array.isArray(value)) {
     return [];
   }
@@ -108,8 +134,11 @@ export function compareDocuments(
     changes.push({ documentId: hash, kind: "added", latest: latestDoc, changedFields: ["hash"] });
   }
 
-  const baselineHashes = Array.isArray(baselineHashesRaw) ? baselineHashesRaw.map((value) => String(value)) : [];
-  const latestHashes = Array.isArray(latestHashesRaw) ? latestHashesRaw.map((value) => String(value)) : [];
+  // Hash lists arrive JSON-encoded in the same exports as the document lists.
+  const baselineHashesDecoded = decodeListValue(baselineHashesRaw);
+  const latestHashesDecoded = decodeListValue(latestHashesRaw);
+  const baselineHashes = Array.isArray(baselineHashesDecoded) ? baselineHashesDecoded.map((value) => String(value)) : [];
+  const latestHashes = Array.isArray(latestHashesDecoded) ? latestHashesDecoded.map((value) => String(value)) : [];
 
   const missingInHashList = [...new Set([...baselineByHash.keys(), ...latestByHash.keys()])].filter(
     (hash) => !baselineHashes.includes(hash) && !latestHashes.includes(hash)
