@@ -16,6 +16,8 @@ import { getProfile } from "../../profiles";
 import { useUiStore } from "../../stores/ui-store";
 import { db } from "../../db";
 import {
+  classifyCells,
+  countLanes,
   decisionsToOverrides,
   orderDecisionLog,
   resolveDecisions,
@@ -95,9 +97,18 @@ export function RecoveryReviewPage() {
     }
     const recovery = application?.recovery ?? review.recovery;
 
+    // What the gate's verdict does NOT cover: cells still awaiting review, and
+    // fields lost systemically. "Passes the gate" must not read as "clean data".
+    const reviewLaneCount = profile ? countLanes(classifyCells(review, profile)).review : 0;
+    const systemicFields = review.qa.findings
+      .filter((finding) => finding.category === "systemic_field_regression" && finding.fieldPath !== null)
+      .map((finding) => finding.fieldPath as string);
+
     return {
       profile,
       staleUnderProfile,
+      reviewLaneCount,
+      systemicFields,
       tiles: buildSummaryTiles(review),
       backfills: groupBackfillsByField(review),
       withheld: withheldFields(review),
@@ -159,12 +170,19 @@ export function RecoveryReviewPage() {
 
       {model.bundle ? (
         model.bundle.gate.recoveredExportAllowed ? (
+          // States what the gate actually checked, plus what it does NOT vouch for.
+          // "Passes the gate" is not "clean data": cells awaiting review stay
+          // unrecovered, and a systemic loss is named rather than averaged away.
           <p
             className="rounded border-2 border-emerald-500 bg-emerald-50 p-3 text-sm font-semibold text-emerald-900"
             data-testid="export-state"
             data-state="safe"
           >
-            ✓ Safe to export — the recovered data artifact passes this profile&rsquo;s safety gate.
+            ✓ Export permitted — the match rate meets the profile minimum and no critical findings
+            are open.
+            {model.reviewLaneCount > 0
+              ? ` ${model.reviewLaneCount} cell(s) still await manual review and are not recovered automatically.`
+              : ""}
           </p>
         ) : (
           <p
@@ -176,6 +194,17 @@ export function RecoveryReviewPage() {
             {model.bundle.gate.blockingReasons.join(" ")} Reports and audits remain available.
           </p>
         )
+      ) : null}
+
+      {model.systemicFields.length > 0 ? (
+        <p
+          className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-900"
+          data-testid="systemic-regression-warning"
+        >
+          Systemic regression: {model.systemicFields.join(", ")} — lost in every matched record
+          where the reference held a value. This is the signature of a broken extraction routine;
+          the primary remedy is a fixed scraper re-run.
+        </p>
       ) : null}
 
       <section className="grid gap-3 md:grid-cols-5" data-testid="review-summary">

@@ -621,3 +621,54 @@ describe("qa: a record that disappeared from the candidate", () => {
     expect(dropped?.ProjectCode).toBe("3B-2018");
   });
 });
+
+describe("qa: systemic field regression", () => {
+  it("reports total loss of a field as a dataset-level finding", () => {
+    const reference = [rec({ Note: "a" }), rec({ Id: "b", Note: "b" })];
+    const candidate = [rec({ Note: "" }), rec({ Id: "b", Note: "" })];
+
+    const report = run(reference, candidate);
+    const systemic = of(report, "systemic_field_regression");
+
+    expect(systemic).toHaveLength(1);
+    expect(systemic[0].fieldPath).toBe("Note");
+    expect(systemic[0].severity).toBe("high");
+    expect(systemic[0].message).toContain("all 2 matched record(s)");
+    expect(systemic[0].evidence.referencePopulated).toBe(2);
+  });
+
+  it("does not fire below total loss — partial loss stays per-record only", () => {
+    // No invented threshold: one surviving value means the extraction routine is
+    // not uniformly broken, and the per-record findings already carry the counts.
+    const reference = [rec({ Note: "a" }), rec({ Id: "b", Note: "b" })];
+    const candidate = [rec({ Note: "" }), rec({ Id: "b", Note: "kept" })];
+
+    const report = run(reference, candidate);
+    expect(of(report, "field_regression")).toHaveLength(1);
+    expect(of(report, "systemic_field_regression")).toHaveLength(0);
+  });
+
+  it("does not fire for a field the reference never populated", () => {
+    const report = run([rec({ Note: "" })], [rec({ Note: "" })]);
+    expect(of(report, "systemic_field_regression")).toHaveLength(0);
+  });
+
+  it("names exactly the eight wiped fields on the real Bellingham pair", () => {
+    const report = runQa(referenceRecords, candidateRecords, bellinghamProfile, { generatedAt: FIXED_NOW });
+    const systemic = of(report, "systemic_field_regression");
+
+    expect(systemic.map((finding) => finding.fieldPath).sort()).toEqual([
+      "AwardDate",
+      "BidStatus",
+      "BidType",
+      "ContactEmail",
+      "ContactPhone",
+      "DueDate",
+      "PublishedDate",
+      "Title"
+    ]);
+    // Loss is measured against populated reference values, per the forensic report.
+    const contactPhone = systemic.find((finding) => finding.fieldPath === "ContactPhone");
+    expect(contactPhone?.evidence.referencePopulated).toBe(171);
+  });
+});
