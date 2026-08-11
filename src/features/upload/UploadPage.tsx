@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { DateOrderingAlert } from "../../components/upload/DateOrderingAlert";
 import { ExportDateIndicators } from "../../components/upload/ExportDateIndicators";
-import { ANALYSIS_CACHE_SCHEMA_VERSION, db } from "../../db";
+import { ANALYSIS_CACHE_SCHEMA_VERSION, db, putAnalysisBounded } from "../../db";
 import { defaultProfile } from "../../engine/profile";
+import { ENGINE_SEMANTICS_VERSION } from "../../engine/version";
 import { BELLINGHAM_PROCUREWARE, PROFILES, getProfile } from "../../profiles";
 import { hashText } from "../../lib/hash";
 import { assessFileOrderFromJson } from "../../lib/file-order";
@@ -54,6 +55,26 @@ export function UploadPage() {
   const dateOrderingIssues = fileOrderAssessment?.issues ?? [];
   const baselineExportDates = fileOrderAssessment?.baseline.dates ?? {};
   const latestExportDates = fileOrderAssessment?.latest.dates ?? {};
+
+  // An abandoned run must not outlive the page: without this, a slow run started
+  // here kept running after navigation and its stale closure could fire
+  // setAnalysis + navigate('/results') minutes later, mid-configuration.
+  useEffect(() => {
+    return () => {
+      runner.cancel();
+    };
+  }, []);
+
+  // Picking a different file abandons the run in flight — its result would
+  // describe files the user has moved past, and the runner refusing "already
+  // running" would otherwise block the new configuration.
+  const abandonActiveRun = () => {
+    if (runner.isRunning()) {
+      runner.cancel();
+      setRunning(false);
+      setStep(null);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -112,7 +133,10 @@ export function UploadPage() {
           String(sourceProfile.version),
           // A cached entry written under an older persisted shape must be a cache
           // miss, not a review missing fields the current code assumes exist.
-          String(ANALYSIS_CACHE_SCHEMA_VERSION)
+          String(ANALYSIS_CACHE_SCHEMA_VERSION),
+          // An engine BEHAVIOR fix (same shape, different results) must also be a
+          // cache miss — otherwise stale wrong results are served indefinitely.
+          String(ENGINE_SEMANTICS_VERSION)
         ].join("::")
       );
 
@@ -161,8 +185,9 @@ export function UploadPage() {
           try {
             // Keyed by the analysisKey the worker ECHOED, which the runner guarantees
             // is the one this request was started with — a result can never be
-            // cached under a different run's key.
-            await db.analyses.put({
+            // cached under a different run's key. Bounded: old entries are pruned
+            // and quota exhaustion evicts-then-retries instead of failing forever.
+            await putAnalysisBounded({
               analysisKey: payload.analysisKey,
               createdAt: new Date().toISOString(),
               result: analysis,
@@ -208,6 +233,7 @@ export function UploadPage() {
             type="file"
             accept="application/json"
             onChange={(event) => {
+              abandonActiveRun();
               setError(null);
               setFileOrderAssessment(null);
               setBaselineFile(event.target.files?.[0] ?? null);
@@ -223,6 +249,7 @@ export function UploadPage() {
             type="file"
             accept="application/json"
             onChange={(event) => {
+              abandonActiveRun();
               setError(null);
               setFileOrderAssessment(null);
               setLatestFile(event.target.files?.[0] ?? null);

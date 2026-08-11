@@ -13,6 +13,7 @@
  * marker rather than presenting reference-derived values as candidate-scraped.
  */
 
+import { BUILD_COMMIT } from "../lib/build-info";
 import { hashText } from "../lib/hash";
 import type { FindingSeverity } from "./findings";
 import type { QaReport } from "./qa";
@@ -212,6 +213,8 @@ type RunMetadata = ReturnType<typeof buildRunMetadata>;
 function buildRunMetadata(inputs: ExportInputs) {
   return {
     generatedAt: inputs.generatedAt,
+    // The build that produced these numbers — "dev" outside a CI build.
+    buildCommit: BUILD_COMMIT,
     profileId: inputs.profile.id,
     profileVersion: inputs.profile.version,
     matchingKey: inputs.profile.primaryKey,

@@ -52,5 +52,11 @@ function contentSecurityPolicy(): Plugin {
 
 export default defineConfig({
   plugins: [react(), contentSecurityPolicy()],
-  base: "/json-data-drift-analyzer/"
+  base: "/json-data-drift-analyzer/",
+  define: {
+    // Stamped into the UI footer and export metadata so a report can be tied to
+    // the exact build that produced it. GITHUB_SHA is set by Actions; local
+    // builds say "dev" rather than pretending to a provenance they lack.
+    __APP_COMMIT__: JSON.stringify(process.env.GITHUB_SHA ?? "dev")
+  }
 });

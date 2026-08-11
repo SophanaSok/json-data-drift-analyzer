@@ -653,6 +653,42 @@ describe("qa: systemic field regression", () => {
     expect(of(report, "systemic_field_regression")).toHaveLength(0);
   });
 
+  it("samples per-record findings for a systemic loss instead of materializing one per cell", () => {
+    // The regression this covers: a field wiped across a large export produced one
+    // finding object per cell — an 8-field loss over 100k records is ~800k objects,
+    // OOMing the tab on exactly the incident the tool exists to diagnose.
+    const size = 620; // above the 500-exemplar cap
+    const reference = Array.from({ length: size }, (_, index) => rec({ Id: `r${index}`, Note: `v${index}` }));
+    const candidate = Array.from({ length: size }, (_, index) => rec({ Id: `r${index}`, Note: "" }));
+
+    const report = run(reference, candidate);
+
+    const perRecord = of(report, "field_regression").filter((finding) => finding.fieldPath === "Note");
+    expect(perRecord).toHaveLength(500);
+    expect(perRecord[0].evidence.sampledExemplar).toBe(true);
+    expect(perRecord[0].evidence.totalRegressedCount).toBe(size);
+
+    const systemic = of(report, "systemic_field_regression").find((finding) => finding.fieldPath === "Note");
+    // The exact counts survive on the dataset-level finding.
+    expect(systemic?.evidence.referencePopulated).toBe(size);
+    expect(systemic?.evidence.regressed).toBe(size);
+    expect(systemic?.evidence.perRecordFindingCount).toBe(500);
+    expect(systemic?.message).toContain("sampled to 500 exemplar(s)");
+  });
+
+  it("keeps every per-record finding for a partial loss — sampling applies to systemic fields only", () => {
+    const size = 520;
+    const reference = Array.from({ length: size }, (_, index) => rec({ Id: `r${index}`, Note: `v${index}` }));
+    const candidate = Array.from({ length: size }, (_, index) =>
+      // One survivor: the loss is no longer total, so nothing may be sampled away.
+      rec({ Id: `r${index}`, Note: index === 0 ? "kept" : "" })
+    );
+
+    const report = run(reference, candidate);
+    expect(of(report, "field_regression").filter((finding) => finding.fieldPath === "Note")).toHaveLength(size - 1);
+    expect(of(report, "systemic_field_regression")).toHaveLength(0);
+  });
+
   it("names exactly the eight wiped fields on the real Bellingham pair", () => {
     const report = runQa(referenceRecords, candidateRecords, bellinghamProfile, { generatedAt: FIXED_NOW });
     const systemic = of(report, "systemic_field_regression");

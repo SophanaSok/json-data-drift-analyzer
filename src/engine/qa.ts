@@ -469,9 +469,13 @@ export function runQa(
   );
 
   // Per field, across all matched pairs: how often the reference held a value, and
-  // how often the candidate lost it. Feeds the systemic-regression check below.
+  // how often the candidate lost it. Feeds the systemic-regression check below and
+  // decides which regressions get per-record findings versus sampled exemplars.
   const fieldLoss = new Map<string, { referencePopulated: number; regressed: number }>();
 
+  // First pass: count losses and emit conflicts. Regressions are deliberately NOT
+  // emitted here — whether a field's loss is systemic is only known once every
+  // pair has been counted, and systemic fields must be sampled (see below).
   for (const pair of matchedPairs) {
     const candidate = candidateRecords[pair.candidateIndex as number];
     const reference = referenceRecords[pair.referenceIndex as number];
@@ -493,31 +497,7 @@ export function runQa(
       if (candidateBlank) loss.regressed += 1;
       fieldLoss.set(field, loss);
 
-      if (candidateBlank) {
-        findings.push(
-          createFinding({
-            severity: required.has(field) ? "critical" : "high",
-            category: "field_regression",
-            fieldPath: field,
-            recordKey,
-            candidateValue: candidateValue ?? null,
-            referenceValue,
-            message: `Field "${field}" held a value in the reference and is unpopulated in the candidate.`,
-            evidence: {
-              candidateIndex: pair.candidateIndex,
-              referenceIndex: pair.referenceIndex,
-              matchMethod: pair.matchMethod,
-              matchKeyFields: pair.keyFields
-            },
-            // Rule 4's emptiness precondition, checked strictly.
-            recommendedAction: resolveRecommendedAction(profile, field, {
-              candidateIsBlank: isBlankStrict(candidateValue) || !(field in candidate)
-            }),
-            discriminator: String(pair.candidateIndex)
-          })
-        );
-        continue;
-      }
+      if (candidateBlank) continue;
 
       if (!valuesEqual(candidateValue, referenceValue)) {
         findings.push(
@@ -543,6 +523,77 @@ export function runQa(
     }
   }
 
+  // ---- Matched pairs, second pass: per-record regressions -----------------------
+  // For a field whose loss is TOTAL (systemic, see the dataset-level check below),
+  // per-record findings are capped at an exemplar sample: a wiped field across a
+  // 100k-record export would otherwise materialize one finding object per cell —
+  // structured-cloned, persisted, pretty-printed, and rendered — OOMing the tab on
+  // exactly the incident this tool exists to diagnose. The exact counts live on
+  // the systemic finding; the exemplars carry the per-record evidence shape.
+  // Non-systemic losses keep one finding per regressed cell, unchanged.
+  const SYSTEMIC_EXEMPLAR_CAP = 500;
+  const regressionFindingsEmitted = new Map<string, number>();
+
+  // Emission budgets, precomputed from the loss totals: systemic fields emit at
+  // most the exemplar cap, everything else emits every regression. Only fields
+  // with a budget are probed per pair (no per-pair field-union rebuild), and the
+  // pass stops as soon as every budget is spent.
+  const regressionBudgets = new Map<string, { left: number; sampled: boolean; regressed: number }>();
+  let remainingBudget = 0;
+  for (const field of [...fieldLoss.keys()].sort()) {
+    const loss = fieldLoss.get(field)!;
+    if (loss.regressed === 0) continue;
+    const systemic = loss.regressed === loss.referencePopulated;
+    const left = systemic ? Math.min(SYSTEMIC_EXEMPLAR_CAP, loss.regressed) : loss.regressed;
+    regressionBudgets.set(field, { left, sampled: systemic && loss.regressed > SYSTEMIC_EXEMPLAR_CAP, regressed: loss.regressed });
+    remainingBudget += left;
+  }
+
+  for (const pair of matchedPairs) {
+    if (remainingBudget === 0) break;
+    const candidate = candidateRecords[pair.candidateIndex as number];
+    const reference = referenceRecords[pair.referenceIndex as number];
+    const recordKey = candidateKeys[pair.candidateIndex as number] ?? referenceKeys[pair.referenceIndex as number];
+
+    for (const [field, budget] of regressionBudgets) {
+      if (budget.left === 0) continue;
+
+      const referenceValue = reference[field];
+      const candidateValue = candidate[field];
+      if (isEmpty(referenceValue) || !isEmpty(candidateValue)) continue;
+
+      budget.left -= 1;
+      remainingBudget -= 1;
+      regressionFindingsEmitted.set(field, (regressionFindingsEmitted.get(field) ?? 0) + 1);
+
+      findings.push(
+        createFinding({
+          severity: required.has(field) ? "critical" : "high",
+          category: "field_regression",
+          fieldPath: field,
+          recordKey,
+          candidateValue: candidateValue ?? null,
+          referenceValue,
+          message: `Field "${field}" held a value in the reference and is unpopulated in the candidate.`,
+          evidence: {
+            candidateIndex: pair.candidateIndex,
+            referenceIndex: pair.referenceIndex,
+            matchMethod: pair.matchMethod,
+            matchKeyFields: pair.keyFields,
+            // Present only when this finding is one of a capped sample; the
+            // systemic finding for the field carries the exact totals.
+            ...(budget.sampled ? { sampledExemplar: true, totalRegressedCount: budget.regressed } : {})
+          },
+          // Rule 4's emptiness precondition, checked strictly.
+          recommendedAction: resolveRecommendedAction(profile, field, {
+            candidateIsBlank: isBlankStrict(candidateValue) || !(field in candidate)
+          }),
+          discriminator: String(pair.candidateIndex)
+        })
+      );
+    }
+  }
+
   // ---- Dataset level: total field loss ------------------------------------------
   // Emitted only at 100% loss: a field blank in the candidate for EVERY matched
   // record where the reference held a value is the signature of a broken extraction
@@ -561,12 +612,17 @@ export function runQa(
         recordKey: null,
         candidateValue: null,
         referenceValue: null,
-        message: `Field "${field}" is unpopulated in the candidate for all ${loss.referencePopulated} matched record(s) where the reference held a value — total loss.`,
+        message:
+          `Field "${field}" is unpopulated in the candidate for all ${loss.referencePopulated} matched record(s) where the reference held a value — total loss.` +
+          (loss.regressed > (regressionFindingsEmitted.get(field) ?? 0)
+            ? ` Per-record findings are sampled to ${regressionFindingsEmitted.get(field) ?? 0} exemplar(s); this count is exact.`
+            : ""),
         evidence: {
           referencePopulated: loss.referencePopulated,
           regressed: loss.regressed,
           lossRate: 1,
-          matchedPairCount: matchedPairs.length
+          matchedPairCount: matchedPairs.length,
+          perRecordFindingCount: regressionFindingsEmitted.get(field) ?? 0
         },
         // A systemic loss is a scraper defect; the per-record findings carry the
         // per-cell recovery actions.
