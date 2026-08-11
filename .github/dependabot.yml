@@ -1,0 +1,22 @@
+# Automated dependency update PRs. For an app whose security story is
+# "CSP + no backend", the npm supply chain IS the attack surface — updates
+# should arrive as reviewable PRs, not go unnoticed.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    # One PR per batch of minor/patch bumps keeps the noise reviewable;
+    # majors still arrive individually so breaking changes get read.
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

@@ -5,6 +5,15 @@ const PREVIEW_URL = "http://127.0.0.1:4174/json-data-drift-analyzer/";
 
 export default defineConfig({
   testDir: "./e2e",
+  // A committed `.only` silently shrinks the suite to one test while CI stays
+  // green — fail the build instead.
+  forbidOnly: !!process.env.CI,
+  // Retries tell flake apart from real failure; the trace from the first retry
+  // is the evidence when it is real.
+  retries: process.env.CI ? 2 : 0,
+  use: {
+    trace: "on-first-retry"
+  },
   projects: [
     {
       name: "dev",
