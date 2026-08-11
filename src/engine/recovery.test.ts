@@ -733,9 +733,12 @@ describe("recovery: findings lookup stays fast and complete at scale", () => {
   it("processes 8,000 fully-regressed records well under the old quadratic time", () => {
     // Coarse tripwire, deliberately generous: the per-record findings lookup used
     // to filter the full findings array once per record — O(records x findings),
-    // ~4.7s for this input on a dev machine. The grouped index runs it in ~0.7s;
-    // the 3s bound fails the quadratic version on any hardware that matters while
-    // leaving the linear one wide margin against CI jitter.
+    // ~4.7s for this input on a fast dev machine and far worse on slower ones.
+    // The grouped index runs it in well under a second there, but on a slow
+    // machine with the full suite running in parallel the linear path has been
+    // measured at ~3.6s wall — so the bound is 6s: still several times under
+    // what the quadratic version costs in the same conditions, without flaking
+    // on contention.
     const size = 8000;
     const record = (index: number, blank: boolean): Record<string, unknown> => ({
       AgentID: "1431",
@@ -758,7 +761,18 @@ describe("recovery: findings lookup stays fast and complete at scale", () => {
     const elapsed = performance.now() - started;
 
     expect(review.recovery.recovered).toHaveLength(size);
-    expect(review.qa.findings.length).toBeGreaterThan(size * 8);
-    expect(elapsed).toBeLessThan(3000);
+    // A fully-regressed run is exactly the systemic-loss case, so per-record
+    // regression findings arrive as capped exemplar samples (500 per wiped
+    // field) rather than one object per cell — the pre-sampling behavior put
+    // ~64k finding objects in this array and OOMed a tab at 100k records. The
+    // exact totals live on the systemic findings.
+    const systemic = review.qa.findings.filter((finding) => finding.category === "systemic_field_regression");
+    expect(systemic.length).toBe(8);
+    for (const finding of systemic) {
+      expect(finding.evidence.regressed).toBe(size);
+    }
+    const regressions = review.qa.findings.filter((finding) => finding.category === "field_regression");
+    expect(regressions.length).toBe(8 * 500);
+    expect(elapsed).toBeLessThan(6000);
   });
 });

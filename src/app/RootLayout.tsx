@@ -2,6 +2,7 @@ import { Link, Outlet } from "react-router-dom";
 import { FileOrderNotice } from "../components/layout/FileOrderNotice";
 import { DateOrderingToastListener } from "../components/ui/DateOrderingToastListener";
 import { Toaster } from "../components/ui/Toaster";
+import { BUILD_COMMIT_SHORT } from "../lib/build-info";
 import { useUiStore } from "../stores/ui-store";
 
 export function RootLayout() {
@@ -18,6 +19,10 @@ export function RootLayout() {
       </header>
       <FileOrderNotice />
       <Outlet />
+      {/* The build identifier a "wrong numbers" report can cite. */}
+      <footer className="border-t px-6 py-2 text-xs text-slate-400">
+        Build <code data-testid="build-commit">{BUILD_COMMIT_SHORT}</code>
+      </footer>
       <DateOrderingToastListener />
       <Toaster />
     </>

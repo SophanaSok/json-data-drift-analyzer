@@ -1,10 +1,12 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ExportDateBanner } from "./ExportDateBanner";
 import { DataHealthPage } from "../../features/data-health/DataHealthPage";
 import { FieldChangesPage } from "../../features/field-changes/FieldChangesPage";
 import { OverviewPage } from "../../features/overview/OverviewPage";
 import { RecordsPage } from "../../features/records/RecordsPage";
+import { db } from "../../db";
+import { useToastStore } from "../../stores/toast-store";
 import { useUiStore } from "../../stores/ui-store";
 
 // Lazy: this tab pulls in the export engine and the source profile, which nothing
@@ -32,6 +34,44 @@ export function ResultsShell() {
   const tab = params.get("tab") ?? "overview";
   const analysis = useUiStore((state) => state.analysis);
   const reset = useUiStore((state) => state.reset);
+  const setAnalysis = useUiStore((state) => state.setAnalysis);
+  const setReview = useUiStore((state) => state.setReview);
+  const showToast = useToastStore((state) => state.showToast);
+  // "restoring" until the cache answers, so a refresh shows a restore message
+  // instead of flashing "Run an analysis first" while IndexedDB is read.
+  const [restore, setRestore] = useState<"idle" | "restoring" | "empty">(() => (analysis ? "idle" : "restoring"));
+
+  // The store is memory-only, so F5 used to lose everything despite the cache
+  // holding the full result. With no analysis in memory, hydrate the most
+  // recent cached run instead of stranding the user on empty tabs.
+  useEffect(() => {
+    if (analysis) return;
+    let cancelled = false;
+    void db.analyses
+      .orderBy("createdAt")
+      .last()
+      .then((saved) => {
+        if (cancelled) return;
+        if (!saved) {
+          setRestore("empty");
+          return;
+        }
+        setAnalysis(saved.result);
+        setReview(saved.review ?? null);
+        setRestore("idle");
+        showToast("Restored the most recent analysis from browser cache.", "info");
+      })
+      .catch(() => {
+        if (!cancelled) setRestore("empty");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [analysis, setAnalysis, setReview, showToast]);
+
+  if (!analysis && restore === "restoring") {
+    return <p className="p-6 text-sm text-slate-600">Restoring the last analysis…</p>;
+  }
 
   return (
     <div className="mx-auto max-w-7xl">

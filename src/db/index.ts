@@ -92,3 +92,66 @@ class DriftDatabase extends Dexie {
 }
 
 export const db = new DriftDatabase();
+
+/**
+ * Cap on cached analyses. Each SavedAnalysis holds the full record graph, the
+ * serialized search index, and every finding — several MB apiece. Without a cap
+ * the cache only ever grows, and once browser quota is hit every later `put`
+ * fails forever. Twenty entries comfortably covers a working week of runs while
+ * staying far from any realistic quota.
+ */
+export const ANALYSIS_CACHE_MAX_ENTRIES = 20;
+
+function isQuotaError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const name = (error as { name?: string }).name;
+  // Dexie wraps the DOMException; the inner error keeps the original name.
+  const inner = (error as { inner?: { name?: string } }).inner;
+  return name === "QuotaExceededError" || inner?.name === "QuotaExceededError";
+}
+
+/** The slice of the analyses table the bounded put needs; injectable for tests. */
+export type AnalysesTableLike = {
+  put: (entry: SavedAnalysis) => Promise<unknown>;
+  count: () => Promise<number>;
+  bulkDelete: (keys: string[]) => Promise<unknown>;
+  orderBy: (index: "createdAt") => { limit: (n: number) => { primaryKeys: () => Promise<string[]> } };
+};
+
+/**
+ * Delete the oldest cached analyses until at most `keep` remain.
+ * Uses the createdAt index, so this is a range read, not a table scan.
+ */
+async function evictOldestAnalyses(table: AnalysesTableLike, keep: number): Promise<void> {
+  const count = await table.count();
+  const excess = count - keep;
+  if (excess <= 0) {
+    return;
+  }
+  const oldestKeys = await table.orderBy("createdAt").limit(excess).primaryKeys();
+  await table.bulkDelete(oldestKeys);
+}
+
+/**
+ * Cache an analysis, keeping the cache bounded.
+ *
+ * After every write the oldest entries beyond ANALYSIS_CACHE_MAX_ENTRIES are
+ * evicted. If the write itself hits browser quota, the whole cache is evicted
+ * and the write retried once — the cache is an optimization, and a full cache
+ * must never make caching fail forever. A second failure propagates to the
+ * caller, which already degrades to session-only with a toast.
+ */
+export async function putAnalysisBounded(entry: SavedAnalysis, table: AnalysesTableLike = db.analyses): Promise<void> {
+  try {
+    await table.put(entry);
+  } catch (error) {
+    if (!isQuotaError(error)) {
+      throw error;
+    }
+    await evictOldestAnalyses(table, 0);
+    await table.put(entry);
+  }
+  await evictOldestAnalyses(table, ANALYSIS_CACHE_MAX_ENTRIES);
+}

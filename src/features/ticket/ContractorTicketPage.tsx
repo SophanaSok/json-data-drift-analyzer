@@ -27,7 +27,13 @@ export function ContractorTicketPage() {
     if (!review) return;
     let cancelled = false;
     void Promise.all([
-      db.postedTickets.where("analysisKey").equals(analysisKey).toArray(),
+      // ALL attempts, not just this run's: the duplicate check compares by
+      // runFingerprint, which is stable across runs — loading per-analysisKey
+      // meant re-posting the identical files after a cache invalidation raised
+      // no duplicate warning. The table only holds explicit posting attempts,
+      // so reading it whole stays a handful of rows; every consumer filters by
+      // fingerprint.
+      db.postedTickets.toArray(),
       db.trelloTarget.get("trello-target")
     ])
       .then(([records, target]) => {
