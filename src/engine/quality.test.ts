@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultProfile } from "./profile";
-import { computeFieldStats } from "./quality";
+import { buildQualityIssues, computeFieldStats } from "./quality";
 
 // The regression these cover: emptyRegressionCount compared baselineRecords[i]
 // against latestRecords[i]. The profile's own measurements record that only 4 of
@@ -64,5 +64,21 @@ describe("computeFieldStats pairs records by identity, not array index", () => {
     expect(title.baselinePresentCount).toBe(2);
     expect(title.baselinePresentRate).toBe(1);
     expect(title.latestPresentCount).toBe(0);
+  });
+});
+
+describe("an empty comparison quarantines instead of passing", () => {
+  it("raises a critical empty-collection issue when both sides have zero records", () => {
+    const issues = buildQualityIssues([], {}, defaultProfile, [], 0, 0);
+    const empty = issues.find((issue) => issue.kind === "empty-collection");
+
+    expect(empty).toBeDefined();
+    expect(empty!.severity).toBe("critical");
+    expect(empty!.description).toContain("collection path");
+  });
+
+  it("stays quiet when records exist", () => {
+    const issues = buildQualityIssues([], {}, defaultProfile, [], 10, 10);
+    expect(issues.find((issue) => issue.kind === "empty-collection")).toBeUndefined();
   });
 });

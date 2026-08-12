@@ -110,6 +110,22 @@ export function buildQualityIssues(
 ): QualityIssue[] {
   const issues: QualityIssue[] = [];
 
+  // A wrong collection path yields zero records on both sides — which used to
+  // read as a clean "Pass" over nothing. An empty comparison proves nothing and
+  // must quarantine, loudly, with the likely cause named.
+  if (baselineCount === 0 && latestCount === 0) {
+    issues.push({
+      id: "empty-collection",
+      kind: "empty-collection",
+      severity: "critical",
+      title: "No records found in either file",
+      description:
+        "The collection path matched no records in either file. Check the collection path setting — a wrong path selects nothing and the comparison is meaningless.",
+      relatedFields: [],
+      relatedRecordIds: []
+    });
+  }
+
   if (unkeyedRecordIds.length > 0) {
     // Every record unkeyed means the identity configuration itself is broken (a
     // typo'd field name does exactly this) — quarantine rather than warn.
