@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   appendDecision,
   createDecision,
@@ -7,6 +6,7 @@ import {
   type DecisionContext,
   type RecoveryDecision
 } from "../../engine/decisions";
+import { EMPTY_DECISION_DRAFT, useDraftStore } from "../../stores/draft-store";
 import { ACTION_LABEL, preview } from "./decision-display";
 
 /**
@@ -15,6 +15,10 @@ import { ACTION_LABEL, preview } from "./decision-display";
  * Separate from the virtualized list so the part that matters -- recording a
  * decision, and refusing one that cannot be audited -- is testable without a layout
  * engine. The engine refuses; this only surfaces the reason.
+ *
+ * The form's in-progress state lives in the draft store under `draftId`, not in
+ * component state: the virtualized queue unmounts off-screen rows, and unmounting
+ * must not discard half-typed reasons.
  */
 export function DecisionRow({
   cell,
@@ -22,7 +26,8 @@ export function DecisionRow({
   log,
   makeContext,
   onRecord,
-  index
+  index,
+  draftId
 }: {
   cell: CellClassification;
   decision: RecoveryDecision | undefined;
@@ -31,14 +36,15 @@ export function DecisionRow({
   makeContext: () => DecisionContext;
   onRecord: (log: RecoveryDecision[]) => void;
   index: number;
+  /** Stable per-cell key, scoped to the analysis by the caller. */
+  draftId: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const [reason, setReason] = useState("");
-  const [customValue, setCustomValue] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const draft = useDraftStore((state) => state.decisionDrafts[draftId]) ?? EMPTY_DECISION_DRAFT;
+  const updateDraft = useDraftStore((state) => state.updateDecisionDraft);
+  const clearDraft = useDraftStore((state) => state.clearDecisionDraft);
+  const { open, reason, customValue, error } = draft;
 
   const record = (action: DecisionAction) => {
-    setError(null);
     try {
       const entry = createDecision(
         {
@@ -54,11 +60,11 @@ export function DecisionRow({
         makeContext()
       );
       onRecord(appendDecision(log, entry));
-      setReason("");
-      setCustomValue("");
-      setOpen(false);
+      clearDraft(draftId);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not record the decision.");
+      updateDraft(draftId, {
+        error: caught instanceof Error ? caught.message : "Could not record the decision."
+      });
     }
   };
 
@@ -77,10 +83,7 @@ export function DecisionRow({
         <button
           className="ml-auto rounded border px-2 py-0.5 text-xs text-sky-700 hover:bg-slate-100"
           data-testid={`decide-${index}`}
-          onClick={() => {
-            setOpen(!open);
-            setError(null);
-          }}
+          onClick={() => updateDraft(draftId, { open: !open, error: null })}
         >
           {open ? "Cancel" : decision ? "Change" : "Decide"}
         </button>
@@ -99,14 +102,14 @@ export function DecisionRow({
             placeholder="Reason (required)"
             data-testid="decision-reason"
             value={reason}
-            onChange={(event) => setReason(event.target.value)}
+            onChange={(event) => updateDraft(draftId, { reason: event.target.value })}
           />
           <input
             className="w-40 rounded border border-slate-300 p-1 text-xs"
             placeholder="Custom value"
             data-testid="decision-custom"
             value={customValue}
-            onChange={(event) => setCustomValue(event.target.value)}
+            onChange={(event) => updateDraft(draftId, { customValue: event.target.value })}
           />
           <button className="rounded border px-2 py-1 text-xs text-sky-700 hover:bg-slate-100" data-testid="decision-backfill" onClick={() => record("backfill")}>
             Use reference

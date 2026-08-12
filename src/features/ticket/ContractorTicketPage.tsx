@@ -11,6 +11,7 @@ import { getProfile } from "../../profiles";
 import { copyTextToClipboard } from "../../lib/clipboard";
 import { useUiStore } from "../../stores/ui-store";
 import { useToastStore } from "../../stores/toast-store";
+import { useDraftStore } from "../../stores/draft-store";
 import { TrelloPostPanel } from "../trello/TrelloPostPanel";
 import type { PostedTicketRecord, TrelloTarget } from "../trello/trello-ticket";
 import { db } from "../../db";
@@ -18,11 +19,15 @@ import { db } from "../../db";
 export function ContractorTicketPage() {
   const review = useUiStore((state) => state.review);
   const showToast = useToastStore((state) => state.showToast);
-  const [form, setForm] = useState<TicketDraftForm>(EMPTY_TICKET_FORM);
   const [postRecords, setPostRecords] = useState<PostedTicketRecord[]>([]);
   const [trelloTarget, setTrelloTarget] = useState<TrelloTarget | null>(null);
 
   const analysisKey = review?.generatedAt ?? "";
+  // In the draft store, keyed per analysis, so switching tabs (which unmounts
+  // this page) or starting a different run does not discard typed context.
+  const form = useDraftStore((state) => state.ticketForms[analysisKey]) ?? EMPTY_TICKET_FORM;
+  const updateTicketForm = useDraftStore((state) => state.updateTicketForm);
+  const setForm = (update: (current: TicketDraftForm) => TicketDraftForm) => updateTicketForm(analysisKey, update);
   useEffect(() => {
     if (!review) return;
     let cancelled = false;
