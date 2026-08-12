@@ -661,7 +661,7 @@ describe("bulk decisions over a mixed batch", () => {
     expect(sensitiveSkips.length).toBe(
       impact.dateSensitive.reduce((total, entry) => total + entry.count, 0)
     );
-    expect(sensitiveSkips[0]!.reason).toContain("filter the queue");
+    expect(sensitiveSkips[0]!.reason).toContain("requires its own explicit decision");
     expect(result.applied + result.skipped.length).toBe(reviewCellsAll.length);
   });
 
@@ -677,5 +677,55 @@ describe("bulk decisions over a mixed batch", () => {
     const result = createBulkDecisions(reviewCellsAll, { action: "keep_candidate", reason: "leave all" }, context);
     expect(result.applied).toBe(reviewCellsAll.length);
     expect(result.skipped).toEqual([]);
+  });
+});
+
+describe("rule-6 acknowledgment on bulk decisions", () => {
+  const dueDate = cells.find((cell) => cell.lane === "review" && cell.field === "DueDate")!;
+  const bidStatus = cells.find((cell) => cell.lane === "review" && cell.field === "BidStatus")!;
+  const batch = [dueDate, bidStatus];
+
+  it("skips rule-6 fields in a multi-field batch without acknowledgment", () => {
+    const result = createBulkDecisions(batch, { action: "backfill", reason: "sweep" }, context);
+    expect(result.applied).toBe(0);
+    expect(result.skipped).toHaveLength(2);
+  });
+
+  it("records an acknowledged field and still skips the unacknowledged one", () => {
+    // The acknowledgment names fields the user actually saw; naming DueDate
+    // does not cover BidStatus.
+    const result = createBulkDecisions(
+      batch,
+      { action: "backfill", reason: "verified against the agency portal", acknowledgedDateSensitiveFields: ["DueDate"] },
+      context
+    );
+    expect(result.applied).toBe(1);
+    expect(result.decisions[0]!.field).toBe("DueDate");
+    expect(result.skipped).toHaveLength(1);
+    expect(result.skipped[0]!.field).toBe("BidStatus");
+  });
+
+  it("records all fields when every one is acknowledged", () => {
+    const result = createBulkDecisions(
+      batch,
+      {
+        action: "backfill",
+        reason: "verified against the agency portal",
+        acknowledgedDateSensitiveFields: ["DueDate", "BidStatus"]
+      },
+      context
+    );
+    expect(result.applied).toBe(2);
+    expect(result.skipped).toHaveLength(0);
+    // Each decision still carries its own record's reference value.
+    for (const decision of result.decisions) {
+      const source = batch.find((cell) => cell.field === decision.field)!;
+      expect(decision.outputValue).toEqual(source.referenceValue);
+    }
+  });
+
+  it("keep_candidate needs no acknowledgment, as before", () => {
+    const result = createBulkDecisions(batch, { action: "keep_candidate", reason: "leave them" }, context);
+    expect(result.applied).toBe(2);
   });
 });

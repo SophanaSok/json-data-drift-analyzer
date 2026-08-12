@@ -392,6 +392,17 @@ export type BulkDecisionInput = {
    */
   action: Exclude<DecisionAction, "use_custom">;
   reason: string;
+  /**
+   * Rule-6 fields the user has explicitly acknowledged for THIS batch. A
+   * multi-field backfill normally skips date-sensitive cells (deciding DueDate
+   * as a side effect of "use reference for all" is not a per-field decision) —
+   * but a per-record batch, where the user is looking at every field name and
+   * value on one screen, may cover them after a confirmation that names the
+   * rule and each field. A named list, not a boolean: it is rendered in that
+   * confirmation, checked per cell, and a date-sensitive field the user was
+   * never shown stays skipped.
+   */
+  acknowledgedDateSensitiveFields?: string[];
 };
 
 export type BulkImpact = {
@@ -486,6 +497,7 @@ export function createBulkDecisions(
   const impact = assessBulkImpact(cells, context.profile);
   const dateSensitiveFields = new Set(context.profile.dateSensitiveFields ?? []);
   const skipDateSensitive = input.action === "backfill" && impact.dateSensitiveRequiresPerField;
+  const acknowledged = new Set(input.acknowledgedDateSensitiveFields ?? []);
 
   const decisions: RecoveryDecision[] = [];
   const skipped: SkippedCell[] = [];
@@ -500,11 +512,11 @@ export function createBulkDecisions(
       continue;
     }
 
-    if (skipDateSensitive && dateSensitiveFields.has(cell.field)) {
+    if (skipDateSensitive && dateSensitiveFields.has(cell.field) && !acknowledged.has(cell.field)) {
       skipped.push({
         recordKey: cell.recordKey,
         field: cell.field,
-        reason: `"${cell.field}" is date-sensitive (rule 6); filter the queue to ${cell.field} alone to bulk-decide it.`
+        reason: `"${cell.field}" is date-sensitive (rule 6) and requires its own explicit decision; it was not covered by this batch.`
       });
       continue;
     }

@@ -19,6 +19,13 @@ type FieldDecisionControlProps = {
   onRecord: (log: RecoveryDecision[]) => void;
   /** Draft scope prefix — the review's generatedAt, shared with the queue. */
   draftScope: string;
+  /** Seeds an empty reason when the form opens (the remembered session reason). */
+  defaultReason?: string;
+  /**
+   * Seeds an empty custom-value box when the form opens — the record view
+   * passes the reference value so "edit" means correcting it, not retyping it.
+   */
+  editSeedValue?: string;
 };
 
 const LANE_BADGE: Record<string, string> = {
@@ -33,7 +40,7 @@ const LANE_BADGE: Record<string, string> = {
  * tabs — but the lane and its reason are rendered visibly (§6.4), and an
  * auto-lane cell offers a veto (§6.5), which the queue never surfaces.
  */
-export function FieldDecisionControl({ cell, resolved, log, makeContext, onRecord, draftScope }: FieldDecisionControlProps) {
+export function FieldDecisionControl({ cell, resolved, log, makeContext, onRecord, draftScope, defaultReason, editSeedValue }: FieldDecisionControlProps) {
   const classification = cell.classification;
   const id = classification ? cellId(classification.recordKey, classification.field) : null;
   const draftId = id ? `${draftScope}|${id}` : null;
@@ -88,7 +95,14 @@ export function FieldDecisionControl({ cell, resolved, log, makeContext, onRecor
           type="button"
           className="ml-auto rounded border px-1.5 py-0.5 text-sky-700 hover:bg-slate-100"
           data-testid={`decide-${cell.recordKey}`}
-          onClick={() => updateDraft(draftId, { open: !open, error: null })}
+          onClick={() =>
+            updateDraft(draftId, {
+              open: !open,
+              error: null,
+              ...(!open && reason === "" && defaultReason ? { reason: defaultReason } : {}),
+              ...(!open && customValue === "" && editSeedValue !== undefined ? { customValue: editSeedValue } : {})
+            })
+          }
         >
           {open ? "Cancel" : decision ? "Change" : "Decide"}
         </button>

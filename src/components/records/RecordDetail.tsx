@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useUiStore } from "../../stores/ui-store";
 import { baselineSnapshot } from "../../engine/diff";
 import {
@@ -37,6 +38,13 @@ export function RecordDetail({ recordId, onClose }: RecordDetailProps) {
             Status: <span className="font-medium">{record.status}</span>
             {record.changedFieldCount > 0 ? ` · ${record.changedFieldCount} changed field${record.changedFieldCount === 1 ? "" : "s"}` : null}
           </p>
+          <Link
+            className="mt-1 inline-block text-sm text-sky-700 underline"
+            data-testid="decide-record-link"
+            to={`/results?tab=explore&mode=record&record=${encodeURIComponent(record.recordKey)}`}
+          >
+            Decide this record's fields →
+          </Link>
         </div>
         {onClose ? (
           <button type="button" className="rounded border px-2 py-1 text-sm text-slate-600 hover:bg-slate-50" onClick={onClose}>
