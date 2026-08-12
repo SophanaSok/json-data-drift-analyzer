@@ -107,13 +107,13 @@ export function FieldChangesTable({ rows, sort, onSort, onSelectField }: FieldCh
               <div
                 key={column.id}
                 role="columnheader"
+                aria-sort={sort.column === column.id ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
                 className="relative min-w-0 bg-slate-100 p-2 align-top"
               >
                 <div className="flex min-w-0 items-start gap-1 pr-2">
                   <button
                     type="button"
                     className="inline-flex min-w-0 items-center gap-1 font-medium hover:text-sky-700"
-                    aria-sort={sort.column === column.id ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
                     data-testid={`sort-${column.id}`}
                     onClick={() => onSort(column.id)}
                   >
@@ -176,12 +176,19 @@ export function FieldChangesTable({ rows, sort, onSort, onSelectField }: FieldCh
                 role="row"
                 data-index={virtualItem.index}
                 data-testid={`field-change-row-${row.field}`}
-                className="absolute left-0 top-0 grid w-full cursor-pointer border-b border-slate-100 bg-white hover:bg-sky-50"
+                tabIndex={0}
+                className="absolute left-0 top-0 grid w-full cursor-pointer border-b border-slate-100 bg-white hover:bg-sky-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-500"
                 style={{
                   gridTemplateColumns,
                   transform: `translateY(${virtualItem.start}px)`
                 }}
                 onClick={() => onSelectField(row.field)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelectField(row.field);
+                  }
+                }}
               >
                 {FIELD_CHANGES_TABLE_COLUMNS.map((column) => {
                   const value = getFieldColumnValue(row, column.id);

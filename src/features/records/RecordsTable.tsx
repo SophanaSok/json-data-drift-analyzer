@@ -73,12 +73,12 @@ export function RecordsTable({ records, selectedRecordId, sort, onSort, onSelect
               <div
                 key={column.id}
                 role="columnheader"
+                aria-sort={sort.column === column.id ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
                 className="relative min-w-0 bg-slate-100 p-2 align-top"
               >
                 <button
                   type="button"
                   className="inline-flex max-w-full items-center gap-1 truncate pr-2 font-medium hover:text-sky-700"
-                  aria-sort={sort.column === column.id ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
                   data-testid={`sort-${column.id}`}
                   onClick={() => onSort(column.id)}
                 >
@@ -123,7 +123,9 @@ export function RecordsTable({ records, selectedRecordId, sort, onSort, onSelect
                 // for humans and tests ("record-91B-2023").
                 data-testid={`record-${record.recordKey}`}
                 data-selected={isSelected ? "true" : "false"}
-                className={`absolute left-0 top-0 grid w-full cursor-pointer border-b border-slate-100 hover:bg-sky-50 ${
+                tabIndex={0}
+                aria-current={isSelected ? "true" : undefined}
+                className={`absolute left-0 top-0 grid w-full cursor-pointer border-b border-slate-100 hover:bg-sky-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-500 ${
                   isSelected ? "bg-sky-100 ring-1 ring-inset ring-sky-300" : "bg-white"
                 }`}
                 style={{
@@ -131,6 +133,12 @@ export function RecordsTable({ records, selectedRecordId, sort, onSort, onSelect
                   transform: `translateY(${virtualItem.start}px)`
                 }}
                 onClick={() => onSelectRecord(record.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelectRecord(record.id);
+                  }
+                }}
               >
                 {RECORD_TABLE_COLUMNS.map((column) => {
                   const value = getRecordColumnValue(record, column.id);
