@@ -4,10 +4,84 @@
 
 > **Remediation status (2026-08-11):** Phases 1–3 of §6 are implemented and merged to `main`:
 > Phase 1 correctness (`22202c6`), Phase 2 CI/supply chain (`a940c85`), Phase 3 durability (`26bfd91`).
-> **Remaining: Phase 4 (polish)** — keyboard access for tables and the DateOrderingAlert dialog,
-> draft persistence across tab switches, `noUncheckedIndexedAccess`, coverage gating, AGENTS.md
-> refresh, e2e failure-path journeys, and the unaddressed Low items in §1.5, §2.6, §3, and §4.
+> **Remaining: Phase 4 (polish)** — see the handoff section directly below.
 > Findings text below is left as originally written — read it against the commits above.
+
+---
+
+## Session handoff — start here
+
+*Written 2026-08-11 at the end of the Phases 1–3 remediation session, for whoever
+(human or agent) picks this up next. Delete or rewrite it once Phase 4 lands.*
+
+### State as of `e749576`
+
+`main` is green and deployed. CI runs lint → typecheck → 694 unit tests → e2e, then
+publishes the **same** `dist/` artifact that e2e exercised (the deploy job never
+rebuilds). Verified live: the footer build stamp and `gh-pages` both read the
+deployed commit.
+
+### The work that remains
+
+**Phase 4 (polish)** — the audit items never addressed:
+
+- **Keyboard access** (§2.5, rated High): `RecordsTable` and `FieldChangesTable`
+  rows are `div role="row"` with `onClick` only — no `tabIndex`, no key handler, so
+  the core triage workflow is mouse-only. `DateOrderingAlert` is an `alertdialog`
+  with no focus trap, initial focus, or Escape. `aria-sort` sits on the `<button>`
+  rather than the columnheader. Toast live region mounts on demand; errors use
+  polite `role="status"` where `role="alert"` is meant.
+- **Draft persistence** (§2.6): decision drafts and the ticket form are row-local
+  state, so virtualization scroll and tab switches discard typed input. Lift to the
+  store keyed by cell id.
+- **`noUncheckedIndexedAccess`** (§4): the engine indexes into
+  `Record<string, unknown>` constantly. Expect a meaningful number of call sites.
+- **Coverage gating** (§4): coverage is configured but never run; CI has no
+  `--coverage` and no thresholds. Add `coverage/` to `.gitignore`.
+- **AGENTS.md refresh** (§4): its self-described *binding* grounding section is
+  stale on three counts (claims no profile registry exists, an older profile
+  version, and that `ContractValue` appears nowhere).
+- **e2e failure-path journeys** (§4): no malformed-JSON, quarantined/blocked-export,
+  or `page.route()`-mocked Trello journey; Data Health tab never visited; the CSP
+  spec detects violations by matching Chrome's console phrasing rather than a
+  `securitypolicyviolation` listener, so a wording change would make it vacuous.
+- Remaining **Low** items in §1.5, §2.6, §3, and §4.
+
+**Open dependency PRs** (none blocking; each has a catch):
+
+| PR | Bump | Note |
+|----|------|------|
+| #45 + #48 | vitest & @vitest/coverage-v8 3→4 | **Must move together.** Each alone fails `npm ci` in ~13s. Close both and do one manual joint bump. |
+| #46 | typescript 5.9→7.0 | Two majors. Deliberate migration, not a rubber stamp. |
+| #47 | @types/node 24→26 | Ran the full suite before failing — read its log first. |
+| #44 | grouped minor/patch (10 updates) | Likely fine after `@dependabot rebase`. |
+| — | `actions/cache` v4→v6 | Not yet offered (v4.3.0 is newest v4). It is the **last** node20 action; bumping clears the runner deprecation warning. |
+
+### Environment
+
+- **Node ≥ 20.19** (22 LTS fine). Vite 8 needs `util.styleText`; Node 21.6 fails to
+  build with a bare `SyntaxError` naming that import.
+- `npm ci`, then `npm run test` / `lint` / `typecheck` / `build` all work normally
+  on Linux. (Windows needed workarounds — a missing oxlint native binding and an
+  extensionless bin shim — that do not apply there.)
+- For PR automation: `gh auth login`, **plus `gh auth refresh -h github.com -s
+  workflow`**. Without the `workflow` scope, merging any PR that touches
+  `.github/workflows/**` is refused by the API mid-batch; the fallback is merging
+  locally and pushing over SSH.
+
+### Two traps this session hit — worth not repeating
+
+1. **Record ids are not display keys.** Phase 1 made `record.id` the
+   JSON-serialized identity key (collision-proof) while `record.recordKey` stayed
+   the human-readable label. A row testid still built from `record.id` silently
+   became `record-["91B-2023"]` and broke the e2e smoke flow on every run until
+   `f05d362`. When touching record identity, grep for `record.id` in **testids,
+   URLs, and exports** — anywhere a human or a test reads the value.
+2. **A red pipeline was protecting the site, not failing it.** For several commits
+   the deploy job refused to publish because e2e was red. That is the Phase 2
+   design working. Read a failed deploy as "the gate held", and pull the
+   `playwright-report` artifact (uploaded on failure, traces on first retry) before
+   theorizing about flake.
 
 ---
 

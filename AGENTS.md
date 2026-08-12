@@ -3,6 +3,11 @@
 Operating rules for AI agents and contributors working in `json-data-drift-analyzer`.
 These rules are binding. When a request conflicts with a rule, say so before acting.
 
+> **Picking up work?** Read
+> [PRODUCTION-READINESS-AUDIT.md](PRODUCTION-READINESS-AUDIT.md) first — its
+> "Session handoff" section states what has been fixed, what is deliberately
+> still open, and the environment setup this repo needs.
+
 ## Current product goal
 
 Compare a bad candidate JSON export to a known-good reference export, identify
