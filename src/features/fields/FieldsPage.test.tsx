@@ -433,3 +433,40 @@ describe("FieldsPage: By record mode", () => {
     expect(screen.getByTestId("record-excluded-warning")).toBeTruthy();
   });
 });
+
+describe("FieldsPage: focus mode", () => {
+  it("hides the queue list and page chrome, keeping the record and its controls", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&mode=record&record=1B-2020");
+
+    expect(screen.getByTestId("record-queue")).toBeTruthy();
+    await user.click(screen.getByTestId("toggle-focus-mode"));
+
+    expect(screen.queryByTestId("record-queue")).toBeNull();
+    expect(screen.getByTestId("record-mode-panel")).toBeTruthy();
+    expect(screen.getByTestId("record-bulk-bar")).toBeTruthy();
+    // The session reason still governs what a keystroke records, so it stays.
+    expect(screen.getByTestId("record-bulk-reason")).toBeTruthy();
+  });
+
+  it("toggles with f and leaves with Escape", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&mode=record&record=1B-2020");
+
+    await user.click(screen.getByTestId("record-keymap"));
+    await user.keyboard("f");
+    expect(screen.queryByTestId("record-queue")).toBeNull();
+
+    await user.keyboard("{Escape}");
+    expect(screen.getByTestId("record-queue")).toBeTruthy();
+  });
+
+  it("shows the keymap on ?", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&mode=record&record=1B-2020");
+
+    await user.click(screen.getByTestId("record-keymap"));
+    await user.keyboard("?");
+    expect(screen.getByTestId("keymap-help").textContent).toContain("accept all pending");
+  });
+});

@@ -168,8 +168,8 @@ export function FieldsPage() {
 
   return (
     <div className="space-y-4 p-6" data-testid="fields-explorer">
-      <header className="space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+      <header className={focusMode ? "space-y-1" : "space-y-2"}>
+        <div className={`flex flex-wrap items-center justify-between gap-2 ${focusMode ? "hidden" : ""}`}>
           <h2 className="text-xl font-semibold">Explore</h2>
           <div className="flex rounded border border-slate-300 text-sm" role="group" aria-label="Explore mode">
             <button
@@ -192,11 +192,13 @@ export function FieldsPage() {
             </button>
           </div>
         </div>
-        <p className="text-sm text-slate-600">
-          {mode === "field"
-            ? "Every record's value in both files, one field at a time."
-            : "Every field of one record — candidate, reference, and what the export will contain — decidable in place."}
-        </p>
+        {focusMode ? null : (
+          <p className="text-sm text-slate-600">
+            {mode === "field"
+              ? "Every record's value in both files, one field at a time."
+              : "Every field of one record — candidate, reference, and what the export will contain — decidable in place. For work that is the same on every record, By field decides it in four bulk actions."}
+          </p>
+        )}
         {mode === "record" && lastAction ? (
           <p className="rounded border border-emerald-300 bg-emerald-50 p-2 text-xs text-emerald-900" data-testid="last-action">
             ✓ {lastAction}

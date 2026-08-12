@@ -168,7 +168,16 @@ export function RecordModePanel({
       ? 100
       : (queue.progress.resolvedRecords / queue.progress.recordsWithPending) * 100;
 
-  const rowsToRender = useMemo(() => [...pending, ...settled], [pending, settled]);
+  // Focus mode shows only the work: already-decided and auto-applied rows move
+  // into the context disclosure so every pending decision is above the fold.
+  const rowsToRender = useMemo(
+    () => (focusMode ? pending : [...pending, ...settled]),
+    [focusMode, pending, settled]
+  );
+  const contextRows = useMemo(
+    () => (focusMode ? [...settled, ...context] : context),
+    [focusMode, settled, context]
+  );
 
   return (
     <section aria-labelledby="record-detail-heading" className="min-w-0 space-y-3" data-testid="record-mode-panel">
@@ -307,6 +316,11 @@ export function RecordModePanel({
             })}
           </tbody>
         </table>
+        {rowsToRender.length === 0 ? (
+          <p className="p-3 text-sm text-slate-600" data-testid="record-no-pending">
+            Nothing left to decide on this record. Press <kbd>n</kbd> for the next one with pending work.
+          </p>
+        ) : null}
 
         <div className="border-t p-2">
           <button
@@ -316,11 +330,11 @@ export function RecordModePanel({
             data-testid="toggle-unchanged"
             onClick={() => setShowContext((shown) => !shown)}
           >
-            {showContext ? "Hide" : "Show"} {context.length} unchanged and excluded field(s)
+            {showContext ? "Hide" : "Show"} {contextRows.length} other field(s)
           </button>
           {showContext ? (
             <dl className="mt-2 grid gap-x-4 gap-y-1 text-xs md:grid-cols-2" data-testid="unchanged-fields">
-              {context.map((cell) => (
+              {contextRows.map((cell) => (
                 <div key={cell.field} className="flex gap-2">
                   <dt className="w-40 shrink-0 font-mono text-slate-500">{cell.field}</dt>
                   <dd className="min-w-0 break-words">{formatCellValue(cell.candidateValue)}</dd>

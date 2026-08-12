@@ -103,8 +103,12 @@ export function FieldDecisionControl({ cell, resolved, log, makeContext, onRecor
         </button>
       </div>
 
-      {/* §6.4: the lane's reason, visible, not inferred. */}
-      <p className="text-slate-500">{classification.reason}</p>
+      {/* §6.4: the lane's reason is never inferred — shown in full when the
+          form is open or the row is compact-off, and always reachable. */}
+      <details className="text-slate-500">
+        <summary className="cursor-pointer list-none underline decoration-dotted">why this lane</summary>
+        <p className="mt-0.5">{classification.reason}</p>
+      </details>
 
       {error ? (
         <p className="rounded border border-red-300 bg-red-50 p-1 text-red-900" role="alert" data-testid="decision-error">
