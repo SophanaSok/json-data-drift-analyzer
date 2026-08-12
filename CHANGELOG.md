@@ -16,6 +16,26 @@ recovery policy model.
 Each release is tagged `vX.Y.Z` on `main`. The deployed footer shows the version
 and the exact build commit; exported artifacts carry both in their metadata.
 
+## [1.2.0] — 2026-08-12
+
+### Added
+
+- **By record mode** on the Explore tab: a queue over every record with exact
+  pending-decision counts, and a panel showing each field's candidate,
+  reference, and **output** value — the record as the exported artifact will
+  contain it, badged by source. Fields can be backfilled, kept, or edited in
+  place (editing pre-fills the reference value for correction), and a whole
+  record accepted at once.
+- **Rule-6 acknowledgment**: a per-record accept-all covers date-sensitive
+  fields only behind a confirmation that names the rule and each affected
+  field, passed to the engine as an explicit acknowledged-fields list. Without
+  it, multi-field bulk decisions keep skipping rule-6 cells as before.
+- **Queue workflow**: previous/next/next-pending navigation with j/k/n
+  keyboard shortcuts, progress over records with pending work, an only-pending
+  filter, and a remembered session reason that pre-fills every decision form.
+- Records absent from the recovery output warn inline before deciding, and the
+  Records tab's detail view links into the mode.
+
 ## [1.1.0] — 2026-08-12
 
 ### Added
@@ -83,6 +103,7 @@ Low-severity findings — is resolved, each fix with a proving test.
 Initial development version, superseded by 1.0.0. Kept for reference: this is
 the version every pre-release commit reported.
 
+[1.2.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.2.0
 [1.1.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.1.0
 [1.0.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.0.0
 [0.1.0]: https://github.com/SophanaSok/json-data-drift-analyzer/commits/main
