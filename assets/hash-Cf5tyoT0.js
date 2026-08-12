@@ -1,1 +1,0 @@
-async function e(e){let t=new TextEncoder().encode(e),n=await crypto.subtle.digest(`SHA-256`,t);return[...new Uint8Array(n)].map(e=>e.toString(16).padStart(2,`0`)).join(``)}export{e as t};
