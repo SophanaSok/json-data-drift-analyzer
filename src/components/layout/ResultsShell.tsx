@@ -82,9 +82,14 @@ export function ResultsShell() {
     return <p className="p-6 text-sm text-slate-600">Restoring the last analysis…</p>;
   }
 
+  // Focus mode is the record queue's single-task view; the run-level export
+  // dates are context for the run, not for the record being decided, and they
+  // are what pushes the decision rows below the fold.
+  const focusMode = params.get("focus") === "1";
+
   return (
     <div className="mx-auto max-w-7xl">
-      {analysis ? <ExportDateBanner metadata={analysis.metadata} /> : null}
+      {analysis && !focusMode ? <ExportDateBanner metadata={analysis.metadata} /> : null}
       <nav className="flex items-center justify-between border-b bg-white px-6 py-3 text-sm">
         <div className="flex flex-wrap gap-2">
           {tabs.map((item) => (

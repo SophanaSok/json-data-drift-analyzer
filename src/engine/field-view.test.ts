@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import referenceData from "../test/fixtures/bellingham-reference.json";
 import candidateData from "../test/fixtures/bellingham-candidate.json";
 import { runAnalysis } from "./diff";
-import { classifyCells, cellId } from "./decisions";
+import { classifyCells, cellId, createDecision } from "./decisions";
 import {
   assessDecisionBridge,
   buildCellContext,
@@ -395,5 +395,62 @@ describe("the record transpose", () => {
 
   it("returns null for an unknown record id", () => {
     expect(buildRecordDetail(analysis, "no-such-id", review, profile, ctx)).toBeNull();
+  });
+});
+
+describe("manual value entry", () => {
+  const ctx = buildCellContext(analysis, review, profile);
+  const target = buildRecordSummaries(analysis, review, profile, ctx).find(
+    (summary) => summary.cells.review === 4
+  )!;
+  const detail = buildRecordDetail(analysis, target.recordId, review, profile, ctx)!;
+
+  it("offers typing on every field of a decidable record except profile-excluded ones", () => {
+    const editable = detail.cells.filter((cell) => cell.manualClassification !== null);
+    const locked = detail.cells.filter((cell) => cell.manualClassification === null);
+
+    // 45 fields, 2 of them excluded by the profile (Created, Refreshed).
+    expect(editable).toHaveLength(analysis.fieldStats.length - 2);
+    expect(locked.map((cell) => cell.field).sort()).toEqual(["Created", "Refreshed"]);
+  });
+
+  it("covers fields that are blank in both files, which have no lane at all", () => {
+    // ContractValue is empty in 100% of both runs: nothing to accept, but a
+    // reviewer who knows the number can still enter it.
+    const contractValue = detail.cells.find((cell) => cell.field === "ContractValue")!;
+    expect(contractValue.classification).toBeNull();
+    expect(contractValue.manualClassification).not.toBeNull();
+    expect(contractValue.situation).toBe("unchanged");
+  });
+
+  it("records a typed value on a cell with no reference, and refuses to accept one", () => {
+    const contractValue = detail.cells.find((cell) => cell.field === "ContractValue")!;
+    const cell = contractValue.manualClassification!;
+    const decisionContext = { review, profile, timestamp: FIXED_NOW, sequence: 0 };
+
+    const typed = createDecision(
+      { recordKey: cell.recordKey, field: cell.field, action: "use_custom", customValue: "48250.00", reason: "from the award letter" },
+      cell,
+      decisionContext
+    );
+    expect(typed.outputValue).toBe("48250.00");
+    expect(typed.actor).toBe("user");
+
+    // There is still nothing to copy, so accepting is refused as before.
+    expect(() =>
+      createDecision(
+        { recordKey: cell.recordKey, field: cell.field, action: "backfill", reason: "no" },
+        cell,
+        decisionContext
+      )
+    ).toThrow(/no reference value/);
+  });
+
+  it("never offers typing on a record the decisions cannot be attributed to", () => {
+    const removed = buildRecordSummaries(analysis, review, profile, ctx).find(
+      (summary) => summary.status === "removed"
+    )!;
+    const removedDetail = buildRecordDetail(analysis, removed.recordId, review, profile, ctx)!;
+    expect(removedDetail.cells.every((cell) => cell.manualClassification === null)).toBe(true);
   });
 });

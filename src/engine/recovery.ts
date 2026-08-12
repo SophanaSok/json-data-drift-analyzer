@@ -33,12 +33,29 @@ import type { MatchReport, MatchResult } from "./matchRecords";
 import type { SourceProfile } from "./adapter-types";
 
 /** A value a person chose, overriding whatever either export held. */
+/**
+ * Provenance ruleId suffix per override action, so the exported audit
+ * distinguishes an accepted reference value from an invented one.
+ */
+const OVERRIDE_RULE_ID = {
+  backfill: "manual_reference_accept",
+  keep_candidate: "manual_veto",
+  use_custom: "manual_custom_value"
+} as const;
+
 export type ManualOverride = {
   recordKey: string;
   field: string;
   value: unknown;
   /** Required: a manual override with no stated reason is not auditable. */
   reason: string;
+  /**
+   * What the person chose. Stamped into the provenance ruleId so a reader of
+   * the exported audit can tell an accepted reference value from a typed one
+   * (docs/recovery-workflow.proposed.md §9 q4). Absent on overrides built
+   * before this was carried through.
+   */
+  action?: "backfill" | "keep_candidate" | "use_custom";
   /**
    * When the person decided, ISO-8601. Recorded on the provenance entry so the audit
    * trail carries the decision time, not the analysis time. Absent, the envelope
@@ -597,6 +614,14 @@ export function applyOverridesToRecovery(
     // A recovered record has passed the hard-required gate; an override that would
     // blank a hard-required field cannot be applied post-hoc without re-running the
     // exclusion decision, so it is refused rather than smuggled past the gate.
+    if (profile.excludedFields.includes(override.field)) {
+      unapplied.push({
+        override,
+        reason: `"${override.field}" is excluded from comparison by this profile; recovery may not write it.`
+      });
+      continue;
+    }
+
     if (hardRequired.has(override.field) && isEmpty(override.value)) {
       unapplied.push({
         override,
@@ -623,7 +648,7 @@ export function applyOverridesToRecovery(
           originalValue,
           outputValue: override.value,
           reason: override.reason,
-          ruleId: `${recovery.profileId}@${recovery.profileVersion}:manual_override`,
+          ruleId: `${recovery.profileId}@${recovery.profileVersion}:${OVERRIDE_RULE_ID[override.action ?? "backfill"]}`,
           actor: "user",
           candidateIndex: target.candidateIndex,
           referenceIndex: target.referenceIndex,

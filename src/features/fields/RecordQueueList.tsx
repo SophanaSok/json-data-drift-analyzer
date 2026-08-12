@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { QueueRow } from "./use-record-queue";
 
@@ -19,6 +19,7 @@ export function RecordQueueList({ rows, selectedRecordKey, onSelectRecord }: Rec
   const [onlyPending, setOnlyPending] = useState(false);
 
   const visible = onlyPending ? rows.filter((row) => row.pendingCount > 0) : rows;
+  const selectedIndex = visible.findIndex((row) => row.recordKey === selectedRecordKey);
 
   const rowVirtualizer = useVirtualizer({
     count: visible.length,
@@ -27,6 +28,12 @@ export function RecordQueueList({ rows, selectedRecordKey, onSelectRecord }: Rec
     measureElement: (element) => element.getBoundingClientRect().height,
     overscan: 8
   });
+
+  // Keep the selection in view: after a few `n` presses the highlighted row is
+  // otherwise off-screen and orientation is lost.
+  useEffect(() => {
+    if (selectedIndex >= 0) rowVirtualizer.scrollToIndex(selectedIndex, { align: "auto" });
+  }, [selectedIndex, rowVirtualizer]);
 
   return (
     <div className="flex max-h-[640px] flex-col rounded border bg-white" data-testid="record-queue">

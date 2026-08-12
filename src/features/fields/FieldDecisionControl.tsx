@@ -1,12 +1,11 @@
 import {
-  appendDecision,
   cellId,
-  createDecision,
   decisionHistory,
   type DecisionAction,
   type DecisionContext,
   type RecoveryDecision
 } from "../../engine/decisions";
+import { recordCellDecision } from "./record-decision";
 import type { FieldCell } from "../../engine/field-view";
 import { ACTION_LABEL } from "../recovery/decision-display";
 import { EMPTY_DECISION_DRAFT, useDraftStore } from "../../stores/draft-store";
@@ -41,7 +40,10 @@ const LANE_BADGE: Record<string, string> = {
  * auto-lane cell offers a veto (§6.5), which the queue never surfaces.
  */
 export function FieldDecisionControl({ cell, resolved, log, makeContext, onRecord, draftScope, defaultReason, editSeedValue }: FieldDecisionControlProps) {
-  const classification = cell.classification;
+  // A cell with nothing to copy can still take a typed value; classification
+  // governs accept/keep, manualClassification governs typing.
+  const classification = cell.classification ?? cell.manualClassification;
+  const canAcceptReference = cell.classification !== null;
   const id = classification ? cellId(classification.recordKey, classification.field) : null;
   const draftId = id ? `${draftScope}|${id}` : null;
   const draft = useDraftStore((state) => (draftId ? state.decisionDrafts[draftId] : undefined)) ?? EMPTY_DECISION_DRAFT;
@@ -59,29 +61,25 @@ export function FieldDecisionControl({ cell, resolved, log, makeContext, onRecor
   const { open, reason, customValue, error } = draft;
 
   const record = (action: DecisionAction) => {
-    try {
-      const entry = createDecision(
-        {
-          recordKey: classification.recordKey,
-          field: classification.field,
-          action,
-          customValue: action === "use_custom" && customValue.trim().length > 0 ? customValue : undefined,
-          reason
-        },
-        classification,
-        makeContext()
-      );
-      onRecord(appendDecision(log, entry));
-      clearDraft(draftId);
-    } catch (caught) {
-      updateDraft(draftId, { error: caught instanceof Error ? caught.message : "Could not record the decision." });
-    }
+    const failure = recordCellDecision({
+      classification,
+      action,
+      reason,
+      customValue,
+      log,
+      makeContext,
+      onRecord
+    });
+    if (failure) updateDraft(draftId, { error: failure });
+    else clearDraft(draftId);
   };
 
   return (
     <div className="space-y-1 text-xs">
       <div className="flex flex-wrap items-center gap-1">
-        <span className={`rounded px-1.5 py-0.5 ${LANE_BADGE[classification.lane]}`}>{classification.lane}</span>
+        {canAcceptReference ? (
+          <span className={`rounded px-1.5 py-0.5 ${LANE_BADGE[classification.lane]}`}>{classification.lane}</span>
+        ) : null}
         {decision ? (
           <span
             className={`rounded px-1.5 py-0.5 ${isVeto ? "bg-red-50 text-red-900" : "bg-emerald-100 text-emerald-900"}`}
@@ -94,7 +92,8 @@ export function FieldDecisionControl({ cell, resolved, log, makeContext, onRecor
         <button
           type="button"
           className="ml-auto rounded border px-1.5 py-0.5 text-sky-700 hover:bg-slate-100"
-          data-testid={`decide-${cell.recordKey}`}
+          aria-expanded={open}
+          data-testid={`decide-${cell.recordKey}-${cell.field}`}
           onClick={() =>
             updateDraft(draftId, {
               open: !open,
@@ -104,12 +103,19 @@ export function FieldDecisionControl({ cell, resolved, log, makeContext, onRecor
             })
           }
         >
-          {open ? "Cancel" : decision ? "Change" : "Decide"}
+          <span className="sr-only">{cell.field}: </span>
+          {open ? "Cancel" : decision ? "Change" : canAcceptReference ? "Decide" : "Type a value"}
         </button>
       </div>
 
-      {/* §6.4: the lane's reason, visible, not inferred. */}
-      <p className="text-slate-500">{classification.reason}</p>
+      {/* §6.4: the lane's reason is never inferred — shown in full when the
+          form is open or the row is compact-off, and always reachable. */}
+      {canAcceptReference ? (
+        <details className="text-slate-500">
+          <summary className="cursor-pointer list-none underline decoration-dotted">why this lane</summary>
+          <p className="mt-0.5">{classification.reason}</p>
+        </details>
+      ) : null}
 
       {error ? (
         <p className="rounded border border-red-300 bg-red-50 p-1 text-red-900" role="alert" data-testid="decision-error">
@@ -134,7 +140,7 @@ export function FieldDecisionControl({ cell, resolved, log, makeContext, onRecor
             onChange={(event) => updateDraft(draftId, { customValue: event.target.value })}
           />
           <div className="flex flex-wrap gap-1">
-            {classification.lane === "auto" ? (
+            {!canAcceptReference ? null : classification.lane === "auto" ? (
               <button
                 type="button"
                 className="rounded border border-red-300 px-1.5 py-0.5 text-red-900 hover:bg-red-50"

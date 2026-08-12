@@ -88,7 +88,7 @@ test.describe("explore tab", () => {
     // 1B-2020 sorts into the first virtualized window; rows further down are
     // not rendered until scrolled to.
     const row = page.getByTestId("field-cell-1B-2020");
-    await row.getByTestId("decide-1B-2020").click();
+    await row.getByTestId("decide-1B-2020-Title").click();
     await row.getByTestId("decision-reason").fill("title was renamed upstream");
     await row.getByTestId("decision-veto").click();
     await expect(row.getByTestId("cell-decided")).toHaveText("vetoed");
@@ -143,17 +143,17 @@ test.describe("explore tab: by record", () => {
     await expect(page.getByTestId("record-output-DueDate")).toContainText("candidate");
 
     await page.getByTestId("record-bulk-reason").fill("verified against the agency portal, Aug 2026");
-    await page.getByTestId("record-accept-all").click();
-    // The confirmation names rule 6 and its fields; apply is gated on the checkbox.
+    // Accepting is blocked until the rule-6 fields are approved, by name.
     await expect(page.getByTestId("rule6-acknowledgment")).toContainText("rule-6 date-sensitive");
-    await expect(page.getByTestId("record-bulk-apply")).toBeDisabled();
-    await page.getByTestId("rule6-acknowledge-check").check();
-    await page.getByTestId("record-bulk-apply").click();
-    await expect(page.getByTestId("record-bulk-outcome")).toContainText("Recorded 4 decision(s)");
+    await expect(page.getByTestId("record-accept-all")).toBeDisabled();
+    await page.getByTestId("rule6-approve").click();
+    await expect(page.getByTestId("rule6-active")).toContainText("DueDate");
+    await page.getByTestId("record-accept-all").click();
+    await expect(page.getByTestId("last-action")).toContainText("Recorded 4 decision(s)");
 
-    // The record resolves in the queue and the output column flips.
+    // The record resolves in the queue; the run advances to the next one.
     await expect(page.getByTestId("queue-record-1B-2020").getByTestId("queue-resolved")).toBeVisible();
-    await expect(page.getByTestId("record-output-DueDate")).toContainText("your decision");
+    await expect(page.locator("#record-detail-heading")).not.toHaveText("1B-2020");
 
     // Same log on the Recovery tab, and the audit artifact carries the reason.
     await page.getByRole("link", { name: "Recovery", exact: true }).click();
@@ -169,9 +169,9 @@ test.describe("explore tab: by record", () => {
   test("edits one field to a corrected value, pre-filled from the reference", async ({ page }) => {
     await page.getByTestId("queue-record-1B-2020").click();
     const row = page.getByTestId("record-cell-DueDate");
-    const reference = (await row.locator("td").nth(2).textContent())?.trim() ?? "";
+    const reference = (await row.locator("td").nth(3).textContent())?.trim() ?? "";
 
-    await row.getByTestId("decide-1B-2020").click();
+    await row.getByTestId("decide-1B-2020-DueDate").click();
     // The custom box starts as the reference value — correct it, don't retype it.
     await expect(row.getByTestId("decision-custom")).toHaveValue(reference);
     await row.getByTestId("decision-reason").fill("description shows the deadline moved");
@@ -186,13 +186,87 @@ test.describe("explore tab: by record", () => {
     await page.getByTestId("queue-record-1B-2020").click();
     await expect(page.getByTestId("record-position")).toContainText("4 pending");
 
+    // Assert on the record itself rather than reading position text between
+    // keystrokes, which races the URL update.
     await page.keyboard.press("j");
-    const afterJ = (await page.getByTestId("record-position").textContent()) ?? "";
+    await expect(page.locator("#record-detail-heading")).toHaveText("1B-2021");
     await page.keyboard.press("k");
-    const afterK = (await page.getByTestId("record-position").textContent()) ?? "";
-    expect(afterJ).not.toBe(afterK);
+    await expect(page.locator("#record-detail-heading")).toHaveText("1B-2020");
 
     await page.keyboard.press("n");
+    await expect(page.locator("#record-detail-heading")).toHaveText("1B-2021");
     await expect(page.getByTestId("record-position")).toContainText("pending");
+  });
+});
+
+test.describe("explore tab: the record task queue", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("");
+    await page
+      .getByTestId("baseline-input")
+      .setInputFiles(path.join(root, "src/test/fixtures/bellingham-reference.json"));
+    await page
+      .getByTestId("latest-input")
+      .setInputFiles(path.join(root, "src/test/fixtures/bellingham-candidate.json"));
+    await page.getByTestId("analyze-button").click();
+    await page.getByRole("link", { name: "Explore", exact: true }).click();
+    await expect(page.getByTestId("fields-explorer")).toBeVisible({ timeout: 30000 });
+    await page.getByTestId("mode-record").click();
+    await page.getByTestId("queue-record-1B-2020").click();
+  });
+
+  test("resolves three records with one keystroke each after approving rule 6 once", async ({ page }) => {
+    await page.getByTestId("record-bulk-reason").fill("verified against the agency portal, Aug 2026");
+    await page.getByTestId("rule6-approve").click();
+    await expect(page.getByTestId("rule6-active")).toContainText("DueDate");
+
+    // Focus out of the reason field so keystrokes are commands.
+    await page.getByTestId("record-keymap").click();
+    for (const nextRecord of ["1B-2021", "1B-2022", "1B-2023"]) {
+      await page.keyboard.press("a");
+      // Wait for the signal a person waits for — the next record on screen —
+      // rather than firing the next keystroke into a mid-remount panel.
+      await expect(page.locator("#record-detail-heading")).toHaveText(nextRecord);
+    }
+    await expect(page.getByTestId("record-progress")).toContainText("3 / 499 resolved");
+
+    // Twelve decisions, three keystrokes — and the approval was never asked again.
+    await page.getByRole("link", { name: "Recovery", exact: true }).click();
+    await expect(page.getByTestId("recovery-review")).toBeVisible({ timeout: 30000 });
+    await expect(page.getByTestId("decision-log")).toContainText("12 entries");
+  });
+
+  test("focus mode puts every pending decision in the viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.getByTestId("toggle-focus-mode").click();
+    await expect(page.getByTestId("record-queue")).toHaveCount(0);
+
+    const rows = page.locator('[data-testid^="record-cell-"]');
+    await expect(rows).toHaveCount(4);
+    for (const row of await rows.all()) {
+      const box = await row.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.y + box!.height).toBeLessThanOrEqual(720);
+    }
+  });
+
+  test("types a value into a field blank in both files, and the audit marks it as typed", async ({ page }) => {
+    await page.getByTestId("toggle-unchanged").click();
+    const row = page.getByTestId("record-cell-ContractValue");
+    await row.getByTestId("decide-1B-2020-ContractValue").click();
+    await row.getByTestId("decision-reason").fill("contract value from the award letter");
+    await row.getByTestId("decision-custom").fill("48250.00");
+    await row.getByTestId("decision-custom-apply").click();
+
+    await expect(page.getByTestId("record-output-ContractValue")).toContainText("48250.00");
+
+    await page.getByRole("link", { name: "Recovery", exact: true }).click();
+    await expect(page.getByTestId("recovery-review")).toBeVisible({ timeout: 30000 });
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByTestId("download-recovery-audit").click();
+    const audit = fs.readFileSync(await (await downloadPromise).path(), "utf8");
+    expect(audit).toContain("48250.00");
+    // A typed value is distinguishable from an accepted reference in the audit.
+    expect(audit).toContain("manual_custom_value");
   });
 });

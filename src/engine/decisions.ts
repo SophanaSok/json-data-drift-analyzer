@@ -208,8 +208,13 @@ export function createDecision(
   if (input.reason.trim().length === 0) {
     throw new Error(`Decision for ${input.field} has no reason; a reason is required for the audit trail.`);
   }
-  if (cell.lane === "ineligible") {
-    throw new Error(`Cannot decide on ${input.field}: no reference value was recorded for this cell.`);
+  // Refused for backfill and keep_candidate, which need a reference value to
+  // copy — that really is arithmetic, not policy. A typed value comes from the
+  // person, so no reference is required for it to be a decision.
+  if (cell.lane === "ineligible" && input.action !== "use_custom") {
+    throw new Error(
+      `Cannot decide on ${input.field}: no reference value was recorded for this cell. A typed value can still be entered.`
+    );
   }
   if (input.action === "use_custom" && input.customValue === undefined) {
     throw new Error(`Custom decision for ${input.field} carries no value.`);
@@ -320,6 +325,9 @@ export function decisionsToOverrides(
       field: decision.field,
       value: decision.outputValue,
       reason: decision.reason,
+      // The audit must distinguish "the reviewer accepted the reference value"
+      // from "the reviewer typed a value that appears in neither export".
+      action: decision.action,
       // Carried onto the provenance entry: the audit records when the person
       // decided, not when the analysis ran.
       timestamp: decision.timestamp
