@@ -22,7 +22,8 @@ function ToastItem({ toast }: { toast: Toast }) {
     <div
       className={`rounded border p-3 text-sm shadow-lg ${variantClasses[toast.variant]}`}
       data-testid="toast"
-      role="status"
+      // Errors interrupt (assertive); the rest wait their turn (polite).
+      role={toast.variant === "error" ? "alert" : "status"}
     >
       <div className="flex items-start gap-3">
         <p className="flex-1">{toast.message}</p>
@@ -41,8 +42,8 @@ function ToastItem({ toast }: { toast: Toast }) {
 export function Toaster() {
   const toasts = useToastStore((state) => state.toasts);
 
-  if (toasts.length === 0) return null;
-
+  // The region stays mounted even when empty: a live region created in the
+  // same tick as its first message is not reliably announced.
   return createPortal(
     <div className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-full max-w-sm flex-col gap-2" aria-live="polite">
       {toasts.map((toast) => (
