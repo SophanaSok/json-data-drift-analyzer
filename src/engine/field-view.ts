@@ -682,7 +682,14 @@ export function buildRecordSummaries(
   const ctx = context ?? buildCellContext(analysis, review, profile);
   const fields = analysis.fieldStats.map((stat) => stat.field);
 
-  return Object.values(analysis.recordsById).map((record) => {
+  // Stable human order — numeric-aware, matching the Records table ("1B-2020"
+  // before "10B-2018") — not map insertion order: the queue is walked top to
+  // bottom and virtualized.
+  const ordered = Object.values(analysis.recordsById).sort((a, b) =>
+    a.recordKey.localeCompare(b.recordKey, undefined, { numeric: true, sensitivity: "base" })
+  );
+
+  return ordered.map((record) => {
     const recordCtx = prepareRecordCellContext(ctx, record);
     const cells = { auto: 0, review: 0, ineligible: 0, unchanged: 0 };
     const reviewFields: string[] = [];
