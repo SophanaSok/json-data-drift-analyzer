@@ -139,7 +139,7 @@ export function classifyCells(review: RecoveryReview, profile: SourceProfile): C
   return cells;
 }
 
-function describeLane(
+export function describeLane(
   lane: DecisionLane,
   context: { candidateIsBlank: boolean; profilePermitsField: boolean; category: string }
 ): string {
