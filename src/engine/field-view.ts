@@ -1,4 +1,5 @@
 import { backfilledCellIds, cellId, describeLane, type CellClassification, type DecisionLane } from "./decisions";
+import { baselineSnapshot } from "./diff";
 import { isBlankStrict } from "./empty";
 import { buildIdentityKey } from "./normalize";
 import type { SourceProfile } from "./adapter-types";
@@ -33,6 +34,12 @@ export type CellSituation =
   | "record_removed"; // record exists only in the reference file
 
 export type FieldCell = {
+  /**
+   * The field this cell belongs to. Ambient in the field view; load-bearing in
+   * the record view, where every cell is a different field — and not
+   * recoverable from `classification`, which is null for non-decidable cells.
+   */
+  field: string;
   /** Analysis-side id (JSON identity key over the comparison's identityFields). */
   recordId: string;
   /** Human-readable label shown in tables. */
@@ -290,6 +297,142 @@ export function formatCellValue(value: unknown): string {
 }
 
 /**
+ * The field-independent setup both view axes need. O(records + provenance +
+ * matchResults) to build — the dominant cost of any classification call — so
+ * the UI must memoize one per (analysis, review, profile) and pass it in;
+ * rebuilding it per selected record would make every click O(records).
+ */
+export type CellContext = {
+  bridge: { available: boolean; reason: string | null };
+  review: RecoveryReview | null;
+  profile: SourceProfile | null;
+  backfilled: Set<string>;
+  duplicated: Set<string>;
+  pairings: Map<string, string>;
+  permitted: Set<string>;
+  excludedFields: Set<string>;
+};
+
+export function buildCellContext(
+  analysis: AnalysisResult,
+  review: RecoveryReview | null,
+  profile: SourceProfile | null
+): CellContext {
+  const bridge = assessDecisionBridge(analysis, review, profile);
+  const records = Object.values(analysis.recordsById);
+  return {
+    bridge,
+    review,
+    profile,
+    backfilled: bridge.available && review ? backfilledCellIds(review) : new Set<string>(),
+    duplicated: bridge.available && profile ? duplicatedDecisionKeys(records, profile) : new Set<string>(),
+    pairings: bridge.available && review ? reviewPairings(review) : new Map<string, string>(),
+    permitted: profile ? new Set(profile.safeBackfillFields) : new Set<string>(),
+    excludedFields: profile ? new Set(profile.excludedFields) : new Set<string>()
+  };
+}
+
+/** Per-record facts shared by all of that record's cells. */
+export type RecordCellContext = {
+  record: DiffRecord;
+  decisionRecordKey: string | null;
+  duplicateKey: boolean;
+  pairingOk: boolean;
+};
+
+export function prepareRecordCellContext(ctx: CellContext, record: DiffRecord): RecordCellContext {
+  if (!ctx.bridge.available || !ctx.profile) {
+    return { record, decisionRecordKey: null, duplicateKey: false, pairingOk: true };
+  }
+  const body = candidateBody(record) ?? record.baseline;
+  const decisionRecordKey = body ? buildIdentityKey(body, ctx.profile.primaryKey).key : null;
+  return {
+    record,
+    decisionRecordKey,
+    duplicateKey: decisionRecordKey !== null && ctx.duplicated.has(decisionRecordKey),
+    pairingOk:
+      decisionRecordKey === null ? true : pairingVerified(record, ctx.profile, decisionRecordKey, ctx.pairings)
+  };
+}
+
+/**
+ * One cell, classified. The single home of the lane rules for both view axes —
+ * the field view loops this over records, the record view over fields, and a
+ * test asserts they can never disagree.
+ */
+export function classifyCell(
+  ctx: CellContext,
+  recordCtx: RecordCellContext,
+  field: string,
+  candidate: unknown,
+  reference: unknown
+): FieldCell {
+  const { record, decisionRecordKey } = recordCtx;
+  const situation = situationOf(record, candidate, reference);
+
+  let lane: DecisionLane | null = null;
+  let laneReason: string;
+  let classification: CellClassification | null = null;
+
+  if (!ctx.bridge.available || !ctx.profile) {
+    laneReason = ctx.bridge.reason ?? "Decisions are unavailable for this run.";
+  } else if (situation === "record_removed") {
+    laneReason = "This record exists only in the reference file; there is no candidate record to write into.";
+  } else if (situation === "record_added") {
+    laneReason = "This record exists only in the candidate file; there is no reference to recover from.";
+  } else if (ctx.excludedFields.has(field)) {
+    laneReason = "Excluded from comparison by this profile; recovery may not act on it.";
+  } else if (decisionRecordKey === null) {
+    laneReason = "This record's identity fields are blank or missing, so no decision can be attributed to it.";
+  } else if (recordCtx.duplicateKey) {
+    laneReason = "Another record shares this identity key; a decision would ambiguously cover both rows.";
+  } else if (!recordCtx.pairingOk) {
+    laneReason =
+      "The comparison and the recovery review did not pair this record with the same reference row; no decision is offered on a disputed pairing.";
+  } else if (situation === "unchanged") {
+    laneReason = "Both files agree on this value; there is nothing to decide.";
+  } else {
+    const candidateIsBlank = isBlankStrict(candidate);
+    const profilePermitsField = ctx.permitted.has(field);
+    const referenceMissing = reference === undefined || reference === null;
+    // The same lane rules as classifyCells, over the same key space.
+    lane = referenceMissing
+      ? "ineligible"
+      : ctx.backfilled.has(cellId(decisionRecordKey, field))
+        ? "auto"
+        : "review";
+    laneReason = describeLane(lane, {
+      candidateIsBlank,
+      profilePermitsField,
+      category: situation === "conflict" ? "field_conflict" : "field_regression"
+    });
+    classification = {
+      recordKey: decisionRecordKey,
+      field,
+      lane,
+      reason: laneReason,
+      candidateValue: candidate,
+      referenceValue: reference,
+      candidateIsBlank,
+      profilePermitsField
+    };
+  }
+
+  return {
+    field,
+    recordId: record.id,
+    recordKey: record.recordKey,
+    decisionRecordKey,
+    candidateValue: candidate,
+    referenceValue: reference,
+    situation,
+    lane,
+    laneReason,
+    classification
+  };
+}
+
+/**
  * Everything the detail panel needs for one field, over every record.
  *
  * O(records) per call; only the selected field's cells are materialized.
@@ -299,15 +442,11 @@ export function buildFieldDetail(
   analysis: AnalysisResult,
   field: string,
   review: RecoveryReview | null,
-  profile: SourceProfile | null
+  profile: SourceProfile | null,
+  context?: CellContext
 ): FieldDetail {
-  const bridge = assessDecisionBridge(analysis, review, profile);
+  const ctx = context ?? buildCellContext(analysis, review, profile);
   const records = Object.values(analysis.recordsById);
-  const backfilled = bridge.available && review ? backfilledCellIds(review) : new Set<string>();
-  const duplicated = bridge.available && profile ? duplicatedDecisionKeys(records, profile) : new Set<string>();
-  const pairings = bridge.available && review ? reviewPairings(review) : new Map<string, string>();
-  const permitted = profile ? new Set(profile.safeBackfillFields) : new Set<string>();
-  const excludedField = profile ? profile.excludedFields.includes(field) : false;
 
   const cells: FieldCell[] = [];
   const valueCounts = new Map<string, number>();
@@ -319,10 +458,11 @@ export function buildFieldDetail(
   for (const record of records) {
     const candidate = record.status === "removed" ? undefined : record.latest?.[field];
     const reference = referenceValueOf(record, field);
-    const situation = situationOf(record, candidate, reference);
+    const cell = classifyCell(ctx, prepareRecordCellContext(ctx, record), field, candidate, reference);
+    cells.push(cell);
 
-    if (situation === "candidate_blank") eligibleCount += 1;
-    if (situation === "conflict") conflictCount += 1;
+    if (cell.situation === "candidate_blank") eligibleCount += 1;
+    if (cell.situation === "conflict") conflictCount += 1;
     if (!isBlankStrict(candidate) && !isBlankStrict(reference)) comparablePairCount += 1;
 
     if (!isBlankStrict(reference)) {
@@ -335,73 +475,8 @@ export function buildFieldDetail(
         distinctOverflow = true;
       }
     }
-
-    let lane: DecisionLane | null = null;
-    let laneReason: string;
-    let classification: CellClassification | null = null;
-    let decisionRecordKey: string | null = null;
-
-    if (!bridge.available || !profile) {
-      laneReason = bridge.reason ?? "Decisions are unavailable for this run.";
-    } else {
-      const body = candidateBody(record) ?? record.baseline;
-      decisionRecordKey = body ? buildIdentityKey(body, profile.primaryKey).key : null;
-      const candidateIsBlank = isBlankStrict(candidate);
-      const profilePermitsField = permitted.has(field);
-      const referenceMissing = reference === undefined || reference === null;
-
-      if (situation === "record_removed") {
-        laneReason = "This record exists only in the reference file; there is no candidate record to write into.";
-      } else if (situation === "record_added") {
-        laneReason = "This record exists only in the candidate file; there is no reference to recover from.";
-      } else if (excludedField) {
-        laneReason = "Excluded from comparison by this profile; recovery may not act on it.";
-      } else if (decisionRecordKey === null) {
-        laneReason = "This record's identity fields are blank or missing, so no decision can be attributed to it.";
-      } else if (duplicated.has(decisionRecordKey)) {
-        laneReason = "Another record shares this identity key; a decision would ambiguously cover both rows.";
-      } else if (!pairingVerified(record, profile, decisionRecordKey, pairings)) {
-        laneReason =
-          "The comparison and the recovery review did not pair this record with the same reference row; no decision is offered on a disputed pairing.";
-      } else if (situation === "unchanged") {
-        laneReason = "Both files agree on this value; there is nothing to decide.";
-      } else {
-        // The same lane rules as classifyCells, over the same key space.
-        lane = referenceMissing
-          ? "ineligible"
-          : backfilled.has(cellId(decisionRecordKey, field))
-            ? "auto"
-            : "review";
-        laneReason = describeLane(lane, {
-          candidateIsBlank,
-          profilePermitsField,
-          category: situation === "conflict" ? "field_conflict" : "field_regression"
-        });
-        classification = {
-          recordKey: decisionRecordKey,
-          field,
-          lane,
-          reason: laneReason,
-          candidateValue: candidate,
-          referenceValue: reference,
-          candidateIsBlank,
-          profilePermitsField
-        };
-      }
-    }
-
-    cells.push({
-      recordId: record.id,
-      recordKey: record.recordKey,
-      decisionRecordKey,
-      candidateValue: candidate,
-      referenceValue: reference,
-      situation,
-      lane,
-      laneReason,
-      classification
-    });
   }
+
 
   const groups = [...valueCounts.entries()]
     .map(([value, count]) => ({ value, count }))
@@ -428,8 +503,8 @@ export function buildFieldDetail(
       baselineFillRate: stat?.baselinePresentRate ?? 0,
       latestFillRate: stat?.latestPresentRate ?? 0
     },
-    policy: profile ? describeFieldPolicy(profile, field) : null,
-    decisionsUnavailableReason: bridge.reason
+    policy: ctx.profile ? describeFieldPolicy(ctx.profile, field) : null,
+    decisionsUnavailableReason: ctx.bridge.reason
   };
 }
 
@@ -444,14 +519,11 @@ export function buildFieldDetail(
 export function buildFieldSummaries(
   analysis: AnalysisResult,
   review: RecoveryReview | null,
-  profile: SourceProfile | null
+  profile: SourceProfile | null,
+  context?: CellContext
 ): FieldSummary[] {
-  const bridge = assessDecisionBridge(analysis, review, profile);
+  const ctx = context ?? buildCellContext(analysis, review, profile);
   const records = Object.values(analysis.recordsById);
-  const backfilled = bridge.available && review ? backfilledCellIds(review) : new Set<string>();
-  const duplicated = bridge.available && profile ? duplicatedDecisionKeys(records, profile) : new Set<string>();
-  const pairings = bridge.available && review ? reviewPairings(review) : new Map<string, string>();
-  const excludedFields = profile ? new Set(profile.excludedFields) : new Set<string>();
 
   type Tally = {
     distinct: Set<string>;
@@ -467,18 +539,12 @@ export function buildFieldSummaries(
   }
 
   for (const record of records) {
-    const body = candidateBody(record) ?? record.baseline;
-    const decisionKey = bridge.available && profile && body ? buildIdentityKey(body, profile.primaryKey).key : null;
-    const keyUsable =
-      decisionKey !== null &&
-      !duplicated.has(decisionKey) &&
-      profile !== null &&
-      pairingVerified(record, profile, decisionKey, pairings);
+    const recordCtx = prepareRecordCellContext(ctx, record);
 
     for (const [field, tally] of tallies) {
       const candidate = record.status === "removed" ? undefined : record.latest?.[field];
       const reference = referenceValueOf(record, field);
-      const situation = situationOf(record, candidate, reference);
+      const cell = classifyCell(ctx, recordCtx, field, candidate, reference);
 
       if (!isBlankStrict(reference)) {
         const display = formatCellValue(reference);
@@ -489,23 +555,10 @@ export function buildFieldSummaries(
         }
       }
 
-      if (
-        !bridge.available ||
-        !keyUsable ||
-        excludedFields.has(field) ||
-        situation === "unchanged" ||
-        situation === "record_added" ||
-        situation === "record_removed"
-      ) {
-        tally.unchanged += situation === "unchanged" ? 1 : 0;
-        continue;
-      }
-      if (reference === undefined || reference === null) {
-        tally.ineligible += 1;
-      } else if (backfilled.has(cellId(decisionKey!, field))) {
-        tally.auto += 1;
+      if (cell.lane === null) {
+        tally.unchanged += cell.situation === "unchanged" ? 1 : 0;
       } else {
-        tally.review += 1;
+        tally[cell.lane] += 1;
       }
     }
   }
@@ -521,8 +574,131 @@ export function buildFieldSummaries(
       changedRecordCount: analysis.indexes.byField[stat.field]?.size ?? 0,
       distinctReferenceValues: tally.distinct.size,
       distinctIsLowerBound: tally.overflow,
-      policy: profile ? describeFieldPolicy(profile, stat.field) : null,
+      policy: ctx.profile ? describeFieldPolicy(ctx.profile, stat.field) : null,
       cells: { auto: tally.auto, review: tally.review, ineligible: tally.ineligible, unchanged: tally.unchanged }
+    };
+  });
+}
+
+/** One record's row in the record queue. */
+export type RecordSummary = {
+  recordId: string;
+  recordKey: string;
+  decisionRecordKey: string | null;
+  status: DiffRecord["status"];
+  severity: DiffRecord["severity"];
+  changedFieldCount: number;
+  cells: { auto: number; review: number; ineligible: number; unchanged: number };
+};
+
+export type RecordDetailModel = {
+  recordId: string;
+  recordKey: string;
+  decisionRecordKey: string | null;
+  status: DiffRecord["status"];
+  /** Every analyzed field, in fieldStats order; the UI reorders for display. */
+  cells: FieldCell[];
+  /** Null when decisions are available; otherwise the reason they are not. */
+  decisionsUnavailableReason: string | null;
+  /**
+   * Whether this record is in the recovery output at all. A decision on an
+   * excluded record lands in unappliedOverrides at export — the user must see
+   * that before deciding, not after.
+   */
+  exclusion: { reason: string; detail: string } | null;
+};
+
+/**
+ * The record-first transpose of buildFieldDetail: one record, every field,
+ * through the same classifyCell. O(fields) per call once the context exists.
+ *
+ * Reference values come from baselineSnapshot — one clone per record is
+ * trivial (the field view avoids it only because it runs per record × field),
+ * and it handles nested changed paths exactly.
+ */
+export function buildRecordDetail(
+  analysis: AnalysisResult,
+  recordId: string,
+  review: RecoveryReview | null,
+  profile: SourceProfile | null,
+  context?: CellContext
+): RecordDetailModel | null {
+  const record = analysis.recordsById[recordId];
+  if (!record) return null;
+  const ctx = context ?? buildCellContext(analysis, review, profile);
+  const recordCtx = prepareRecordCellContext(ctx, record);
+  const baseline = baselineSnapshot(record);
+
+  const cells = analysis.fieldStats.map((stat) => {
+    const field = stat.field;
+    const candidate = record.status === "removed" ? undefined : record.latest?.[field];
+    const reference = record.status === "added" ? undefined : baseline?.[field];
+    return classifyCell(ctx, recordCtx, field, candidate, reference);
+  });
+
+  let exclusion: RecordDetailModel["exclusion"] = null;
+  if (ctx.bridge.available && ctx.review && recordCtx.decisionRecordKey !== null) {
+    const recovered = ctx.review.recovery.recovered.some(
+      (entry) => entry.recordKey === recordCtx.decisionRecordKey
+    );
+    if (!recovered) {
+      const excluded = ctx.review.recovery.excluded.find(
+        (entry) => entry.recordKey === recordCtx.decisionRecordKey
+      );
+      exclusion = excluded
+        ? { reason: excluded.reason, detail: excluded.detail }
+        : {
+            reason: "not_recovered",
+            detail: "This record is not in the recovery output; decisions on it cannot reach the exported artifact."
+          };
+    }
+  }
+
+  return {
+    recordId: record.id,
+    recordKey: record.recordKey,
+    decisionRecordKey: recordCtx.decisionRecordKey,
+    status: record.status,
+    cells,
+    decisionsUnavailableReason: ctx.bridge.reason,
+    exclusion
+  };
+}
+
+/**
+ * One summary per record for the queue list, via the same classifier as the
+ * detail views. O(records × fields); memoize per (analysis, review, profile).
+ */
+export function buildRecordSummaries(
+  analysis: AnalysisResult,
+  review: RecoveryReview | null,
+  profile: SourceProfile | null,
+  context?: CellContext
+): RecordSummary[] {
+  const ctx = context ?? buildCellContext(analysis, review, profile);
+  const fields = analysis.fieldStats.map((stat) => stat.field);
+
+  return Object.values(analysis.recordsById).map((record) => {
+    const recordCtx = prepareRecordCellContext(ctx, record);
+    const cells = { auto: 0, review: 0, ineligible: 0, unchanged: 0 };
+    for (const field of fields) {
+      const candidate = record.status === "removed" ? undefined : record.latest?.[field];
+      const reference = referenceValueOf(record, field);
+      const cell = classifyCell(ctx, recordCtx, field, candidate, reference);
+      if (cell.lane === null) {
+        cells.unchanged += cell.situation === "unchanged" ? 1 : 0;
+      } else {
+        cells[cell.lane] += 1;
+      }
+    }
+    return {
+      recordId: record.id,
+      recordKey: record.recordKey,
+      decisionRecordKey: recordCtx.decisionRecordKey,
+      status: record.status,
+      severity: record.severity,
+      changedFieldCount: record.changedFieldCount,
+      cells
     };
   });
 }

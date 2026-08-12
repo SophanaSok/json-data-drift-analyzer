@@ -5,8 +5,11 @@ import { runAnalysis } from "./diff";
 import { classifyCells, cellId } from "./decisions";
 import {
   assessDecisionBridge,
+  buildCellContext,
   buildFieldDetail,
   buildFieldSummaries,
+  buildRecordDetail,
+  buildRecordSummaries,
   GROUPABLE_DISTINCT_LIMIT
 } from "./field-view";
 import { runRecoveryReview } from "./review";
@@ -311,5 +314,86 @@ describe("buildFieldSummaries", () => {
     expect(dueDate.baselineFillRate).toBeGreaterThan(0.9);
     expect(dueDate.cells.review).toBe(0);
     expect(dueDate.policy).toBeNull();
+  });
+});
+
+describe("the record transpose", () => {
+  const ctx = buildCellContext(analysis, review, profile);
+
+  it("produces identical cells to buildFieldDetail for the same (record, field)", () => {
+    // The property that keeps the two axes honest: same classifier, same
+    // values, whichever way you slice.
+    const fields = ["DueDate", "Title", "ContactEmail", "Description", "BidDocuments", "Created"];
+    const detailsByField = new Map(fields.map((field) => [field, buildFieldDetail(analysis, field, review, profile, ctx)]));
+
+    let compared = 0;
+    for (const recordId of Object.keys(analysis.recordsById).slice(0, 50)) {
+      const recordDetail = buildRecordDetail(analysis, recordId, review, profile, ctx)!;
+      for (const field of fields) {
+        const fromRecord = recordDetail.cells.find((cell) => cell.field === field)!;
+        const fromField = detailsByField.get(field)!.cells.find((cell) => cell.recordId === recordId)!;
+        expect(fromRecord.lane, `${recordId}/${field}`).toBe(fromField.lane);
+        expect(fromRecord.laneReason).toBe(fromField.laneReason);
+        expect(fromRecord.situation).toBe(fromField.situation);
+        expect(fromRecord.candidateValue).toEqual(fromField.candidateValue);
+        expect(fromRecord.referenceValue).toEqual(fromField.referenceValue);
+        compared += 1;
+      }
+    }
+    expect(compared).toBe(300);
+  });
+
+  it("covers every analyzed field for one record, decision lanes matching the workload", () => {
+    // A typical wiped record: 4 review cells (the rule-6 fields) and the
+    // auto-backfilled ones.
+    const summaries = buildRecordSummaries(analysis, review, profile, ctx);
+    const typical = summaries.find((summary) => summary.cells.review === 4 && summary.cells.auto >= 2)!;
+    expect(typical).toBeDefined();
+
+    const detail = buildRecordDetail(analysis, typical.recordId, review, profile, ctx)!;
+    expect(detail.cells).toHaveLength(analysis.fieldStats.length);
+    expect(detail.cells.filter((cell) => cell.lane === "review")).toHaveLength(4);
+    expect(detail.exclusion).toBeNull();
+    // Every decidable cell names its field on the classification createDecision gets.
+    for (const cell of detail.cells) {
+      if (cell.classification) expect(cell.classification.field).toBe(cell.field);
+    }
+  });
+
+  it("summary lane totals reconcile with the field-first summaries", () => {
+    const recordTotals = buildRecordSummaries(analysis, review, profile, ctx).reduce(
+      (total, summary) => total + summary.cells.review + summary.cells.auto,
+      0
+    );
+    const fieldTotals = buildFieldSummaries(analysis, review, profile, ctx).reduce(
+      (total, summary) => total + summary.cells.review + summary.cells.auto,
+      0
+    );
+    expect(recordTotals).toBe(fieldTotals);
+  });
+
+  it("keeps candidate-only records decidable-free but included (default keep policy)", () => {
+    // With candidateOnlyPolicy "keep", the candidate-only record IS in the
+    // recovery output — no exclusion warning, but also nothing to decide
+    // (there is no reference).
+    const summaries = buildRecordSummaries(analysis, review, profile, ctx);
+    const candidateOnly = summaries.find((summary) => summary.status === "added")!;
+    const detail = buildRecordDetail(analysis, candidateOnly.recordId, review, profile, ctx)!;
+    expect(detail.exclusion).toBeNull();
+    expect(detail.cells.every((cell) => cell.lane === null)).toBe(true);
+  });
+
+  it("flags a record that is absent from the recovery output", () => {
+    // The reference-only record (dropped by the candidate run) never enters
+    // recovered; a decision on it could not reach the artifact, and the model
+    // must say so before the user decides, not after.
+    const summaries = buildRecordSummaries(analysis, review, profile, ctx);
+    const referenceOnly = summaries.find((summary) => summary.status === "removed")!;
+    const detail = buildRecordDetail(analysis, referenceOnly.recordId, review, profile, ctx)!;
+    expect(detail.exclusion).not.toBeNull();
+  });
+
+  it("returns null for an unknown record id", () => {
+    expect(buildRecordDetail(analysis, "no-such-id", review, profile, ctx)).toBeNull();
   });
 });
