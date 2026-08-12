@@ -110,7 +110,10 @@ export function getCollection(input: unknown, path: string): Array<Record<string
   if (!Array.isArray(source)) {
     return [];
   }
-  return source.filter((item): item is Record<string, unknown> => item !== null && typeof item === "object");
+  // Arrays are objects too; a nested array in the collection is not a record.
+  return source.filter(
+    (item): item is Record<string, unknown> => item !== null && typeof item === "object" && !Array.isArray(item)
+  );
 }
 
 export function normalizeRecord(record: Record<string, unknown>, ignoredFields: string[]): Record<string, unknown> {

@@ -21,8 +21,24 @@ export const PROFILES: Record<string, SourceProfile> = {
   [BELLINGHAM_PROCUREWARE.id]: BELLINGHAM_PROCUREWARE
 };
 
+/**
+ * Refuse to serve a profile whose rules contradict each other.
+ *
+ * The `as SourceProfile` cast above is unavoidable for imported JSON, which means
+ * the type system never checked the file; this is where a bad edit fails loudly
+ * instead of silently governing recovery.
+ */
+export function assertProfileCoherent(profile: SourceProfile): SourceProfile {
+  const problems = findProfileContradictions(profile);
+  if (problems.length > 0) {
+    throw new Error(`Profile "${profile.id}" is self-contradictory and cannot be used: ${problems.join(" ")}`);
+  }
+  return profile;
+}
+
 export function getProfile(id: string): SourceProfile | null {
-  return PROFILES[id] ?? null;
+  const profile = PROFILES[id];
+  return profile ? assertProfileCoherent(profile) : null;
 }
 
 /**

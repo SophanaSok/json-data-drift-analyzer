@@ -23,6 +23,24 @@ export function isBlankStrict(value: unknown): boolean {
   return false;
 }
 
+// The merged per-rule placeholder set is immutable, but isEmpty runs once per
+// cell — millions of times on large exports — and rebuilding it each call was
+// measurable allocation churn. Cached per rule object; rules come from profiles
+// and are never mutated after load.
+const mergedPlaceholderCache = new WeakMap<EmptyRule, ReadonlySet<string>>();
+
+function placeholdersFor(fieldRule?: EmptyRule): ReadonlySet<string> {
+  if (!fieldRule?.placeholders?.length) {
+    return DEFAULT_PLACEHOLDERS;
+  }
+  let merged = mergedPlaceholderCache.get(fieldRule);
+  if (!merged) {
+    merged = new Set<string>([...fieldRule.placeholders, ...DEFAULT_PLACEHOLDERS]);
+    mergedPlaceholderCache.set(fieldRule, merged);
+  }
+  return merged;
+}
+
 export function isEmpty(value: unknown, fieldRule?: EmptyRule): boolean {
   if (value === null || value === undefined) {
     return true;
@@ -32,8 +50,7 @@ export function isEmpty(value: unknown, fieldRule?: EmptyRule): boolean {
     if (trimmed.length === 0) {
       return true;
     }
-    const placeholders = new Set<string>([...(fieldRule?.placeholders ?? []), ...DEFAULT_PLACEHOLDERS]);
-    return placeholders.has(trimmed.toLowerCase());
+    return placeholdersFor(fieldRule).has(trimmed.toLowerCase());
   }
   if (Array.isArray(value)) {
     return value.length === 0 && !fieldRule?.allowEmptyArray;

@@ -84,6 +84,13 @@ export type QualityProfile = {
   emptyRules: Record<string, EmptyRule>;
   identityDefault: string[];
   fieldGroups: Array<{ id: string; name: string; fields: string[]; thresholdDrop: number; minAffectedFields: number; severity: Severity; narrative: string }>;
+  /**
+   * List-valued fields diffed at document level, paired with their hash fields.
+   * Lives on the profile so engine code carries no source field names.
+   */
+  documentFieldPairs: Array<{ docs: string; hashes: string }>;
+  /** Source-record fields fed into the search index, by search role. */
+  searchSourceFields: { title: string; status: string; type: string; url: string };
 };
 
 export type ComparisonConfig = {
@@ -125,7 +132,9 @@ export type AnalysisSummary = {
   removedCount: number;
   changedCount: number;
   unchangedCount: number;
-  qualityGate: "Pass" | "Warning" | "Failed" | "Quarantined";
+  // No "Failed": nothing ever produced it, and an unreachable state in the union
+  // invites callers to handle a case that cannot occur.
+  qualityGate: "Pass" | "Warning" | "Quarantined";
 };
 
 export type ExportDateField = "Refreshed" | "Created";

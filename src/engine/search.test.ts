@@ -4,6 +4,7 @@ import latest from "../test/fixtures/latest.json";
 import { runAnalysis } from "./diff";
 import { buildRecordKey } from "./identity";
 import { buildSearchIndex, compareSearchRelevance, loadSearchIndex, searchRecordIds } from "./search";
+import { defaultProfile } from "./profile";
 
 // Search queries match on the human-readable recordKey label, but the ids the
 // search returns are the collision-proof identity keys.
@@ -73,5 +74,33 @@ describe("search ranking", () => {
     expect(
       compareSearchRelevance(idOf("91B-2023"), idOf("92C-2023"), 1, 10, "91B-2023", analysis.recordsById)
     ).toBeLessThan(0);
+  });
+});
+
+describe("profile-driven source fields", () => {
+  it("indexes the fields the profile names instead of hard-coded Bellingham ones", () => {
+    const record = {
+      id: "r1",
+      recordKey: "r1",
+      status: "changed" as const,
+      latest: { Headline: "Alpha Bridge Repair", Stage: "Open", Kind: "RFQ", Link: "https://example.test/1" },
+      changedFields: [],
+      changedFieldCount: 0,
+      documentDiffs: {},
+      severity: "warning" as const,
+      qualityIssueIds: []
+    };
+    const profile = {
+      ...defaultProfile,
+      searchSourceFields: { title: "Headline", status: "Stage", type: "Kind", url: "Link" }
+    };
+
+    const index = buildSearchIndex({ r1: record }, [], profile);
+    expect(searchRecordIds(index, "Alpha", { r1: record })).toEqual(["r1"]);
+
+    // The same records under the default profile find nothing: the fields the
+    // default profile names are absent from this record.
+    const defaultIndex = buildSearchIndex({ r1: record }, []);
+    expect(searchRecordIds(defaultIndex, "Alpha", { r1: record })).toEqual([]);
   });
 });

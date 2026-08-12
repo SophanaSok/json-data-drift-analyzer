@@ -151,6 +151,22 @@ export function buildQualityIssues(
     });
   }
 
+  // One pass over the records instead of one full scan per regressed field:
+  // on a wide systemic loss the per-field scans multiply into most of the
+  // issue-construction time.
+  const recordIdsByChangedField = new Map<string, string[]>();
+  for (const record of Object.values(recordsById)) {
+    for (const change of record.changedFields) {
+      const ids = recordIdsByChangedField.get(change.path);
+      if (!ids) {
+        recordIdsByChangedField.set(change.path, [record.id]);
+      } else if (ids[ids.length - 1] !== record.id) {
+        // Consecutive check suffices: records are visited one at a time.
+        ids.push(record.id);
+      }
+    }
+  }
+
   for (const stat of fieldStats) {
     if (stat.severity === "pass") continue;
     issues.push({
@@ -160,9 +176,7 @@ export function buildQualityIssues(
       title: `${stat.field} population regression`,
       description: `${stat.field} fill rate changed from ${(stat.baselinePresentRate * 100).toFixed(1)}% to ${(stat.latestPresentRate * 100).toFixed(1)}% (${(stat.populationChange * 100).toFixed(1)}pp)`,
       relatedFields: [stat.field],
-      relatedRecordIds: Object.values(recordsById)
-        .filter((record) => record.changedFields.some((change) => change.path === stat.field))
-        .map((record) => record.id)
+      relatedRecordIds: recordIdsByChangedField.get(stat.field) ?? []
     });
   }
 

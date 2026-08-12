@@ -13,6 +13,13 @@ export const defaultProfile: QualityProfile = {
     AwardDocuments: { allowEmptyArray: true }
   },
   identityDefault: ["ProjectCode"],
+  documentFieldPairs: [
+    { docs: "BidDocuments", hashes: "BidDocumentHashes" },
+    { docs: "AddendumDocuments", hashes: "AddendumDocumentHashes" },
+    { docs: "BidTabulations", hashes: "BidTabulationHashes" },
+    { docs: "AwardDocuments", hashes: "AwardDocumentHashes" }
+  ],
+  searchSourceFields: { title: "Title", status: "BidStatus", type: "BidType", url: "BidURL" },
   fieldGroups: [
     {
       id: "header-metadata",

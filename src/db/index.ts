@@ -88,6 +88,17 @@ class DriftDatabase extends Dexie {
       trelloTarget: "id",
       textDiffs: "id"
     });
+    // Dexie only deletes an object store when a version names it null; the v2
+    // schema merely omitted `profiles`, so databases created at v1 still carry
+    // the orphaned store. This drops it for real.
+    this.version(5).stores({
+      analyses: "analysisKey, createdAt",
+      decisions: "id, analysisKey, timestamp",
+      postedTickets: "id, runFingerprint, analysisKey, attemptedAt",
+      trelloTarget: "id",
+      textDiffs: "id",
+      profiles: null
+    });
   }
 }
 

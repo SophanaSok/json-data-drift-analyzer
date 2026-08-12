@@ -1,5 +1,6 @@
 import MiniSearch from "minisearch";
-import type { DiffRecord, QualityIssue } from "./types";
+import { defaultProfile } from "./profile";
+import type { DiffRecord, QualityIssue, QualityProfile } from "./types";
 
 export type SearchDocument = {
   id: string;
@@ -105,8 +106,13 @@ export function searchRecordIds(
     .map((result) => String(result.id));
 }
 
-export function buildSearchIndex(records: Record<string, DiffRecord>, issues: QualityIssue[]) {
+export function buildSearchIndex(
+  records: Record<string, DiffRecord>,
+  issues: QualityIssue[],
+  profile: QualityProfile = defaultProfile
+) {
   const miniSearch = new MiniSearch<SearchDocument>(SEARCH_INDEX_OPTIONS);
+  const sourceFields = profile.searchSourceFields;
 
   const issueMap = new Map(issues.map((issue) => [issue.id, issue.title + " " + issue.description]));
   for (const record of Object.values(records)) {
@@ -119,10 +125,10 @@ export function buildSearchIndex(records: Record<string, DiffRecord>, issues: Qu
     miniSearch.add({
       id: record.id,
       recordKey: record.recordKey,
-      title: String((record.latest ?? record.baseline)?.Title ?? ""),
-      bidStatus: String((record.latest ?? record.baseline)?.BidStatus ?? ""),
-      bidType: String((record.latest ?? record.baseline)?.BidType ?? ""),
-      bidUrl: String((record.latest ?? record.baseline)?.BidURL ?? ""),
+      title: String((record.latest ?? record.baseline)?.[sourceFields.title] ?? ""),
+      bidStatus: String((record.latest ?? record.baseline)?.[sourceFields.status] ?? ""),
+      bidType: String((record.latest ?? record.baseline)?.[sourceFields.type] ?? ""),
+      bidUrl: String((record.latest ?? record.baseline)?.[sourceFields.url] ?? ""),
       changedFields: record.changedFields.map((change) => change.path).join(" "),
       qualityText,
       documentText
