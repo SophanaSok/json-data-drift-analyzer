@@ -13,7 +13,7 @@
  * marker rather than presenting reference-derived values as candidate-scraped.
  */
 
-import { BUILD_COMMIT } from "../lib/build-info";
+import { APP_VERSION, BUILD_COMMIT } from "../lib/build-info";
 import { hashText } from "../lib/hash";
 import type { FindingSeverity } from "./findings";
 import type { QaReport } from "./qa";
@@ -215,6 +215,7 @@ function buildRunMetadata(inputs: ExportInputs) {
     generatedAt: inputs.generatedAt,
     // The build that produced these numbers — "dev" outside a CI build.
     buildCommit: BUILD_COMMIT,
+    appVersion: APP_VERSION,
     profileId: inputs.profile.id,
     profileVersion: inputs.profile.version,
     matchingKey: inputs.profile.primaryKey,

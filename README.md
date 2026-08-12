@@ -89,6 +89,28 @@ Note the base path — the app serves under `/json-data-drift-analyzer/`, matchi
 
 Pushing to `main` triggers `.github/workflows/deploy.yml`: lint → typecheck → unit tests → build → Playwright e2e, then (on `main` only) the built `dist/` is published to the `gh-pages` branch via `peaceiris/actions-gh-pages`. Every PR runs the same test job.
 
+### Versioning and releases
+
+The project follows semantic versioning against the user-facing contract (what
+analysis results mean, the shape of exported artifacts, the recovery policy
+model) — see the criteria at the top of [CHANGELOG.md](CHANGELOG.md). The
+deployed footer shows `v<version> · Build <commit>`, and exported artifacts
+carry both in their metadata, so any report can be tied to a release and an
+exact build.
+
+To cut a release:
+
+1. In the PR that completes the release, bump `version` in `package.json` and
+   move the `Unreleased` notes in `CHANGELOG.md` under the new version heading
+   (create an `Unreleased` section as notable changes land, so this step is a
+   rename, not an archaeology dig).
+2. After the PR merges and `main` deploys green, tag and publish:
+
+   ```bash
+   git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z
+   gh release create vX.Y.Z --title "vX.Y.Z" --notes-from-tag
+   ```
+
 ## Project structure
 
 ```
