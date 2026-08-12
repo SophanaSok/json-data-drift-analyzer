@@ -16,7 +16,9 @@ self.onmessage = (event: MessageEvent<AnalyzeRequest>) => {
 };
 
 async function handle(event: MessageEvent<AnalyzeRequest>): Promise<void> {
-  if (event.data.type !== "analyze") {
+  // Optional chain: a malformed message (null data, missing type) must be
+  // dropped, not become an unhandled rejection the UI never hears about.
+  if (event.data?.type !== "analyze") {
     return;
   }
 

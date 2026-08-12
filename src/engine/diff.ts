@@ -11,13 +11,6 @@ import { buildSearchIndex } from "./search";
 import type { AnalysisResult, ChangeKind, ComparisonConfig, DiffRecord, FieldChange, QualityProfile, RecordStatus, Severity } from "./types";
 import type { WorkerStep } from "../workers/protocol";
 
-const DOCUMENT_FIELDS: Array<{ docs: string; hashes: string }> = [
-  { docs: "BidDocuments", hashes: "BidDocumentHashes" },
-  { docs: "AddendumDocuments", hashes: "AddendumDocumentHashes" },
-  { docs: "BidTabulations", hashes: "BidTabulationHashes" },
-  { docs: "AwardDocuments", hashes: "AwardDocumentHashes" }
-];
-
 function classifyChangeKind(path: string, baseline: unknown, latest: unknown, profile: QualityProfile): ChangeKind {
   if (baseline === undefined && latest !== undefined) return "added";
   if (baseline !== undefined && latest === undefined) return "removed";
@@ -224,7 +217,7 @@ export function runAnalysis(input: {
     const documentDiffs: DiffRecord["documentDiffs"] = {};
     const base = baseline ?? {};
     const current = latest ?? {};
-    for (const field of DOCUMENT_FIELDS) {
+    for (const field of profile.documentFieldPairs) {
       const compared = compareDocuments(base[field.docs], current[field.docs], base[field.hashes], current[field.hashes]);
       documentDiffs[field.docs] = compared.summary;
       if (compared.health.danglingHashListValues.length > 0 || compared.health.missingInHashList.length > 0 || compared.health.duplicateHashes.length > 0) {
@@ -307,7 +300,7 @@ export function runAnalysis(input: {
   } as const;
 
   const narrative = buildNarrative(qualityIssues, fieldStats);
-  const searchIndex = buildSearchIndex(recordsById, qualityIssues);
+  const searchIndex = buildSearchIndex(recordsById, qualityIssues, profile);
 
   const result: AnalysisResult = {
     analysisKey: input.analysisKey,

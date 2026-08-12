@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BELLINGHAM_PROCUREWARE, PROFILES, findProfileContradictions, getProfile } from "./index";
+import { BELLINGHAM_PROCUREWARE, PROFILES, assertProfileCoherent, findProfileContradictions, getProfile } from "./index";
 import type { SourceProfile } from "../engine/adapter-types";
 
 describe("profile registry", () => {
@@ -134,5 +134,20 @@ describe("Bellingham profile: the approved policy", () => {
     // The Title approval went against the analysis; the record must say so.
     expect(notes).toContain("made with the analysis advising against it");
     expect(notes).toContain("RULE 6 GUARD");
+  });
+});
+
+describe("the load path refuses an incoherent profile", () => {
+  it("serves a coherent profile and throws for a contradictory one", () => {
+    // The registry profile passes through the same assertion getProfile runs.
+    expect(assertProfileCoherent(BELLINGHAM_PROCUREWARE)).toBe(BELLINGHAM_PROCUREWARE);
+
+    const contradictory: SourceProfile = {
+      ...BELLINGHAM_PROCUREWARE,
+      safeBackfillFields: ["Title"],
+      manualReviewFields: ["Title"]
+    };
+    expect(() => assertProfileCoherent(contradictory)).toThrow(/self-contradictory/);
+    expect(() => assertProfileCoherent(contradictory)).toThrow(/cannot be automatic and human-only/);
   });
 });
