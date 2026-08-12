@@ -87,12 +87,18 @@ them rather than trusting this section.
   `AwardDate`, `BidDocuments`, `BidDocumentHashes`.
 - `src/engine/profile.ts` additionally references `AwardedVendorName`,
   `ResourceURL`, `AddendumDocuments`, `BidTabulations`, `AwardDocuments`, which
-  do **not** appear in current fixtures. `ContractValue` (rule 6) appears in
-  neither fixtures nor code today; treat it as not-yet-modeled.
-- Only one profile exists: `defaultProfile` (`id: "default-government-bids"`,
-  `version: 1`, `identityDefault: ["ProjectCode"]`). There is no per-source
-  profile registry yet; rules 4 and 6 describe the required behavior once one
-  exists.
+  do **not** appear in current fixtures. `ContractValue` (rule 6) is modeled in
+  the Bellingham source profile as review-only; it is empty in 100% of records
+  in both observed runs, so there is nothing to recover from it yet.
+- Two profile concepts coexist. `defaultProfile` in `src/engine/profile.ts`
+  (`QualityProfile`, `id: "default-government-bids"`, `version: 1`) drives
+  quality/drift analysis. The per-source **profile registry** for recovery lives
+  in `src/profiles/` (`PROFILES` / `getProfile` in `src/profiles/index.ts`);
+  `src/profiles/*.json` is the single source of truth for what each source
+  permits, including the rule 4 and rule 6 approvals. The one registered profile
+  is `BELLINGHAM_PROCUREWARE` (`id: "bellingham-procureware"`, `version: 4` —
+  bump the version on any change; its embedded notes record the approval
+  history).
 - Emptiness is defined by `isEmpty` in `src/engine/empty.ts` (null/undefined,
   whitespace-only strings, configured placeholders, empty arrays unless allowed).
   Reuse it; do not re-implement emptiness checks.
