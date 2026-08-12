@@ -3,6 +3,7 @@ import {
   appendDecision,
   appendDecisions,
   assessBulkImpact,
+  backfilledCellIds,
   createBulkDecisions,
   cellId,
   classifyCells,
@@ -261,6 +262,27 @@ describe("applying decisions", () => {
       reviewCell,
       context
     );
+    expect(decisionsToOverrides(resolveDecisions([decision]))).toEqual([]);
+  });
+
+  it("produces an override for keep_candidate on an auto cell — a veto is an edit", () => {
+    // The backfill is already applied, so keeping the candidate must write the
+    // candidate's own value back; otherwise the log records a veto the
+    // artifact never saw — the log/artifact disagreement rule 7 forbids.
+    const vetoTarget = classifyCells(review, BELLINGHAM_PROCUREWARE).find((cell) => cell.lane === "auto")!;
+    const decision = createDecision(
+      { recordKey: vetoTarget.recordKey, field: vetoTarget.field, action: "keep_candidate", reason: "backfill was wrong" },
+      vetoTarget,
+      context
+    );
+    const autoIds = backfilledCellIds(review);
+
+    const overrides = decisionsToOverrides(resolveDecisions([decision]), autoIds);
+    expect(overrides).toHaveLength(1);
+    expect(overrides[0]!.value).toEqual(vetoTarget.candidateValue);
+    expect(overrides[0]!.reason).toBe("backfill was wrong");
+
+    // Without the auto-cell set the old behavior holds.
     expect(decisionsToOverrides(resolveDecisions([decision]))).toEqual([]);
   });
 

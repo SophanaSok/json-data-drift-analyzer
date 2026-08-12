@@ -51,4 +51,9 @@ describe("ResultsShell tab handling", () => {
     renderShell("?tab=does-not-exist");
     expect(screen.getByText("Deterministic incident narrative")).toBeTruthy();
   });
+
+  it("renders the lazy Explore tab", async () => {
+    renderShell("?tab=explore");
+    expect(await screen.findByTestId("fields-explorer")).toBeTruthy();
+  });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   buildSummaryTiles,
@@ -14,16 +14,15 @@ import { buildExportBundle, downloadArtifact, type ExportArtifact } from "../../
 import { applyOverridesToRecovery, type OverrideApplication } from "../../engine/recovery";
 import { getProfile } from "../../profiles";
 import { useUiStore } from "../../stores/ui-store";
-import { db } from "../../db";
 import {
+  backfilledCellIds,
   classifyCells,
   countLanes,
   decisionsToOverrides,
-  orderDecisionLog,
-  resolveDecisions,
-  type RecoveryDecision
+  resolveDecisions
 } from "../../engine/decisions";
 import { useToastStore } from "../../stores/toast-store";
+import { useDecisionLog } from "./use-decision-log";
 
 const TONE_CLASS = {
   neutral: "text-slate-900",
@@ -36,46 +35,7 @@ export function RecoveryReviewPage() {
   const review = useUiStore((state) => state.review);
   const showToast = useToastStore((state) => state.showToast);
   const [openRecordKey, setOpenRecordKey] = useState<string | null>(null);
-  const [decisionLog, setDecisionLog] = useState<RecoveryDecision[]>([]);
-
-  const analysisKey = review?.generatedAt ?? "";
-  useEffect(() => {
-    if (!review) return;
-    let cancelled = false;
-    void db.decisions
-      .where("analysisKey")
-      .equals(analysisKey)
-      .toArray()
-      // Storage returns rows in ITS order, not append order — and resolution is
-      // last-entry-wins, so the order must be reconstructed from the recorded
-      // sequence or a reload could flip which decision is in force.
-      .then((rows) => {
-        if (!cancelled) setDecisionLog(orderDecisionLog(rows));
-      })
-      .catch(() => {
-        // A cache read failure must not hide the review; the log simply starts empty.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [review, analysisKey]);
-
-  const onRecordDecisions = (next: RecoveryDecision[]) => {
-    // Persist everything appended since the last state, not just the final entry:
-    // a bulk action adds hundreds at once and saving only the last would lose them.
-    const appended = next.slice(decisionLog.length);
-    setDecisionLog(next);
-    if (appended.length === 0) return;
-
-    void db.decisions
-      .bulkPut(appended.map((decision) => ({ ...decision, analysisKey })))
-      .catch(() => {
-        showToast(
-          `${appended.length} decision(s) recorded for this session but not saved in browser storage.`,
-          "warning"
-        );
-      });
-  };
+  const { log: decisionLog, record: onRecordDecisions } = useDecisionLog(review);
 
   const model = useMemo(() => {
     if (!review) return null;
@@ -90,7 +50,10 @@ export function RecoveryReviewPage() {
     // from, so the artifact and the decision log cannot silently disagree. A stale
     // profile blocks application: the decisions were resolved under a policy the
     // current profile no longer describes.
-    const overrides = decisionsToOverrides(resolveDecisions(decisionLog));
+    // The auto-cell set makes a keep_candidate on an applied backfill a real
+    // override (a veto writes the candidate value back); on review-lane cells
+    // it stays a log-only entry, as before.
+    const overrides = decisionsToOverrides(resolveDecisions(decisionLog), backfilledCellIds(review));
     let application: OverrideApplication | null = null;
     if (profile && !staleUnderProfile && overrides.length > 0) {
       application = applyOverridesToRecovery(review.recovery, overrides, profile);

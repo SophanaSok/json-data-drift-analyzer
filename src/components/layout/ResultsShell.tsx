@@ -20,10 +20,17 @@ const ContractorTicketPage = lazy(() =>
   import("../../features/ticket/ContractorTicketPage").then((module) => ({ default: module.ContractorTicketPage }))
 );
 
+// Lazy for the same reason: the field explorer pulls in the decisions engine
+// and the profile registry.
+const FieldsPage = lazy(() =>
+  import("../../features/fields/FieldsPage").then((module) => ({ default: module.FieldsPage }))
+);
+
 const tabs = [
   { id: "overview", label: "Overview" },
   { id: "records", label: "Records" },
   { id: "field-changes", label: "Field Changes" },
+  { id: "explore", label: "Explore" },
   { id: "data-health", label: "Data Health" },
   { id: "recovery", label: "Recovery" },
   { id: "ticket", label: "Ticket" }
@@ -79,7 +86,7 @@ export function ResultsShell() {
     <div className="mx-auto max-w-7xl">
       {analysis ? <ExportDateBanner metadata={analysis.metadata} /> : null}
       <nav className="flex items-center justify-between border-b bg-white px-6 py-3 text-sm">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {tabs.map((item) => (
             <Link key={item.id} className={`rounded px-3 py-1 ${tab === item.id ? "bg-sky-100" : "hover:bg-slate-100"}`} to={`/results?${new URLSearchParams({ ...Object.fromEntries(params), tab: item.id }).toString()}`}>
               {item.label}
@@ -93,6 +100,11 @@ export function ResultsShell() {
       {tab === "overview" ? <OverviewPage /> : null}
       {tab === "records" ? <RecordsPage /> : null}
       {tab === "field-changes" ? <FieldChangesPage /> : null}
+      {tab === "explore" ? (
+        <Suspense fallback={<p className="p-6 text-sm text-slate-600">Loading field explorer…</p>}>
+          <FieldsPage />
+        </Suspense>
+      ) : null}
       {tab === "data-health" ? <DataHealthPage /> : null}
       {tab === "recovery" ? (
         <Suspense fallback={<p className="p-6 text-sm text-slate-600">Loading recovery review…</p>}>
