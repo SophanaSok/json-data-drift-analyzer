@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { resolveDecisions } from "../../engine/decisions";
 import {
@@ -17,7 +17,7 @@ import { FieldDetailPanel } from "./FieldDetailPanel";
 import { FieldList } from "./FieldList";
 import { RecordModePanel } from "./RecordModePanel";
 import { RecordQueueList } from "./RecordQueueList";
-import { useRecordQueue } from "./use-record-queue";
+import { useRecordQueue, type RecordShortcutActions } from "./use-record-queue";
 import type { FieldListSortColumn, SortDirection } from "./field-view-table";
 
 /**
@@ -40,6 +40,14 @@ export function FieldsPage() {
   // anywhere. At 499 records an empty box per decision degrades to one-character
   // reasons, which satisfies the audit check while defeating it.
   const [sessionReason, setSessionReason] = useState("");
+  // Rule-6 approval is taken once per source, per docs/recovery-workflow.proposed.md
+  // §6.2 — re-certifying the same field names on every one of 499 records trains
+  // click-through rather than deliberation.
+  const [acknowledgedFields, setAcknowledgedFields] = useState<string[] | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
+  const [lastAction, setLastAction] = useState<string | null>(null);
+  const actionsRef = useRef<RecordShortcutActions | null>(null);
+  const workspaceRef = useRef<HTMLDivElement | null>(null);
 
   // Never fall back to a default profile here: a silently substituted policy
   // would put the wrong badges behind every field.
@@ -48,6 +56,7 @@ export function FieldsPage() {
   const resolved = useMemo(() => resolveDecisions(log), [log]);
 
   const mode = params.get("mode") === "record" ? "record" : "field";
+  const focusMode = mode === "record" && params.get("focus") === "1";
 
   // The field-independent classification setup — the dominant cost of any
   // per-field or per-record build. One instance per (analysis, review, profile).
@@ -100,13 +109,45 @@ export function FieldsPage() {
     setParams(next, { replace: true });
   };
 
+  // Rebuilt each render, which is correct: useRecordQueue keeps the live
+  // handler in a ref, so these always close over the current record and params
+  // while the window listener itself is registered once.
+  const shortcutActions: RecordShortcutActions = {
+    acceptAll: () => actionsRef.current?.acceptAll(),
+    keepAll: () => actionsRef.current?.keepAll(),
+    selectField: (position) => actionsRef.current?.selectField(position),
+    acceptSelectedField: () => actionsRef.current?.acceptSelectedField(),
+    keepSelectedField: () => actionsRef.current?.keepSelectedField(),
+    editSelectedField: () => actionsRef.current?.editSelectedField(),
+    toggleFocusMode: () => setParam("focus", params.get("focus") === "1" ? null : "1"),
+    toggleHelp: () => setShowHelp((shown) => !shown),
+    cancel: () => {
+      if (params.get("focus") === "1") setParam("focus", null);
+      actionsRef.current?.cancel();
+    }
+  };
+
   const queue = useRecordQueue(
     recordSummaries,
     resolved,
     selectedRecord?.recordKey ?? null,
     (recordKey) => setParam("record", recordKey),
-    mode === "record"
+    mode === "record",
+    shortcutActions
   );
+
+  // After any decision: keep focus in the workspace so the next keystroke works
+  // (the clicked button unmounts, which would otherwise drop focus to <body>),
+  // and advance when the record is done.
+  const onDecisionsRecorded = (applied: number, recordResolved: boolean) => {
+    if (applied > 0) {
+      setLastAction(
+        `Recorded ${applied} decision(s) for ${selectedRecord?.recordKey ?? "this record"} — press k to go back`
+      );
+    }
+    workspaceRef.current?.focus();
+    if (recordResolved && applied > 0) queue.nextPending();
+  };
 
   if (!analysis) {
     return <p className="p-6">Run an analysis first.</p>;
@@ -156,6 +197,41 @@ export function FieldsPage() {
             ? "Every record's value in both files, one field at a time."
             : "Every field of one record — candidate, reference, and what the export will contain — decidable in place."}
         </p>
+        {mode === "record" && lastAction ? (
+          <p className="rounded border border-emerald-300 bg-emerald-50 p-2 text-xs text-emerald-900" data-testid="last-action">
+            ✓ {lastAction}
+          </p>
+        ) : null}
+        {mode === "record" && acknowledgedFields !== null ? (
+          <p className="flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900" data-testid="rule6-active">
+            Rule-6 approved for this source this session: <strong>{acknowledgedFields.join(", ")}</strong>
+            <button
+              type="button"
+              className="rounded border border-amber-500 px-1.5 py-0.5 hover:bg-amber-100"
+              data-testid="rule6-revoke"
+              onClick={() => setAcknowledgedFields(null)}
+            >
+              revoke
+            </button>
+          </p>
+        ) : null}
+        {mode === "record" && showHelp ? (
+          <div className="rounded border border-slate-300 bg-white p-3 text-xs text-slate-700" data-testid="keymap-help">
+            <p className="font-medium">Keyboard</p>
+            <ul className="mt-1 grid gap-x-6 gap-y-0.5 md:grid-cols-2">
+              <li><kbd>a</kbd> accept all pending for this record</li>
+              <li><kbd>x</kbd> keep all candidate values</li>
+              <li><kbd>1</kbd>–<kbd>9</kbd> select a pending field</li>
+              <li><kbd>Enter</kbd> accept the selected field</li>
+              <li><kbd>c</kbd> keep the selected field</li>
+              <li><kbd>e</kbd> edit the selected field's value</li>
+              <li><kbd>n</kbd> next record with pending work</li>
+              <li><kbd>j</kbd> / <kbd>k</kbd> next / previous record</li>
+              <li><kbd>f</kbd> focus mode · <kbd>?</kbd> this help</li>
+              <li><kbd>Esc</kbd> leave focus mode</li>
+            </ul>
+          </div>
+        ) : null}
         {decisionsLive ? (
           <label className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
             Session reason (pre-fills each decision, editable per record):
@@ -227,12 +303,19 @@ export function FieldsPage() {
           )}
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-[18rem_minmax(0,1fr)]">
-          <RecordQueueList
-            rows={queue.rows}
-            selectedRecordKey={selectedRecord?.recordKey ?? null}
-            onSelectRecord={(recordKey) => setParam("record", recordKey)}
-          />
+        <div
+          ref={workspaceRef}
+          tabIndex={-1}
+          className={`grid gap-4 outline-none ${focusMode ? "" : "md:grid-cols-[18rem_minmax(0,1fr)]"}`}
+          data-testid="record-workspace"
+        >
+          {focusMode ? null : (
+            <RecordQueueList
+              rows={queue.rows}
+              selectedRecordKey={selectedRecord?.recordKey ?? null}
+              onSelectRecord={(recordKey) => setParam("record", recordKey)}
+            />
+          )}
           {recordDetail ? (
             <RecordModePanel
               key={recordDetail.recordId}
@@ -244,7 +327,15 @@ export function FieldsPage() {
               makeContext={makeContext}
               onRecord={record}
               sessionReason={sessionReason}
+              onSessionReasonChange={setSessionReason}
+              acknowledgedFields={acknowledgedFields}
+              onAcknowledge={setAcknowledgedFields}
               draftScope={draftScope}
+              actionsRef={actionsRef}
+              onDecisionsRecorded={onDecisionsRecorded}
+              focusMode={focusMode}
+              onToggleFocusMode={() => setParam("focus", focusMode ? null : "1")}
+              onToggleHelp={() => setShowHelp((shown) => !shown)}
             />
           ) : (
             <p className="rounded border bg-white p-6 text-sm text-slate-600" data-testid="record-detail-prompt">

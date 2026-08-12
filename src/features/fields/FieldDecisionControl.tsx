@@ -1,12 +1,11 @@
 import {
-  appendDecision,
   cellId,
-  createDecision,
   decisionHistory,
   type DecisionAction,
   type DecisionContext,
   type RecoveryDecision
 } from "../../engine/decisions";
+import { recordCellDecision } from "./record-decision";
 import type { FieldCell } from "../../engine/field-view";
 import { ACTION_LABEL } from "../recovery/decision-display";
 import { EMPTY_DECISION_DRAFT, useDraftStore } from "../../stores/draft-store";
@@ -59,23 +58,17 @@ export function FieldDecisionControl({ cell, resolved, log, makeContext, onRecor
   const { open, reason, customValue, error } = draft;
 
   const record = (action: DecisionAction) => {
-    try {
-      const entry = createDecision(
-        {
-          recordKey: classification.recordKey,
-          field: classification.field,
-          action,
-          customValue: action === "use_custom" && customValue.trim().length > 0 ? customValue : undefined,
-          reason
-        },
-        classification,
-        makeContext()
-      );
-      onRecord(appendDecision(log, entry));
-      clearDraft(draftId);
-    } catch (caught) {
-      updateDraft(draftId, { error: caught instanceof Error ? caught.message : "Could not record the decision." });
-    }
+    const failure = recordCellDecision({
+      classification,
+      action,
+      reason,
+      customValue,
+      log,
+      makeContext,
+      onRecord
+    });
+    if (failure) updateDraft(draftId, { error: failure });
+    else clearDraft(draftId);
   };
 
   return (
@@ -94,7 +87,8 @@ export function FieldDecisionControl({ cell, resolved, log, makeContext, onRecor
         <button
           type="button"
           className="ml-auto rounded border px-1.5 py-0.5 text-sky-700 hover:bg-slate-100"
-          data-testid={`decide-${cell.recordKey}`}
+          aria-expanded={open}
+          data-testid={`decide-${cell.recordKey}-${cell.field}`}
           onClick={() =>
             updateDraft(draftId, {
               open: !open,
@@ -104,6 +98,7 @@ export function FieldDecisionControl({ cell, resolved, log, makeContext, onRecor
             })
           }
         >
+          <span className="sr-only">{cell.field}: </span>
           {open ? "Cancel" : decision ? "Change" : "Decide"}
         </button>
       </div>

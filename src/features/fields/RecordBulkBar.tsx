@@ -16,35 +16,58 @@ type RecordBulkBarProps = {
   log: RecoveryDecision[];
   makeContext: () => DecisionContext;
   onRecord: (log: RecoveryDecision[]) => void;
-  /** The remembered session reason; editable per record before confirming. */
-  sessionReason: string;
+  /** Live session reason — a prop, not seed state, so edits reach the open record. */
+  reason: string;
+  onReasonChange: (reason: string) => void;
+  /** Date-sensitive fields already approved for this session, or null if none. */
+  acknowledgedFields: string[] | null;
+  onAcknowledge: (fields: string[]) => void;
+  /** Called after decisions are recorded, so the queue can advance. */
+  onRecorded?: (applied: number) => void;
 };
 
 /**
  * Accept or keep every pending value for one record.
  *
- * A per-record batch spans several fields, which normally makes the engine
- * skip every rule-6 date-sensitive cell. Here the user is looking at each
- * field name and value on one screen, so the batch may cover them — behind a
- * confirmation that names the rule and every affected field, passed to the
- * engine as an explicit acknowledged-fields list (§6.2's "distinct
- * confirmation, with the rule stated in the dialog").
+ * A per-record batch spans several fields, which makes the engine skip
+ * date-sensitive cells unless they are explicitly acknowledged. That
+ * acknowledgment is taken once per session — `docs/recovery-workflow.proposed.md`
+ * §6.2 specifies the rule-6 confirmation "per source", and re-certifying the
+ * same four field names on all 499 records trains click-through rather than
+ * deliberation.
  */
-export function RecordBulkBar({ recordKey, pendingCells, profile, log, makeContext, onRecord, sessionReason }: RecordBulkBarProps) {
-  const [reason, setReason] = useState(sessionReason);
-  const [pending, setPending] = useState<"backfill" | "keep_candidate" | null>(null);
-  const [acknowledged, setAcknowledged] = useState(false);
+export function RecordBulkBar({
+  recordKey,
+  pendingCells,
+  profile,
+  log,
+  makeContext,
+  onRecord,
+  reason,
+  onReasonChange,
+  acknowledgedFields,
+  onAcknowledge,
+  onRecorded
+}: RecordBulkBarProps) {
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
 
-  // After a successful apply pendingCells drops to zero — the outcome must
-  // outlive the controls, or the confirmation the user just earned vanishes.
-  if (pendingCells.length === 0 && outcome === null && error === null) return null;
+  const dateSensitiveFields = [
+    ...new Set(
+      pendingCells.map((cell) => cell.field).filter((field) => (profile.dateSensitiveFields ?? []).includes(field))
+    )
+  ].sort();
 
-  const dateSensitiveFields = pendingCells
-    .map((cell) => cell.field)
-    .filter((field) => (profile.dateSensitiveFields ?? []).includes(field));
-  const needsAcknowledgment = pending === "backfill" && dateSensitiveFields.length > 0;
+  // The engine only skips date-sensitive cells when the batch spans more than
+  // one field. A record down to its last rule-6 field needs no acknowledgment —
+  // blocking it would be friction with nothing behind it.
+  const batchFields = new Set(pendingCells.map((cell) => cell.field));
+  const engineWouldSkip = dateSensitiveFields.length > 0 && batchFields.size > 1;
+  const covered =
+    !engineWouldSkip ||
+    (acknowledgedFields !== null && dateSensitiveFields.every((field) => acknowledgedFields.includes(field)));
+
+  if (pendingCells.length === 0 && outcome === null && error === null) return null;
 
   const apply = (action: "backfill" | "keep_candidate") => {
     setError(null);
@@ -54,7 +77,9 @@ export function RecordBulkBar({ recordKey, pendingCells, profile, log, makeConte
         {
           action,
           reason,
-          ...(action === "backfill" && acknowledged ? { acknowledgedDateSensitiveFields: dateSensitiveFields } : {})
+          ...(action === "backfill" && covered && engineWouldSkip
+            ? { acknowledgedDateSensitiveFields: dateSensitiveFields }
+            : {})
         },
         makeContext()
       );
@@ -63,98 +88,79 @@ export function RecordBulkBar({ recordKey, pendingCells, profile, log, makeConte
         `Recorded ${result.applied} decision(s) for ${recordKey}.` +
           (result.skipped.length > 0 ? ` Skipped ${result.skipped.length}.` : "")
       );
-      setPending(null);
-      setAcknowledged(false);
+      onRecorded?.(result.applied);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not record the decisions.");
-      setPending(null);
     }
   };
 
   return (
     <div className="rounded border border-slate-200 bg-slate-50 p-3" data-testid="record-bulk-bar">
       {pendingCells.length > 0 ? (
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          className="min-w-[14rem] flex-1 rounded border border-slate-300 p-1 text-xs"
-          placeholder="Reason for this record's decisions (required)"
-          data-testid="record-bulk-reason"
-          value={reason}
-          onChange={(event) => setReason(event.target.value)}
-        />
-        <button
-          type="button"
-          className="rounded border px-2 py-1 text-xs text-sky-700 hover:bg-slate-100"
-          data-testid="record-accept-all"
-          onClick={() => {
-            setOutcome(null);
-            setAcknowledged(false);
-            setPending("backfill");
-          }}
-        >
-          Accept all {pendingCells.length} reference value(s)
-        </button>
-        <button
-          type="button"
-          className="rounded border px-2 py-1 text-xs text-sky-700 hover:bg-slate-100"
-          data-testid="record-keep-all"
-          onClick={() => {
-            setOutcome(null);
-            setPending("keep_candidate");
-          }}
-        >
-          Keep all candidate values
-        </button>
-      </div>
-      ) : null}
-
-      {pending ? (
-        <div className="mt-2 rounded border border-amber-400 bg-amber-50 p-2" data-testid="record-bulk-confirm">
-          <p className="text-xs text-amber-900">
-            Record <strong>{pendingCells.length}</strong> decision(s) for <strong>{recordKey}</strong> —{" "}
-            {pending === "backfill" ? "use each field's reference value" : "keep each candidate value"}? Fields:{" "}
-            {pendingCells.map((cell) => cell.field).join(", ")}.
-          </p>
-          {needsAcknowledgment ? (
-            <label className="mt-2 flex items-start gap-2 text-xs text-amber-900" data-testid="rule6-acknowledgment">
-              <input
-                type="checkbox"
-                checked={acknowledged}
-                data-testid="rule6-acknowledge-check"
-                onChange={(event) => setAcknowledged(event.target.checked)}
-              />
-              <span>
-                <strong>{dateSensitiveFields.join(", ")}</strong> {dateSensitiveFields.length === 1 ? "is" : "are"}{" "}
-                <strong>rule-6 date-sensitive</strong>: automatic backfill requires explicit approval. I am approving
-                these reference values for this record, having seen them above.
-              </span>
-            </label>
-          ) : null}
-          <div className="mt-2 flex gap-2">
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              className="min-w-[14rem] flex-1 rounded border border-slate-300 p-1 text-xs"
+              placeholder="Reason for this record's decisions (required)"
+              data-testid="record-bulk-reason"
+              value={reason}
+              onChange={(event) => onReasonChange(event.target.value)}
+            />
             <button
               type="button"
-              className="rounded border border-amber-500 px-2 py-1 text-xs text-amber-900 hover:bg-amber-100 disabled:opacity-40"
-              data-testid="record-bulk-apply"
-              disabled={needsAcknowledgment && !acknowledged}
-              title={needsAcknowledgment && !acknowledged ? "Acknowledge the rule-6 fields first" : undefined}
-              onClick={() => apply(pending)}
+              className="rounded border px-2 py-1 text-xs text-sky-700 hover:bg-slate-100 disabled:opacity-40"
+              data-testid="record-accept-all"
+              disabled={!covered}
+              title={covered ? undefined : "Approve the rule-6 fields first"}
+              onClick={() => {
+                setOutcome(null);
+                apply("backfill");
+              }}
             >
-              Yes, record them
+              Accept all {pendingCells.length} reference value(s)
+              <span className="ml-1 text-slate-400">a</span>
             </button>
             <button
               type="button"
-              className="rounded border px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
-              data-testid="record-bulk-cancel"
-              onClick={() => setPending(null)}
+              className="rounded border px-2 py-1 text-xs text-sky-700 hover:bg-slate-100"
+              data-testid="record-keep-all"
+              onClick={() => {
+                setOutcome(null);
+                apply("keep_candidate");
+              }}
             >
-              Cancel
+              Keep all candidate values
+              <span className="ml-1 text-slate-400">x</span>
             </button>
           </div>
-        </div>
+
+          {engineWouldSkip && !covered ? (
+            <div className="mt-2 rounded border border-amber-400 bg-amber-50 p-2" data-testid="rule6-acknowledgment">
+              <p className="text-xs text-amber-900">
+                <strong>{dateSensitiveFields.join(", ")}</strong>{" "}
+                {dateSensitiveFields.length === 1 ? "is" : "are"} <strong>rule-6 date-sensitive</strong>: automatic
+                backfill requires explicit approval. Approving here covers these fields for this source, for the rest
+                of this session — every decision still records its own reason, and you can revoke it at any time.
+              </p>
+              <button
+                type="button"
+                className="mt-2 rounded border border-amber-500 px-2 py-1 text-xs text-amber-900 hover:bg-amber-100"
+                data-testid="rule6-approve"
+                onClick={() => onAcknowledge(dateSensitiveFields)}
+              >
+                I approve these fields for this source
+              </button>
+            </div>
+          ) : null}
+        </>
       ) : null}
 
       {error ? (
-        <p className="mt-2 rounded border border-red-300 bg-red-50 p-2 text-xs text-red-900" role="alert" data-testid="record-bulk-error">
+        <p
+          className="mt-2 rounded border border-red-300 bg-red-50 p-2 text-xs text-red-900"
+          role="alert"
+          data-testid="record-bulk-error"
+        >
           {error}
         </p>
       ) : null}

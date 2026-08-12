@@ -36,7 +36,8 @@ vi.mock("@tanstack/react-virtual", () => ({
     getTotalSize: () => options.count * 44,
     getVirtualItems: () => Array.from({ length: options.count }, (_, index) => ({ index, start: index * 44 })),
     measure: () => {},
-    measureElement: () => {}
+    measureElement: () => {},
+    scrollToIndex: () => {}
   })
 }));
 
@@ -184,7 +185,7 @@ describe("FieldsPage decisions", () => {
     renderPage("/results?tab=explore&field=DueDate");
 
     const row = screen.getByTestId("field-cell-1B-2020");
-    await user.click(within(row).getByTestId("decide-1B-2020"));
+    await user.click(within(row).getByTestId("decide-1B-2020-DueDate"));
     await user.type(within(row).getByTestId("decision-reason"), "confirmed with the agency");
     await user.click(within(row).getByTestId("decision-backfill"));
 
@@ -203,7 +204,7 @@ describe("FieldsPage decisions", () => {
     const row = screen.getByTestId("field-cell-1B-2020");
     expect(row.textContent).toContain("does not approve this field");
 
-    await user.click(within(row).getByTestId("decide-1B-2020"));
+    await user.click(within(row).getByTestId("decide-1B-2020-DueDate"));
     await user.click(within(row).getByTestId("decision-backfill"));
     expect(within(row).getByTestId("decision-error").textContent).toContain("reason is required");
     expect(mockDb.persisted).toHaveLength(0);
@@ -216,7 +217,7 @@ describe("FieldsPage decisions", () => {
 
     const row = screen.getByTestId("field-cell-1B-2020");
     expect(row.textContent).toContain("auto");
-    await user.click(within(row).getByTestId("decide-1B-2020"));
+    await user.click(within(row).getByTestId("decide-1B-2020-Title"));
     await user.type(within(row).getByTestId("decision-reason"), "title was renamed upstream");
     await user.click(within(row).getByTestId("decision-veto"));
 
@@ -274,27 +275,106 @@ describe("FieldsPage: By record mode", () => {
     void user;
   });
 
-  it("accept-all requires the rule-6 acknowledgment before it can be applied", async () => {
+  it("takes the rule-6 approval once, then accept-all is a single action", async () => {
     const user = userEvent.setup();
     renderPage("/results?tab=explore&mode=record&record=1B-2020");
 
     await user.type(screen.getByTestId("record-bulk-reason"), "verified against the agency portal");
-    await user.click(screen.getByTestId("record-accept-all"));
-
+    // Until the fields are approved, accept-all is blocked and says which fields.
     const acknowledgment = screen.getByTestId("rule6-acknowledgment");
     expect(acknowledgment.textContent).toContain("rule-6 date-sensitive");
     expect(acknowledgment.textContent).toContain("DueDate");
-    const apply = screen.getByTestId("record-bulk-apply") as HTMLButtonElement;
-    expect(apply.disabled).toBe(true);
+    expect((screen.getByTestId("record-accept-all") as HTMLButtonElement).disabled).toBe(true);
 
-    await user.click(screen.getByTestId("rule6-acknowledge-check"));
-    expect(apply.disabled).toBe(false);
-    await user.click(apply);
+    await user.click(screen.getByTestId("rule6-approve"));
+    // The approval is now session-scoped and visible, with a way out.
+    expect(screen.getByTestId("rule6-active").textContent).toContain("DueDate");
+    expect(screen.getByTestId("rule6-revoke")).toBeTruthy();
 
-    expect(screen.getByTestId("record-bulk-outcome").textContent).toContain("Recorded 4 decision(s)");
+    await user.click(screen.getByTestId("record-accept-all"));
     expect(mockDb.persisted).toHaveLength(4);
-    // The outputs now show the decisions.
-    expect(screen.getByTestId("record-output-DueDate").textContent).toContain("your decision");
+    expect(screen.getByTestId("last-action").textContent).toContain("Recorded 4 decision(s)");
+  });
+
+  it("does not ask for the approval again on the next record", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&mode=record&record=1B-2020");
+
+    await user.type(screen.getByTestId("record-bulk-reason"), "verified");
+    await user.click(screen.getByTestId("rule6-approve"));
+    await user.click(screen.getByTestId("record-accept-all"));
+
+    // Auto-advanced to the next record with work; no acknowledgment prompt.
+    expect(screen.queryByTestId("rule6-acknowledgment")).toBeNull();
+    expect((screen.getByTestId("record-accept-all") as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("auto-advances to the next pending record once one is resolved", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&mode=record&record=1B-2020");
+    const before = screen.getByTestId("record-position").textContent;
+
+    await user.type(screen.getByTestId("record-bulk-reason"), "verified");
+    await user.click(screen.getByTestId("rule6-approve"));
+    await user.click(screen.getByTestId("record-accept-all"));
+
+    expect(screen.getByTestId("record-position").textContent).not.toBe(before);
+    expect(screen.getByTestId("record-mode-panel").textContent).not.toContain("1B-2020 ");
+  });
+
+  it("accepts a whole record from the keyboard alone", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&mode=record&record=1B-2020");
+
+    await user.type(screen.getByTestId("record-bulk-reason"), "verified");
+    await user.click(screen.getByTestId("rule6-approve"));
+    // Focus leaves the reason input so keystrokes are commands again.
+    await user.click(screen.getByTestId("record-keymap"));
+    await user.keyboard("a");
+
+    expect(mockDb.persisted).toHaveLength(4);
+  });
+
+  it("decides a single selected field by number and Enter", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&mode=record&record=1B-2020");
+
+    await user.type(screen.getByTestId("record-bulk-reason"), "verified");
+    await user.click(screen.getByTestId("record-keymap"));
+    await user.keyboard("2");
+    expect(screen.getAllByTestId(/^record-cell-/).some((row) => row.dataset.selected === "true")).toBe(true);
+
+    await user.keyboard("{Enter}");
+    expect(mockDb.persisted).toHaveLength(1);
+    // A single-field batch is not a multi-field sweep, so no approval was needed.
+    expect(screen.queryByTestId("rule6-active")).toBeNull();
+  });
+
+  it("ignores shortcuts while typing but not while a checkbox has focus", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&mode=record&record=1B-2020");
+    const before = screen.getByTestId("record-position").textContent;
+
+    // Typing "j" into the reason must not navigate.
+    await user.type(screen.getByTestId("record-bulk-reason"), "j");
+    expect(screen.getByTestId("record-position").textContent).toBe(before);
+    expect((screen.getByTestId("record-bulk-reason") as HTMLInputElement).value).toContain("j");
+
+    // A checkbox is an INPUT too, but it takes no text — shortcuts must live.
+    const onlyPending = screen.getByTestId("queue-only-pending");
+    onlyPending.focus();
+    await user.keyboard("j");
+    expect(screen.getByTestId("record-position").textContent).not.toBe(before);
+  });
+
+  it("does not hijack browser chords", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&mode=record&record=1B-2020");
+    const before = screen.getByTestId("record-position").textContent;
+
+    await user.click(screen.getByTestId("record-keymap"));
+    await user.keyboard("{Control>}j{/Control}");
+    expect(screen.getByTestId("record-position").textContent).toBe(before);
   });
 
   it("record decisions update the queue pending count and progress", async () => {
@@ -302,9 +382,8 @@ describe("FieldsPage: By record mode", () => {
     renderPage("/results?tab=explore&mode=record&record=1B-2020");
 
     await user.type(screen.getByTestId("record-bulk-reason"), "verified");
+    await user.click(screen.getByTestId("rule6-approve"));
     await user.click(screen.getByTestId("record-accept-all"));
-    await user.click(screen.getByTestId("rule6-acknowledge-check"));
-    await user.click(screen.getByTestId("record-bulk-apply"));
 
     expect(within(screen.getByTestId("queue-record-1B-2020")).getByTestId("queue-resolved")).toBeTruthy();
     expect(screen.getByTestId("record-progress").textContent).toContain("1 /");
@@ -326,7 +405,7 @@ describe("FieldsPage: By record mode", () => {
 
     await user.type(screen.getByTestId("session-reason"), "verified against the agency portal, Aug 2026");
     const row = screen.getByTestId("record-cell-DueDate");
-    await user.click(within(row).getByTestId("decide-1B-2020"));
+    await user.click(within(row).getByTestId("decide-1B-2020-DueDate"));
     const reasonInput = within(row).getByTestId("decision-reason") as HTMLInputElement;
     expect(reasonInput.value).toBe("verified against the agency portal, Aug 2026");
   });
@@ -336,7 +415,7 @@ describe("FieldsPage: By record mode", () => {
     renderPage("/results?tab=explore&mode=record&record=1B-2020");
 
     const row = screen.getByTestId("record-cell-DueDate");
-    await user.click(within(row).getByTestId("decide-1B-2020"));
+    await user.click(within(row).getByTestId("decide-1B-2020-DueDate"));
     const custom = within(row).getByTestId("decision-custom") as HTMLInputElement;
     expect(custom.value.length).toBeGreaterThan(0);
     // It is the reference value, ready to correct rather than retype.
