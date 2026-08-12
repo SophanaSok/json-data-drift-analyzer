@@ -304,9 +304,9 @@ export function runRecovery(
     // to the matched reference's, as QA does); the key that produced the PAIRING is
     // recorded separately in matchedKeyFields and in each provenance entry.
     const recordKey =
-      buildIdentityKey(candidateRecords[candidateIndex], profile.primaryKey).key ??
+      buildIdentityKey(candidateRecords[candidateIndex]!, profile.primaryKey).key ??
       (result.referenceIndex !== null
-        ? buildIdentityKey(referenceRecords[result.referenceIndex], profile.primaryKey).key
+        ? buildIdentityKey(referenceRecords[result.referenceIndex]!, profile.primaryKey).key
         : null);
     const knownKeys = new Set([recordKey, result.candidateKey].filter((key): key is string => key !== null));
     const relatedFindings = findingsForRecord(findingIndex, knownKeys, candidateIndex);
@@ -357,9 +357,9 @@ export function runRecovery(
     }
 
     const usable = USABLE_MATCH_STATUSES.has(result.status);
-    const reference = usable && result.referenceIndex !== null ? referenceRecords[result.referenceIndex] : null;
+    const reference = usable && result.referenceIndex !== null ? referenceRecords[result.referenceIndex]! : null;
 
-    const output = cloneRecord(candidateRecords[candidateIndex]);
+    const output = cloneRecord(candidateRecords[candidateIndex]!);
     const backfilledFields: string[] = [];
     const overriddenFields: string[] = [];
     const key = recordKey ?? `candidate:${candidateIndex}`;

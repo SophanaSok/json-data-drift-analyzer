@@ -109,7 +109,7 @@ export function RecordsTable({ records, selectedRecordId, sort, onSort, onSelect
           style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative" }}
         >
           {rowVirtualizer.getVirtualItems().map((virtualItem) => {
-            const record = records[virtualItem.index];
+            const record = records[virtualItem.index]!;
             const isSelected = selectedRecordId === record.id;
 
             return (

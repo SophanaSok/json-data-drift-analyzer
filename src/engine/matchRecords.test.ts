@@ -116,10 +116,10 @@ describe("matchRecords: real Bellingham fixtures", () => {
     expect(report.counts.candidate_only).toBe(1);
     expect(report.counts.reference_only).toBe(1);
 
-    const candidateOnly = only(report, "candidate_only")[0];
-    const referenceOnly = only(report, "reference_only")[0];
-    expect(candidateRecords[candidateOnly.candidateIndex!].ProjectCode).toBe("33B-2026");
-    expect(referenceRecords[referenceOnly.referenceIndex!].ProjectCode).toBe("3B-2018");
+    const candidateOnly = only(report, "candidate_only")[0]!;
+    const referenceOnly = only(report, "reference_only")[0]!;
+    expect(candidateRecords[candidateOnly.candidateIndex!]!.ProjectCode).toBe("33B-2026");
+    expect(referenceRecords[referenceOnly.referenceIndex!]!.ProjectCode).toBe("3B-2018");
   });
 
   it("finds no ambiguity or invalid identity in the real data", () => {
@@ -155,8 +155,8 @@ describe("matchRecords: real Bellingham fixtures", () => {
   it("agrees with the ProjectCode fallback key on every pairing", () => {
     // The forensic report found BidURL and ProjectCode produce identical pairings.
     for (const result of only(report, "matched_primary")) {
-      expect(candidateRecords[result.candidateIndex!].ProjectCode).toBe(
-        referenceRecords[result.referenceIndex!].ProjectCode
+      expect(candidateRecords[result.candidateIndex!]!.ProjectCode).toBe(
+        referenceRecords[result.referenceIndex!]!.ProjectCode
       );
     }
   });
@@ -200,9 +200,9 @@ describe("matchRecords: duplicate BidURL", () => {
 
     expect(report.counts.matched_primary).toBe(0);
     expect(ambiguous.length).toBeGreaterThan(0);
-    expect(ambiguous[0].ambiguity?.referenceIndexes).toEqual([0, 1]);
-    expect(ambiguous[0].ambiguity?.side).toBe("reference");
-    expect(ambiguous[0].referenceIndex).toBeNull();
+    expect(ambiguous[0]!.ambiguity?.referenceIndexes).toEqual([0, 1]);
+    expect(ambiguous[0]!.ambiguity?.side).toBe("reference");
+    expect(ambiguous[0]!.referenceIndex).toBeNull();
   });
 
   it("flags ambiguous_primary when the candidate has two records with one BidURL", () => {
@@ -214,8 +214,8 @@ describe("matchRecords: duplicate BidURL", () => {
 
     expect(report.counts.matched_primary).toBe(0);
     expect(ambiguous).toHaveLength(3); // both candidates, plus the unclaimed reference
-    expect(ambiguous[0].ambiguity?.candidateIndexes).toEqual([0, 1]);
-    expect(ambiguous[0].ambiguity?.side).toBe("candidate");
+    expect(ambiguous[0]!.ambiguity?.candidateIndexes).toEqual([0, 1]);
+    expect(ambiguous[0]!.ambiguity?.side).toBe("candidate");
   });
 
   it("reports side 'both' when each export duplicates the key", () => {
@@ -223,7 +223,7 @@ describe("matchRecords: duplicate BidURL", () => {
     const candidate = [rec(), rec()];
 
     const report = matchRecords(reference, candidate, noFallbackProfile);
-    expect(only(report, "ambiguous_primary")[0].ambiguity?.side).toBe("both");
+    expect(only(report, "ambiguous_primary")[0]!.ambiguity?.side).toBe("both");
   });
 });
 
@@ -235,7 +235,7 @@ describe("matchRecords: fallback keys", () => {
     const candidate = [rec(differentUrl)];
 
     const report = matchRecords(reference, candidate, bellinghamProfile);
-    const matched = only(report, "matched_fallback")[0];
+    const matched = only(report, "matched_fallback")[0]!;
 
     expect(report.counts.matched_fallback).toBe(1);
     expect(matched.matchMethod).toBe("fallback");
@@ -262,7 +262,7 @@ describe("matchRecords: fallback keys", () => {
     const candidate = [rec({ BidURL: "https://a.test/Bids/3" })];
 
     const report = matchRecords(reference, candidate, bellinghamProfile);
-    const ambiguous = only(report, "ambiguous_fallback")[0];
+    const ambiguous = only(report, "ambiguous_fallback")[0]!;
 
     expect(report.counts.matched_fallback).toBe(0);
     expect(ambiguous.ambiguity?.keyFields).toEqual(["AgentID", "ProjectCode"]);
@@ -314,7 +314,7 @@ describe("matchRecords: fallback keys", () => {
     ];
 
     const report = matchRecords(reference, candidate, bellinghamProfile);
-    const ambiguous = only(report, "ambiguous_fallback")[0];
+    const ambiguous = only(report, "ambiguous_fallback")[0]!;
 
     expect(report.counts.matched_primary).toBe(1);
     expect(report.counts.matched_fallback).toBe(0);
@@ -367,7 +367,7 @@ describe("matchRecords: missing and blank keys", () => {
   it("reports invalid_identity for a candidate missing a key field", () => {
     const { BidURL: _omitted, ...withoutUrl } = rec();
     const report = matchRecords([rec()], [withoutUrl], noFallbackProfile);
-    const invalid = only(report, "invalid_identity")[0];
+    const invalid = only(report, "invalid_identity")[0]!;
 
     expect(invalid.candidateIndex).toBe(0);
     expect(invalid.invalidIdentity?.missingFields).toEqual(["BidURL"]);
@@ -380,14 +380,14 @@ describe("matchRecords: missing and blank keys", () => {
     const invalid = only(report, "invalid_identity");
 
     expect(invalid).toHaveLength(2);
-    expect(invalid[0].invalidIdentity?.blankFields).toEqual(["BidURL"]);
-    expect(invalid[1].invalidIdentity?.blankFields).toEqual(["AgentID"]);
+    expect(invalid[0]!.invalidIdentity?.blankFields).toEqual(["BidURL"]);
+    expect(invalid[1]!.invalidIdentity?.blankFields).toEqual(["AgentID"]);
   });
 
   it("reports invalid_identity on the reference side too", () => {
     const report = matchRecords([rec({ BidURL: null })], [rec()], noFallbackProfile);
 
-    expect(only(report, "invalid_identity")[0].referenceIndex).toBe(0);
+    expect(only(report, "invalid_identity")[0]!.referenceIndex).toBe(0);
     expect(report.counts.candidate_only).toBe(1);
   });
 

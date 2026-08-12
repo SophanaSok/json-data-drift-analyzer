@@ -75,7 +75,7 @@ export function RecordsPage() {
 
   const sortedRecords = useMemo(() => {
     if (!analysis) return [];
-    return sortedIds.map((id) => analysis.recordsById[id]).filter(Boolean);
+    return sortedIds.map((id) => analysis.recordsById[id]).filter((record) => record !== undefined);
   }, [analysis, sortedIds]);
 
   const recordKeyFromUrl = params.get("record");
@@ -113,7 +113,7 @@ export function RecordsPage() {
     setSelectedRecordId(nextSelected);
     const next = new URLSearchParams(params);
     if (nextSelected) {
-      next.set("record", analysis.recordsById[nextSelected].recordKey);
+      next.set("record", analysis.recordsById[nextSelected]!.recordKey);
     } else {
       next.delete("record");
     }

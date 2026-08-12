@@ -39,8 +39,8 @@ export function DateOrderingAlert({ issues, baselineDates, latestDates, onContin
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
       );
       if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
       const active = document.activeElement;
       // Keep Tab cycling inside the dialog, including when focus has escaped it.
       if (event.shiftKey && (active === first || !dialog.contains(active))) {

@@ -21,7 +21,7 @@ export function buildIndexes(recordsById: Record<string, DiffRecord>): AnalysisI
       if (!byField[change.path]) {
         byField[change.path] = new Set<string>();
       }
-      byField[change.path].add(record.id);
+      byField[change.path]!.add(record.id);
     }
 
     for (const [docName, summary] of Object.entries(record.documentDiffs)) {
@@ -67,7 +67,7 @@ export function mergeQualityIssueIndexes(result: AnalysisResult): void {
     }
     for (const recordId of issue.relatedRecordIds) {
       if (result.recordsById[recordId]) {
-        result.indexes.byQualityIssue[issue.id].add(recordId);
+        result.indexes.byQualityIssue[issue.id]!.add(recordId);
       }
     }
   }

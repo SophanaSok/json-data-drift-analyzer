@@ -1,4 +1,4 @@
-import { expect, test, type ConsoleMessage } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import path from "node:path";
 
 const root = process.cwd();
@@ -8,20 +8,22 @@ const root = process.cwd();
  *
  * A CSP that is too strict fails silently in ways unit tests cannot see: a blocked
  * worker, a blocked stylesheet, a download that never starts. These run the actual
- * flows with violations collected from the console.
+ * flows with violations collected from the browser's own `securitypolicyviolation`
+ * event — not by matching Chrome's console phrasing, which changes between versions
+ * and would make the assertions silently vacuous.
  */
-function collectCspViolations(page: import("@playwright/test").Page): string[] {
-  const violations: string[] = [];
-  page.on("console", (message: ConsoleMessage) => {
-    const text = message.text();
-    if (/content security policy|refused to (load|connect|execute|apply)/i.test(text)) {
-      violations.push(text);
-    }
+async function trackCspViolations(page: import("@playwright/test").Page): Promise<() => Promise<string[]>> {
+  await page.addInitScript(() => {
+    const holder = window as unknown as { __cspViolations: string[] };
+    holder.__cspViolations = [];
+    window.addEventListener("securitypolicyviolation", (event) => {
+      holder.__cspViolations.push(
+        `${event.violatedDirective}: ${event.blockedURI || event.sourceFile || "inline"}`
+      );
+    });
   });
-  page.on("pageerror", (error) => {
-    if (/content security policy/i.test(error.message)) violations.push(error.message);
-  });
-  return violations;
+  return () =>
+    page.evaluate(() => (window as unknown as { __cspViolations: string[] }).__cspViolations ?? []);
 }
 
 test("the built page carries the policy", async ({ page }) => {
@@ -36,8 +38,23 @@ test("the built page carries the policy", async ({ page }) => {
   expect(csp).toContain("connect-src 'self' https://api.trello.com");
 });
 
+test("the violation listener itself works, so empty results below mean something", async ({ page }) => {
+  // A detection mechanism that cannot fire proves nothing. Trigger one deliberate
+  // violation (an image from a host connect-src/img-src does not allow) and require
+  // the listener to see it.
+  const violations = await trackCspViolations(page);
+
+  await page.goto("");
+  await page.evaluate(() => {
+    const img = document.createElement("img");
+    img.src = "https://example.invalid/pixel.png";
+    document.body.appendChild(img);
+  });
+  await expect.poll(violations).not.toEqual([]);
+});
+
 test("the app loads and analyses without violating the policy", async ({ page }) => {
-  const violations = collectCspViolations(page);
+  const violations = await trackCspViolations(page);
 
   await page.goto("");
   await page
@@ -51,11 +68,11 @@ test("the app loads and analyses without violating the policy", async ({ page })
   // Reaching results proves the worker ran, which is the load most likely to be
   // blocked by worker-src.
   await expect(page.getByText("Deterministic incident narrative")).toBeVisible({ timeout: 30000 });
-  expect(violations).toEqual([]);
+  expect(await violations()).toEqual([]);
 });
 
 test("virtualized rows still position, so inline styles are permitted", async ({ page }) => {
-  const violations = collectCspViolations(page);
+  const violations = await trackCspViolations(page);
 
   await page.goto("");
   await page
@@ -72,11 +89,11 @@ test("virtualized rows still position, so inline styles are permitted", async ({
   await expect(row).toBeVisible();
   // A blocked style attribute would leave every row stacked at the origin.
   await expect(row).toHaveAttribute("style", /transform/);
-  expect(violations).toEqual([]);
+  expect(await violations()).toEqual([]);
 });
 
 test("downloads still work under the policy", async ({ page }) => {
-  const violations = collectCspViolations(page);
+  const violations = await trackCspViolations(page);
 
   await page.goto("");
   await page
@@ -96,5 +113,5 @@ test("downloads still work under the policy", async ({ page }) => {
   // Object URLs are how every export is delivered; a policy that blocked them
   // would break the feature silently.
   expect(download.suggestedFilename()).toContain("recovered");
-  expect(violations).toEqual([]);
+  expect(await violations()).toEqual([]);
 });

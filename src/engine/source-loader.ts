@@ -233,16 +233,16 @@ export function verifyIdentityFieldsExist(
   for (const record of records) {
     for (const field of profile.primaryKey) {
       if (!(field in record)) {
-        fieldPresence[field].missing++;
+        fieldPresence[field]!.missing++;
       } else if (isBlankStrict(record[field])) {
-        fieldPresence[field].blank++;
+        fieldPresence[field]!.blank++;
       } else {
-        fieldPresence[field].present++;
+        fieldPresence[field]!.present++;
       }
     }
   }
 
-  const allPresent = profile.primaryKey.every((field) => fieldPresence[field].missing === 0);
+  const allPresent = profile.primaryKey.every((field) => fieldPresence[field]!.missing === 0);
 
   return { allPresent, fieldPresence };
 }

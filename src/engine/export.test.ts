@@ -171,8 +171,8 @@ describe("export: safety gate", () => {
 
     expect(bundle.gate.recoveredExportAllowed).toBe(false);
     expect(bundle.gate.matchRateBelowMinimum).toBe(true);
-    expect(bundle.blocked[0].kind).toBe("recovered");
-    expect(bundle.blocked[0].reason).toContain("below the profile minimum");
+    expect(bundle.blocked[0]!.kind).toBe("recovered");
+    expect(bundle.blocked[0]!.reason).toContain("below the profile minimum");
   });
 
   it("blocks the recovered artifact when a critical finding exists", () => {

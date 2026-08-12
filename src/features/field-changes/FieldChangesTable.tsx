@@ -167,7 +167,7 @@ export function FieldChangesTable({ rows, sort, onSort, onSelectField }: FieldCh
           style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative" }}
         >
           {rowVirtualizer.getVirtualItems().map((virtualItem) => {
-            const row = rows[virtualItem.index];
+            const row = rows[virtualItem.index]!;
 
             return (
               <div

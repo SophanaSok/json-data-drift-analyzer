@@ -204,7 +204,7 @@ describe("DecisionQueue: decision timestamps are the decision's, not the render'
 
     expect(clock).toHaveBeenCalled();
     const [next] = onRecord.mock.calls[0] as [RecoveryDecision[]];
-    expect(next[0].timestamp).toBe("2026-08-10T04:05:06.000Z");
+    expect(next[0]!.timestamp).toBe("2026-08-10T04:05:06.000Z");
     // Positions are the log length each entry is appended at, so a reload can
     // reconstruct append order even though the batch shares one timestamp.
     expect(next.map((entry) => entry.sequence)).toEqual(next.map((_, index) => index));

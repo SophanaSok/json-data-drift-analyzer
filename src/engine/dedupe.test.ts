@@ -99,16 +99,16 @@ describe("dedupe: exact duplicates", () => {
 
     expect(result.summary.retainedCount).toBe(1);
     expect(result.summary.removedCount).toBe(2);
-    expect(result.groups[0].memberCount).toBe(3);
+    expect(result.groups[0]!.memberCount).toBe(3);
   });
 
   it("keeps the earliest when everything else ties", () => {
     const candidate = [rec({ Id: "a" }), rec({ Id: "b" })];
     const result = pipeline([], candidate);
 
-    expect(result.groups[0].winner.candidateIndex).toBe(0);
-    expect(result.removed[0].reason).toBe("duplicate_lost_to_earlier_record");
-    expect(result.removed[0].detail).toContain("index 0 before 1");
+    expect(result.groups[0]!.winner.candidateIndex).toBe(0);
+    expect(result.removed[0]!.reason).toBe("duplicate_lost_to_earlier_record");
+    expect(result.removed[0]!.detail).toContain("index 0 before 1");
   });
 
   it("excludes rather than dedupes when the primary key itself repeats", () => {
@@ -132,8 +132,8 @@ describe("dedupe: same key, different completeness", () => {
     const result = pipeline([], candidate);
 
     expect(result.summary.retainedCount).toBe(1);
-    expect(result.groups[0].winner.requiredFieldsPresent).toBe(2);
-    expect(result.removed[0].removed.requiredFieldsPresent).toBe(1);
+    expect(result.groups[0]!.winner.requiredFieldsPresent).toBe(2);
+    expect(result.removed[0]!.removed.requiredFieldsPresent).toBe(1);
   });
 
   it("falls through to input order when required-field counts match", () => {
@@ -142,7 +142,7 @@ describe("dedupe: same key, different completeness", () => {
       { Id: "b", Group: "g1", Extra: "x" }
     ];
     // Extra is not hard-required, so completeness ties and order decides.
-    expect(pipeline([], candidate).removed[0].reason).toBe("duplicate_lost_to_earlier_record");
+    expect(pipeline([], candidate).removed[0]!.reason).toBe("duplicate_lost_to_earlier_record");
   });
 
   it("beats input order — a later, more complete record wins", () => {
@@ -159,9 +159,9 @@ describe("dedupe: same key, different completeness", () => {
     ];
     const result = pipeline([], candidate, profile);
 
-    expect(result.groups[0].winner.candidateIndex).toBe(1);
-    expect(result.removed[0].reason).toBe("duplicate_lost_to_more_complete_record");
-    expect(result.removed[0].detail).toContain("3 hard-required fields against the removed record's 2");
+    expect(result.groups[0]!.winner.candidateIndex).toBe(1);
+    expect(result.removed[0]!.reason).toBe("duplicate_lost_to_more_complete_record");
+    expect(result.removed[0]!.detail).toContain("3 hard-required fields against the removed record's 2");
   });
 });
 
@@ -176,9 +176,9 @@ describe("dedupe: validity outranks everything", () => {
     const result = pipeline([], candidate, profile);
 
     expect(result.summary.retainedCount).toBe(1);
-    expect(result.groups[0].winner.validity).toBe("valid");
-    expect(result.removed[0].reason).toBe("duplicate_lost_to_valid_record");
-    expect(result.removed[0].removed.validity).toBe("excluded");
+    expect(result.groups[0]!.winner.validity).toBe("valid");
+    expect(result.removed[0]!.reason).toBe("duplicate_lost_to_valid_record");
+    expect(result.removed[0]!.removed.validity).toBe("excluded");
   });
 
   it("wins even when the excluded record came first and is otherwise fuller", () => {
@@ -188,8 +188,8 @@ describe("dedupe: validity outranks everything", () => {
       { Id: "b", Group: "g1", Title: "t" }
     ];
     const result = pipeline([], candidate, profile);
-    expect(result.groups[0].winner.candidateIndex).toBe(1);
-    expect(result.groups[0].winner.validity).toBe("valid");
+    expect(result.groups[0]!.winner.candidateIndex).toBe(1);
+    expect(result.groups[0]!.winner.validity).toBe("valid");
   });
 });
 
@@ -205,10 +205,10 @@ describe("dedupe: candidate-sourced beats reference-recovered", () => {
     ];
     const result = pipeline(reference, candidate, profile);
 
-    expect(result.groups[0].winner.containsReferenceDerivedValues).toBe(false);
-    expect(result.groups[0].winner.candidateIndex).toBe(1);
-    expect(result.removed[0].reason).toBe("duplicate_lost_to_candidate_sourced_record");
-    expect(result.removed[0].removed.containsReferenceDerivedValues).toBe(true);
+    expect(result.groups[0]!.winner.containsReferenceDerivedValues).toBe(false);
+    expect(result.groups[0]!.winner.candidateIndex).toBe(1);
+    expect(result.removed[0]!.reason).toBe("duplicate_lost_to_candidate_sourced_record");
+    expect(result.removed[0]!.removed.containsReferenceDerivedValues).toBe(true);
   });
 
   it("still sees reference-derived values on a record recovery later excluded", () => {
@@ -226,9 +226,9 @@ describe("dedupe: candidate-sourced beats reference-recovered", () => {
     ];
 
     const result = pipeline(reference, candidate, excludingProfile);
-    const backfilled = result.groups[0].removed
+    const backfilled = result.groups[0]!.removed
       .map((entry) => entry.removed)
-      .concat(result.groups[0].winner)
+      .concat(result.groups[0]!.winner)
       .find((participant) => participant.candidateIndex === 0);
 
     expect(backfilled?.validity).toBe("excluded");
@@ -241,7 +241,7 @@ describe("dedupe: candidate-sourced beats reference-recovered", () => {
       { Id: "b", Group: "g1", Note: "y" }
     ];
     const result = pipeline([], candidate, profile);
-    expect(result.removed[0].reason).toBe("duplicate_lost_to_earlier_record");
+    expect(result.removed[0]!.reason).toBe("duplicate_lost_to_earlier_record");
   });
 });
 
@@ -309,7 +309,7 @@ describe("dedupe: nothing disappears silently", () => {
   it("logs every removal with key, winner, loser, and reason", () => {
     const candidate = [rec({ Id: "a" }), rec({ Id: "b" })];
     const result = pipeline([], candidate);
-    const entry = result.removed[0];
+    const entry = result.removed[0]!;
 
     expect(entry.dedupeKey).toBeTruthy();
     expect(entry.winner.candidateIndex).toBe(0);
@@ -324,8 +324,8 @@ describe("dedupe: nothing disappears silently", () => {
     const result = pipeline([], candidate);
 
     expect(result.groups).toHaveLength(1);
-    expect(result.groups[0].memberCount).toBe(2);
-    expect(result.groups[0].removed).toHaveLength(1);
+    expect(result.groups[0]!.memberCount).toBe(2);
+    expect(result.groups[0]!.removed).toHaveLength(1);
   });
 
   it("carries recovery exclusions through instead of dropping them", () => {
@@ -350,7 +350,7 @@ describe("dedupe: determinism", () => {
     const candidate = [rec({ Id: "a" }), rec({ Id: "a" }), rec({ Id: "a" })];
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const result = pipeline([], candidate);
-      expect(result.groups[0].winner.candidateIndex).toBe(0);
+      expect(result.groups[0]!.winner.candidateIndex).toBe(0);
       expect(result.removed.map((entry) => entry.removed.candidateIndex)).toEqual([1, 2]);
     }
   });

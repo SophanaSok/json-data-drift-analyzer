@@ -16,7 +16,7 @@ const candidateRecords = (candidateData as unknown as { Export: Array<Record<str
 const review = runRecoveryReview(referenceRecords, candidateRecords, BELLINGHAM_PROCUREWARE, {
   generatedAt: "2026-08-10T00:00:00.000Z"
 });
-const recordKey = changedRecords(review)[0].recordKey;
+const recordKey = changedRecords(review)[0]!.recordKey;
 
 afterEach(cleanup);
 

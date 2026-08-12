@@ -99,7 +99,9 @@ export function baselineSnapshot(record: DiffRecord): Record<string, unknown> | 
 }
 
 function revertPath(target: Record<string, unknown>, segments: string[], baselineValue: unknown): void {
-  const [head, ...rest] = segments;
+  // split(".") never yields an empty array, and recursion only descends while rest
+  // is non-empty, so a head segment always exists.
+  const [head, ...rest] = segments as [string, ...string[]];
   if (rest.length === 0) {
     if (baselineValue === undefined) delete target[head];
     else target[head] = baselineValue;

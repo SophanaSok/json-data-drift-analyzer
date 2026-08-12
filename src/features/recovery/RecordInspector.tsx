@@ -41,7 +41,7 @@ export function RecordInspector({ review, recordKey }: { review: RecoveryReview;
         </thead>
         <tbody>
           {inspection.rows.map((row) => {
-            const label = SOURCE_LABEL[row.source] ?? SOURCE_LABEL.candidate;
+            const label = SOURCE_LABEL[row.source] ?? SOURCE_LABEL.candidate!;
             return (
               <tr key={row.field} className={`border-t ${row.changed ? "bg-amber-50" : ""}`}>
                 <td className="py-1 font-medium">{row.field}</td>

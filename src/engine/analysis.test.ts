@@ -82,15 +82,15 @@ describe("analysis engine", () => {
 
   it("classifies emptied and restored changes", () => {
     const result = getAnalysis();
-    const changed = result.recordsById[idOf("91B-2023")];
+    const changed = result.recordsById[idOf("91B-2023")]!;
     const titleChange = changed.changedFields.find((change) => change.path === "Title");
     expect(titleChange?.kind).toBe("emptied");
   });
 
   it("detects document modifications and incomplete docs", () => {
     const result = getAnalysis();
-    const changed = result.recordsById[idOf("91B-2023")];
-    const diff = changed.documentDiffs.BidDocuments;
+    const changed = result.recordsById[idOf("91B-2023")]!;
+    const diff = changed.documentDiffs.BidDocuments!;
     expect(diff.modifiedCount).toBeGreaterThan(0);
     expect(diff.incompleteCount).toBeGreaterThan(0);
   });
@@ -156,7 +156,7 @@ describe("analysis engine", () => {
     const reorderBaseline = { Export: [{ ProjectCode: "R1", BidDocuments: [{ Title: "A", URL: "u1", Hash: "h1" }, { Title: "B", URL: "u2", Hash: "h2" }], BidDocumentHashes: ["h1", "h2"] }] };
     const reorderLatest = { Export: [{ ProjectCode: "R1", BidDocuments: [{ Title: "B", URL: "u2", Hash: "h2" }, { Title: "A", URL: "u1", Hash: "h1" }], BidDocumentHashes: ["h1", "h2"] }] };
     const result = runAnalysis({ baselineData: reorderBaseline, latestData: reorderLatest, baselineFileName: "b", latestFileName: "l", analysisKey: "r", config: { collectionPath: "Export", identityFields: ["ProjectCode"], ignoredFields: [], profileId: "default-government-bids" } });
-    expect(result.recordsById[idOf("R1")].documentDiffs.BidDocuments.modifiedCount).toBe(0);
+    expect(result.recordsById[idOf("R1")]!.documentDiffs.BidDocuments!.modifiedCount).toBe(0);
   });
 });
 
