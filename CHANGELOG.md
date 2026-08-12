@@ -16,6 +16,42 @@ recovery policy model.
 Each release is tagged `vX.Y.Z` on `main`. The deployed footer shows the version
 and the exact build commit; exported artifacts carry both in their metadata.
 
+## [1.3.0] — 2026-08-12
+
+### Added
+
+- **Record decisions work as a task queue**: one keystroke resolves a record
+  and advances to the next one needing work. `a` accepts every pending
+  reference value, `x` keeps the candidates, `1`–`9` select a field with
+  `Enter`/`c`/`e` to accept, keep, or edit it, and `n`/`j`/`k` move through the
+  queue. Focus stays in the workspace after every decision, and the last action
+  is shown so stepping back is one key.
+- **Focus mode** (`f`) hides the record list and run-level chrome so every
+  pending decision fits on one screen — measured at 1280×720, all four fit
+  without scrolling.
+- **Manual value entry on any field** of a decidable record, not only the ones
+  with something to accept: a field blank in both exports, or identical in
+  both, can now be given a value, seeded from the current output and recorded
+  as an audited decision with its reason. Profile-excluded fields stay locked.
+
+### Changed
+
+- The rule-6 approval is taken **once per source per session** rather than on
+  every record, as `docs/recovery-workflow.proposed.md` §6.2 specifies. It is
+  displayed while active and can be revoked at any time.
+
+### Fixed
+
+- Typed values are now **distinguishable from accepted reference values** in
+  the exported recovery audit (`manual_custom_value` vs
+  `manual_reference_accept` vs `manual_veto`); previously both were stamped
+  identically, which the design had asked to avoid.
+- An override targeting a profile-excluded field is refused by the engine, not
+  only by the UI.
+- Keyboard shortcuts no longer stop working while a checkbox has focus, and no
+  longer intercept browser and OS chords such as Ctrl+J or Cmd+N.
+- Editing the session reason now reaches the record already open.
+
 ## [1.2.0] — 2026-08-12
 
 ### Added
@@ -103,6 +139,7 @@ Low-severity findings — is resolved, each fix with a proving test.
 Initial development version, superseded by 1.0.0. Kept for reference: this is
 the version every pre-release commit reported.
 
+[1.3.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.3.0
 [1.2.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.2.0
 [1.1.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.1.0
 [1.0.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.0.0
