@@ -11,77 +11,78 @@
 
 ## Session handoff — start here
 
-*Written 2026-08-11 at the end of the Phases 1–3 remediation session, for whoever
-(human or agent) picks this up next. Delete or rewrite it once Phase 4 lands.*
+*Rewritten 2026-08-12 at the end of the Phase 4 session. All four planned
+remediation phases have landed; what follows is the state a fresh contributor
+(human or agent) actually needs.*
 
-### State as of `e749576`
+### State as of `c601aca`
 
-`main` is green and deployed. CI runs lint → typecheck → 694 unit tests → e2e, then
-publishes the **same** `dist/` artifact that e2e exercised (the deploy job never
-rebuilds). Verified live: the footer build stamp and `gh-pages` both read the
-deployed commit.
+`main` is green and deployed. Phases 1–4 of the audit remediation are complete:
+every Critical/High/Medium finding is fixed with proving tests, and the Phase 4
+polish items landed in PRs #49–#53:
+
+- **#49** vitest + coverage-v8 → 4.1.10 (jointly — either alone fails `npm ci`),
+  CI coverage gating, actions/cache v6, and a dedicated `tsconfig.e2e.json`
+  (e2e specs lost node types when vitest 4 cleaned up its type chain).
+- **#50** keyboard access (§2.5): table rows focus and select via Enter/Space,
+  `aria-sort` on columnheaders, `DateOrderingAlert` is a real modal (focus trap,
+  Escape, restore), toast live region always mounted with `role="alert"` errors.
+- **#51** AGENTS.md grounding refreshed (profile registry, version 4,
+  ContractValue).
+- **#52** draft persistence (§2.6): decision-form text and the ticket form live
+  in `src/stores/draft-store.ts`, keyed per analysis, surviving virtualization
+  scroll and tab switches.
+- **#53** `noUncheckedIndexedAccess` on in all tsconfig projects (367 sites,
+  assertions only where provably in range, no silent fallbacks);
+  `e2e/failure-paths.spec.ts` (malformed JSON, blocked export, Data Health,
+  Trello against a `page.route()` mock); CSP spec detects violations via a
+  `securitypolicyviolation` listener with a canary proving the listener fires.
 
 ### The work that remains
 
-**Phase 4 (polish)** — the audit items never addressed:
-
-- **Keyboard access** (§2.5, rated High): `RecordsTable` and `FieldChangesTable`
-  rows are `div role="row"` with `onClick` only — no `tabIndex`, no key handler, so
-  the core triage workflow is mouse-only. `DateOrderingAlert` is an `alertdialog`
-  with no focus trap, initial focus, or Escape. `aria-sort` sits on the `<button>`
-  rather than the columnheader. Toast live region mounts on demand; errors use
-  polite `role="status"` where `role="alert"` is meant.
-- **Draft persistence** (§2.6): decision drafts and the ticket form are row-local
-  state, so virtualization scroll and tab switches discard typed input. Lift to the
-  store keyed by cell id.
-- **`noUncheckedIndexedAccess`** (§4): the engine indexes into
-  `Record<string, unknown>` constantly. Expect a meaningful number of call sites.
-- **Coverage gating** (§4): coverage is configured but never run; CI has no
-  `--coverage` and no thresholds. Add `coverage/` to `.gitignore`.
-- **AGENTS.md refresh** (§4): its self-described *binding* grounding section is
-  stale on three counts (claims no profile registry exists, an older profile
-  version, and that `ContractValue` appears nowhere).
-- **e2e failure-path journeys** (§4): no malformed-JSON, quarantined/blocked-export,
-  or `page.route()`-mocked Trello journey; Data Health tab never visited; the CSP
-  spec detects violations by matching Chrome's console phrasing rather than a
-  `securitypolicyviolation` listener, so a wording change would make it vacuous.
-- Remaining **Low** items in §1.5, §2.6, §3, and §4.
-
-**Open dependency PRs** (none blocking; each has a catch):
-
-| PR | Bump | Note |
-|----|------|------|
-| #45 + #48 | vitest & @vitest/coverage-v8 3→4 | **Must move together.** Each alone fails `npm ci` in ~13s. Close both and do one manual joint bump. |
-| #46 | typescript 5.9→7.0 | Two majors. Deliberate migration, not a rubber stamp. |
-| #47 | @types/node 24→26 | Ran the full suite before failing — read its log first. |
-| #44 | grouped minor/patch (10 updates) | Likely fine after `@dependabot rebase`. |
-| — | `actions/cache` v4→v6 | Not yet offered (v4.3.0 is newest v4). It is the **last** node20 action; bumping clears the runner deprecation warning. |
+- **PR #46: typescript 5.9 → 7.0.** Two majors. A deliberate migration with its
+  own session, not a rubber stamp.
+- **Remaining Low items** in §1.5, §2.6, §3, and §4 below. None block use.
+- **Coverage thresholds** (`vitest.config.ts`: 90/81/87/91) are anchored just
+  below coverage as measured on merged `main`. If you add meaningfully-tested
+  code, consider re-anchoring upward; the untested pockets are `ui-store.ts`
+  and parts of `toast-store.ts`.
 
 ### Environment
 
-- **Node ≥ 20.19** (22 LTS fine). Vite 8 needs `util.styleText`; Node 21.6 fails to
-  build with a bare `SyntaxError` naming that import.
-- `npm ci`, then `npm run test` / `lint` / `typecheck` / `build` all work normally
-  on Linux. (Windows needed workarounds — a missing oxlint native binding and an
-  extensionless bin shim — that do not apply there.)
+- **Node ≥ 20.19** (22 LTS fine). Vite 8 needs `util.styleText`; Node 21.6 fails
+  to build with a bare `SyntaxError` naming that import.
+- `npm ci`, then `npm run test` / `lint` / `typecheck` / `build` / `test:e2e`.
+  After a Playwright version bump, run `npx playwright install chromium` — the
+  cached browser is keyed to the version and e2e otherwise dies with
+  "Executable doesn't exist".
 - For PR automation: `gh auth login`, **plus `gh auth refresh -h github.com -s
   workflow`**. Without the `workflow` scope, merging any PR that touches
-  `.github/workflows/**` is refused by the API mid-batch; the fallback is merging
-  locally and pushing over SSH.
+  `.github/workflows/**` is refused by the API; the working fallback (used for
+  #49) is merging locally and pushing over SSH.
 
-### Two traps this session hit — worth not repeating
+### Traps prior sessions hit — worth not repeating
 
-1. **Record ids are not display keys.** Phase 1 made `record.id` the
-   JSON-serialized identity key (collision-proof) while `record.recordKey` stayed
-   the human-readable label. A row testid still built from `record.id` silently
-   became `record-["91B-2023"]` and broke the e2e smoke flow on every run until
-   `f05d362`. When touching record identity, grep for `record.id` in **testids,
-   URLs, and exports** — anywhere a human or a test reads the value.
-2. **A red pipeline was protecting the site, not failing it.** For several commits
-   the deploy job refused to publish because e2e was red. That is the Phase 2
-   design working. Read a failed deploy as "the gate held", and pull the
-   `playwright-report` artifact (uploaded on failure, traces on first retry) before
-   theorizing about flake.
+1. **Record ids are not display keys.** `record.id` is the JSON-serialized
+   identity key (collision-proof); `record.recordKey` is the human-readable
+   label. A testid built from `record.id` silently became
+   `record-["91B-2023"]` and broke e2e until `f05d362`. When touching record
+   identity, grep for `record.id` in **testids, URLs, and exports**.
+2. **A red pipeline is usually protecting the site, not failing it.** The deploy
+   job refuses to publish when any gate is red — including the coverage gate,
+   which blocked `main`'s deploy for one commit in this session when thresholds
+   measured on a feature branch turned out to sit above merged `main`'s
+   coverage. Anchor thresholds against `main`, and read a failed deploy as "the
+   gate held" before theorizing about flake. The `playwright-report` artifact is
+   uploaded on failure.
+3. **Piped typecheck output lies about the exit code.** `npm run typecheck |
+   tail` exits with tail's status, so a broken build can print "OK"-looking
+   summaries. Check `tsc -b`'s own exit code, and cold-check with
+   `rm -rf node_modules/.tmp` when switching branches — stale `.tsbuildinfo`
+   masks errors.
+4. **The Bellingham fixtures carry a UTF-8 BOM** (deliberately — real scraper
+   exports do). Anything that `JSON.parse`s them outside the engine (e2e specs,
+   scripts) must strip `\uFEFF` first; the engine's `parseJSON` already does.
 
 ---
 
