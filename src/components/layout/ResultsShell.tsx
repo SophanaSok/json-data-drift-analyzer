@@ -31,7 +31,9 @@ const tabs = [
 
 export function ResultsShell() {
   const [params] = useSearchParams();
-  const tab = params.get("tab") ?? "overview";
+  const requestedTab = params.get("tab") ?? "overview";
+  // A mistyped or stale ?tab= must not render an empty shell.
+  const tab = tabs.some((item) => item.id === requestedTab) ? requestedTab : "overview";
   const analysis = useUiStore((state) => state.analysis);
   const reset = useUiStore((state) => state.reset);
   const setAnalysis = useUiStore((state) => state.setAnalysis);

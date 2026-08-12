@@ -13,6 +13,13 @@ type ResizeState = {
 export function useRecordColumnResize(onWidthsChange?: () => void) {
   const [columnWidths, setColumnWidths] = useState<ColumnWidths>(() => loadRecordColumnWidths());
   const resizeRef = useRef<ResizeState | null>(null);
+  // Mirrors state so mouseup can persist the latest widths without a storage
+  // write inside a setState updater — updaters must stay pure (StrictMode
+  // double-invokes them, which would double the write).
+  const widthsRef = useRef(columnWidths);
+  useEffect(() => {
+    widthsRef.current = columnWidths;
+  }, [columnWidths]);
 
   const beginResize = useCallback((columnId: RecordSortColumn, startX: number) => {
     resizeRef.current = {
@@ -37,10 +44,7 @@ export function useRecordColumnResize(onWidthsChange?: () => void) {
     const handleMouseUp = () => {
       if (!resizeRef.current) return;
       resizeRef.current = null;
-      setColumnWidths((current) => {
-        saveRecordColumnWidths(current);
-        return current;
-      });
+      saveRecordColumnWidths(widthsRef.current);
       onWidthsChange?.();
     };
 
