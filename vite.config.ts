@@ -53,6 +53,12 @@ function contentSecurityPolicy(): Plugin {
 export default defineConfig({
   plugins: [react(), contentSecurityPolicy()],
   base: "/json-data-drift-analyzer/",
+  build: {
+    // The repo is public and there is deliberately no telemetry, so a field
+    // crash report is the only diagnostic that will ever arrive — sourcemaps
+    // are what make its stack readable.
+    sourcemap: true
+  },
   define: {
     // Stamped into the UI footer and export metadata so a report can be tied to
     // the exact build that produced it. GITHUB_SHA is set by Actions; local

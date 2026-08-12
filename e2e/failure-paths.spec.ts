@@ -65,6 +65,19 @@ test("a candidate that misses the match-rate floor blocks the recovered export",
   await expect(state).toContainText("Reports and audits remain available");
 });
 
+test("a wrong collection path quarantines the run instead of passing over nothing", async ({ page }) => {
+  await page.goto("");
+  await page.getByTestId("baseline-input").setInputFiles(reference);
+  await page.getByTestId("latest-input").setInputFiles(candidate);
+  await page.getByPlaceholder("Export or $").fill("NotTheRealPath");
+  await page.getByTestId("analyze-button").click();
+
+  await expect(page.getByText("Quarantined")).toBeVisible({ timeout: 30000 });
+  await page.getByRole("link", { name: "Data Health", exact: true }).click();
+  await expect(page.getByText("No records found in either file")).toBeVisible();
+  await expect(page.getByText(/Check the collection path/)).toBeVisible();
+});
+
 test("the Data Health tab lists the quality issues the engine found", async ({ page }) => {
   await page.goto("");
   await page.getByTestId("baseline-input").setInputFiles(reference);
