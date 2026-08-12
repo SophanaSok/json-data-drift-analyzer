@@ -253,6 +253,9 @@ export function DecisionQueue({
                     makeContext={makeContext}
                     onRecord={onRecord}
                     index={row.index}
+                    // Scoped to the analysis so a later run's queue never
+                    // inherits text typed against another run's cells.
+                    draftId={`${review.generatedAt}|${id}`}
                   />
                 </div>
               );

@@ -1,10 +1,11 @@
 /**
  * @vitest-environment jsdom
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DecisionRow } from "./DecisionRow";
+import { useDraftStore } from "../../stores/draft-store";
 import { preview } from "./decision-display";
 import { classifyCells, type RecoveryDecision } from "../../engine/decisions";
 import { runRecoveryReview } from "../../engine/review";
@@ -27,12 +28,23 @@ const reviewCell = cells.find((cell) => cell.lane === "review" && cell.field ===
 const conflictCell = cells.find((cell) => cell.field === "BidDocuments")!;
 const context = { review, profile: BELLINGHAM_PROCUREWARE, timestamp: FIXED_NOW, sequence: 0 };
 
+// Drafts live in a global store now; a leftover draft from one test must not
+// leak an open form or typed text into the next.
+beforeEach(() => useDraftStore.getState().reset());
 afterEach(cleanup);
 
 function renderRow(cell = reviewCell, log: RecoveryDecision[] = [], decision?: RecoveryDecision) {
   const onRecord = vi.fn();
   render(
-    <DecisionRow cell={cell} decision={decision} log={log} makeContext={() => context} onRecord={onRecord} index={0} />
+    <DecisionRow
+      cell={cell}
+      decision={decision}
+      log={log}
+      makeContext={() => context}
+      onRecord={onRecord}
+      index={0}
+      draftId={`test|${cell.recordKey}|${cell.field}`}
+    />
   );
   return onRecord;
 }
@@ -198,6 +210,63 @@ describe("DecisionRow: recording", () => {
     await user.click(screen.getByTestId("decision-keep"));
 
     expect(screen.queryByTestId("decision-form")).toBeNull();
+  });
+});
+
+describe("DecisionRow: draft survival", () => {
+  // The queue virtualizes rows, so scrolling unmounts them. Unmounting used to
+  // discard the half-typed form; the draft store is what prevents that.
+  it("keeps a half-typed reason across unmount and remount, as virtualization scroll does", async () => {
+    const user = userEvent.setup();
+    const props = {
+      cell: reviewCell,
+      decision: undefined,
+      log: [],
+      makeContext: () => context,
+      onRecord: vi.fn(),
+      index: 0,
+      draftId: "run|cell-under-edit"
+    };
+    const first = render(<DecisionRow {...props} />);
+
+    await user.click(screen.getByTestId("decide-0"));
+    await user.type(screen.getByTestId("decision-reason"), "half-typed rea");
+    first.unmount();
+
+    render(<DecisionRow {...props} />);
+    expect(screen.getByTestId("decision-form")).toBeTruthy();
+    expect((screen.getByTestId("decision-reason") as HTMLInputElement).value).toBe("half-typed rea");
+  });
+
+  it("scopes drafts by id, so another cell's row starts blank", async () => {
+    const user = userEvent.setup();
+    const props = {
+      cell: reviewCell,
+      decision: undefined,
+      log: [],
+      makeContext: () => context,
+      onRecord: vi.fn(),
+      index: 0
+    };
+    const first = render(<DecisionRow {...props} draftId="run|cell-a" />);
+    await user.click(screen.getByTestId("decide-0"));
+    await user.type(screen.getByTestId("decision-reason"), "meant for cell a");
+    first.unmount();
+
+    render(<DecisionRow {...props} draftId="run|cell-b" />);
+    expect(screen.queryByTestId("decision-form")).toBeNull();
+  });
+
+  it("clears the draft once the decision is recorded", async () => {
+    const user = userEvent.setup();
+    const onRecord = renderRow();
+
+    await user.click(screen.getByTestId("decide-0"));
+    await user.type(screen.getByTestId("decision-reason"), "done deliberating");
+    await user.click(screen.getByTestId("decision-keep"));
+
+    expect(onRecord).toHaveBeenCalledTimes(1);
+    expect(useDraftStore.getState().decisionDrafts).toEqual({});
   });
 });
 
