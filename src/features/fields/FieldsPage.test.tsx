@@ -249,3 +249,108 @@ describe("FieldsPage decisions", () => {
     expect(scope).toContain("purchasing@cob.org");
   });
 });
+
+describe("FieldsPage: By record mode", () => {
+  it("toggles into record mode, lists the queue with pending counts", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByTestId("mode-record"));
+    expect(screen.getByTestId("record-queue")).toBeTruthy();
+    // A typical wiped record shows 4 pending review decisions.
+    expect(screen.getByTestId("queue-record-1B-2020").textContent).toContain("4");
+  });
+
+  it("opens a record showing candidate, reference, and the live output with source badges", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&mode=record&record=1B-2020");
+
+    const panel = screen.getByTestId("record-mode-panel");
+    expect(panel.textContent).toContain("1B-2020");
+    // Auto-backfilled Title: output is the reference value, badged as such.
+    expect(screen.getByTestId("record-output-Title").textContent).toContain("reference backfill");
+    // Undecided DueDate: output is still the (blank) candidate.
+    expect(screen.getByTestId("record-output-DueDate").textContent).toContain("candidate");
+    void user;
+  });
+
+  it("accept-all requires the rule-6 acknowledgment before it can be applied", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&mode=record&record=1B-2020");
+
+    await user.type(screen.getByTestId("record-bulk-reason"), "verified against the agency portal");
+    await user.click(screen.getByTestId("record-accept-all"));
+
+    const acknowledgment = screen.getByTestId("rule6-acknowledgment");
+    expect(acknowledgment.textContent).toContain("rule-6 date-sensitive");
+    expect(acknowledgment.textContent).toContain("DueDate");
+    const apply = screen.getByTestId("record-bulk-apply") as HTMLButtonElement;
+    expect(apply.disabled).toBe(true);
+
+    await user.click(screen.getByTestId("rule6-acknowledge-check"));
+    expect(apply.disabled).toBe(false);
+    await user.click(apply);
+
+    expect(screen.getByTestId("record-bulk-outcome").textContent).toContain("Recorded 4 decision(s)");
+    expect(mockDb.persisted).toHaveLength(4);
+    // The outputs now show the decisions.
+    expect(screen.getByTestId("record-output-DueDate").textContent).toContain("your decision");
+  });
+
+  it("record decisions update the queue pending count and progress", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&mode=record&record=1B-2020");
+
+    await user.type(screen.getByTestId("record-bulk-reason"), "verified");
+    await user.click(screen.getByTestId("record-accept-all"));
+    await user.click(screen.getByTestId("rule6-acknowledge-check"));
+    await user.click(screen.getByTestId("record-bulk-apply"));
+
+    expect(within(screen.getByTestId("queue-record-1B-2020")).getByTestId("queue-resolved")).toBeTruthy();
+    expect(screen.getByTestId("record-progress").textContent).toContain("1 /");
+  });
+
+  it("next-pending moves to a record that still needs decisions", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&mode=record&record=1B-2020");
+
+    await user.click(screen.getByTestId("record-next-pending"));
+    const position = screen.getByTestId("record-position").textContent ?? "";
+    expect(position).toContain("pending");
+    expect(screen.getByTestId("record-mode-panel").textContent).not.toContain("record 0 of");
+  });
+
+  it("the session reason pre-fills a per-row decision form", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&mode=record&record=1B-2020");
+
+    await user.type(screen.getByTestId("session-reason"), "verified against the agency portal, Aug 2026");
+    const row = screen.getByTestId("record-cell-DueDate");
+    await user.click(within(row).getByTestId("decide-1B-2020"));
+    const reasonInput = within(row).getByTestId("decision-reason") as HTMLInputElement;
+    expect(reasonInput.value).toBe("verified against the agency portal, Aug 2026");
+  });
+
+  it("edit pre-fills the custom box with the reference value", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&mode=record&record=1B-2020");
+
+    const row = screen.getByTestId("record-cell-DueDate");
+    await user.click(within(row).getByTestId("decide-1B-2020"));
+    const custom = within(row).getByTestId("decision-custom") as HTMLInputElement;
+    expect(custom.value.length).toBeGreaterThan(0);
+    // It is the reference value, ready to correct rather than retype.
+    expect(row.textContent).toContain(custom.value);
+  });
+
+  it("warns on a record absent from the recovery output", async () => {
+    renderPage("/results?tab=explore&mode=record");
+    const user = userEvent.setup();
+    // The reference-only record: dropped by the candidate run.
+    const removedRow = screen
+      .getAllByTestId(/^queue-record-/)
+      .find((row) => row.textContent?.includes("only reference"))!;
+    await user.click(removedRow);
+    expect(screen.getByTestId("record-excluded-warning")).toBeTruthy();
+  });
+});

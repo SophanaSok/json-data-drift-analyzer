@@ -589,6 +589,10 @@ export type RecordSummary = {
   severity: DiffRecord["severity"];
   changedFieldCount: number;
   cells: { auto: number; review: number; ineligible: number; unchanged: number };
+  /** Fields in the review lane — with the decision log, exact pending counts. */
+  reviewFields: string[];
+  /** Fields recovery auto-backfilled (vetoable). */
+  autoFields: string[];
 };
 
 export type RecordDetailModel = {
@@ -681,6 +685,8 @@ export function buildRecordSummaries(
   return Object.values(analysis.recordsById).map((record) => {
     const recordCtx = prepareRecordCellContext(ctx, record);
     const cells = { auto: 0, review: 0, ineligible: 0, unchanged: 0 };
+    const reviewFields: string[] = [];
+    const autoFields: string[] = [];
     for (const field of fields) {
       const candidate = record.status === "removed" ? undefined : record.latest?.[field];
       const reference = referenceValueOf(record, field);
@@ -689,6 +695,8 @@ export function buildRecordSummaries(
         cells.unchanged += cell.situation === "unchanged" ? 1 : 0;
       } else {
         cells[cell.lane] += 1;
+        if (cell.lane === "review") reviewFields.push(field);
+        if (cell.lane === "auto") autoFields.push(field);
       }
     }
     return {
@@ -698,7 +706,9 @@ export function buildRecordSummaries(
       status: record.status,
       severity: record.severity,
       changedFieldCount: record.changedFieldCount,
-      cells
+      cells,
+      reviewFields,
+      autoFields
     };
   });
 }
