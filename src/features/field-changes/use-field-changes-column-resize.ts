@@ -17,6 +17,13 @@ type ResizeState = {
 export function useFieldChangesColumnResize(onWidthsChange?: () => void) {
   const [columnWidths, setColumnWidths] = useState<ColumnWidths>(() => loadFieldChangesColumnWidths());
   const resizeRef = useRef<ResizeState | null>(null);
+  // Mirrors state so mouseup can persist the latest widths without a storage
+  // write inside a setState updater — updaters must stay pure (StrictMode
+  // double-invokes them, which would double the write).
+  const widthsRef = useRef(columnWidths);
+  useEffect(() => {
+    widthsRef.current = columnWidths;
+  }, [columnWidths]);
 
   const beginResize = useCallback((columnId: FieldSortColumn, startX: number) => {
     resizeRef.current = {
@@ -41,10 +48,7 @@ export function useFieldChangesColumnResize(onWidthsChange?: () => void) {
     const handleMouseUp = () => {
       if (!resizeRef.current) return;
       resizeRef.current = null;
-      setColumnWidths((current) => {
-        saveFieldChangesColumnWidths(current);
-        return current;
-      });
+      saveFieldChangesColumnWidths(widthsRef.current);
       onWidthsChange?.();
     };
 

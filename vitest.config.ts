@@ -9,14 +9,20 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],
-      // Set just below measured coverage (91.4 / 83.0 / 88.5 / 92.9 after the
-      // Phase 4 merges) so regressions fail CI without making every small
-      // refactor fight the gate.
+      // The whole source tree, whether or not any test imports it. Without this
+      // the denominator shifts every time a test pulls in a new import graph,
+      // and the thresholds break on unrelated changes — which has already
+      // blocked a deploy once.
+      all: true,
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: ["src/test/**", "src/**/*.test.{ts,tsx}", "src/main.tsx", "src/vite-env.d.ts"],
+      // Set just below coverage as measured against that full denominator so
+      // regressions fail CI without making every small refactor fight the gate.
       thresholds: {
-        statements: 90,
-        branches: 81,
-        functions: 87,
-        lines: 91
+        statements: 76,
+        branches: 70,
+        functions: 70,
+        lines: 78
       }
     }
   }
