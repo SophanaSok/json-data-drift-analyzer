@@ -47,8 +47,8 @@ describe("recovery review: proposed changes by field", () => {
   });
 
   it("orders by volume so the largest change reads first", () => {
-    expect(groups[0].field).toBe("Title");
-    expect(groups[0].count).toBe(499);
+    expect(groups[0]!.field).toBe("Title");
+    expect(groups[0]!.count).toBe(499);
     expect(groups.map((group) => group.count)).toEqual([499, 495, 242, 171]);
   });
 
@@ -136,9 +136,9 @@ describe("recovery review: exclusions", () => {
     const strictReview = runRecoveryReview(referenceRecords, candidateRecords, strict, { generatedAt: FIXED_NOW });
     const groups = groupExclusions(strictReview);
 
-    expect(groups[0].reason).toBe("hard_required_field_missing");
-    expect(groups[0].count).toBeGreaterThan(0);
-    expect(groups[0].examples[0].detail).toContain("Title");
+    expect(groups[0]!.reason).toBe("hard_required_field_missing");
+    expect(groups[0]!.count).toBeGreaterThan(0);
+    expect(groups[0]!.examples[0]!.detail).toContain("Title");
   });
 });
 
@@ -151,15 +151,15 @@ describe("recovery review: record drill-down", () => {
 
   it("orders by how much would change", () => {
     for (let index = 1; index < records.length; index += 1) {
-      expect(records[index - 1].changedFieldCount).toBeGreaterThanOrEqual(records[index].changedFieldCount);
+      expect(records[index - 1]!.changedFieldCount).toBeGreaterThanOrEqual(records[index]!.changedFieldCount);
     }
   });
 
   it("returns provenance rows for a record, sorted by field", () => {
-    const rows = provenanceRowsForRecord(review, records[0].recordKey);
+    const rows = provenanceRowsForRecord(review, records[0]!.recordKey);
     const fields = rows.map((row) => row.field);
 
-    expect(rows.length).toBe(records[0].changedFieldCount);
+    expect(rows.length).toBe(records[0]!.changedFieldCount);
     expect(fields).toEqual([...fields].sort());
     for (const row of rows) {
       expect(row.source).toBe("reference_backfill");
@@ -187,9 +187,9 @@ describe("findings explorer: filter options", () => {
 
   it("sorts severities by seriousness, not alphabetically", () => {
     const mixed = deriveFilterOptions([
-      { ...review.qa.findings[0], severity: "low" },
-      { ...review.qa.findings[0], severity: "critical" },
-      { ...review.qa.findings[0], severity: "medium" }
+      { ...review.qa.findings[0]!, severity: "low" },
+      { ...review.qa.findings[0]!, severity: "critical" },
+      { ...review.qa.findings[0]!, severity: "medium" }
     ]);
     expect(mixed.severities).toEqual(["critical", "medium", "low"]);
   });
@@ -260,7 +260,7 @@ describe("findings explorer: filtering", () => {
 
 describe("record inspector", () => {
   const changed = changedRecords(review);
-  const inspection = buildRecordInspection(review, changed[0].recordKey);
+  const inspection = buildRecordInspection(review, changed[0]!.recordKey);
 
   it("returns a row for every field in the output record", () => {
     expect(inspection).not.toBeNull();
@@ -270,7 +270,7 @@ describe("record inspector", () => {
   it("labels a recovered value as reference-derived, never candidate", () => {
     const recovered = inspection?.rows.filter((row) => row.changed) ?? [];
 
-    expect(recovered.length).toBe(changed[0].changedFieldCount);
+    expect(recovered.length).toBe(changed[0]!.changedFieldCount);
     for (const row of recovered) {
       expect(row.source).toBe("reference_backfill");
       expect(row.candidateValue).toBe("");

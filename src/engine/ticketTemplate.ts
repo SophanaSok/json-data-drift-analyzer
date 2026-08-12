@@ -230,7 +230,7 @@ export function deriveTitle(input: TicketInput): string {
     return `[${input.profile.id}] Export quality review — no field-level issues found`;
   }
 
-  const leader = affected[0];
+  const leader = affected[0]!;
   const others = affected.length - 1;
   const scope = others > 0 ? ` and ${others} other field${others === 1 ? "" : "s"}` : "";
   const percentage = formatPercent(leader.count, leader.outOf);
@@ -349,7 +349,7 @@ export function buildTicketDraft(input: TicketInput): TicketDraft {
   if (affected.length === 0) {
     lines.push("No downstream impact identified from this comparison.");
   } else {
-    const worst = affected[0];
+    const worst = affected[0]!;
     lines.push(
       `Downstream consumers reading ${affected.map((group) => `\`${group.field}\``).join(", ")} will find them ` +
         `unpopulated for affected records — up to ${worst.count} of ${worst.outOf} (${formatPercent(worst.count, worst.outOf)}) ` +

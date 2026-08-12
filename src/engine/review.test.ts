@@ -39,7 +39,7 @@ describe("runRecoveryReview", () => {
   it("threads the run names through to the audit trail", () => {
     expect(review.sourceRun).toBe("candidate.json");
     expect(review.recovery.sourceRun).toBe("candidate.json");
-    expect(review.recovery.provenance[0].referenceRun).toBe("reference.json");
+    expect(review.recovery.provenance[0]!.referenceRun).toBe("reference.json");
   });
 
   it("reuses one match report rather than matching twice", () => {

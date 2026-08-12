@@ -216,7 +216,7 @@ export function runDedupe(
   recovery.excluded.forEach((record) => {
     const source =
       record.candidateIndex !== null && record.candidateIndex < candidateRecords.length
-        ? candidateRecords[record.candidateIndex]
+        ? candidateRecords[record.candidateIndex]!
         : null;
 
     participants.push({
@@ -255,7 +255,8 @@ export function runDedupe(
     if (members.length < 2) continue;
 
     const ranked = [...members].sort(compareParticipants);
-    const winner = ranked[0];
+    // members.length >= 2 was checked above, so a winner always exists.
+    const winner = ranked[0]!;
     const losers = ranked.slice(1);
 
     const groupRemovals = losers

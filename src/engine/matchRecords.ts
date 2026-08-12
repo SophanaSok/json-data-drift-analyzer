@@ -201,14 +201,14 @@ export function matchRecords(
     }
 
     if (referenceIndexes.length === 1) {
-      const referenceIndex = referenceIndexes[0];
+      const referenceIndex = referenceIndexes[0]!;
       matchedReference.add(referenceIndex);
       candidateOutcome[candidateIndex] = {
         status: "matched_primary",
         candidateIndex,
         referenceIndex,
         candidateKey: identity.key,
-        referenceKey: referencePrimary[referenceIndex].key,
+        referenceKey: referencePrimary[referenceIndex]!.key,
         matchMethod: "primary",
         keyFields: primaryKey,
         ambiguity: null,
@@ -242,7 +242,9 @@ export function matchRecords(
       const candidateIndex = indexByKey(candidateFallback, (position) => candidateOutcome[position] === null);
 
       for (const position of unmatchedCandidates) {
-        const identity = candidateFallback[position];
+        // `position` indexes candidateOutcome, which is sized to candidateRecords,
+        // and candidateFallback maps candidateRecords 1:1.
+        const identity = candidateFallback[position]!;
         if (identity.key === null) {
           // This candidate cannot be keyed on this fallback; later fallbacks may still apply.
           continue;
@@ -275,15 +277,15 @@ export function matchRecords(
         // Requirement: fallback applies only when it yields exactly one reference
         // match — and that sole carrier must still be unclaimed. A claimed sole
         // carrier means this candidate has no counterpart, not a different one.
-        if (referenceMatches.length === 1 && !matchedReference.has(referenceMatches[0])) {
-          const matchedIndex = referenceMatches[0];
+        if (referenceMatches.length === 1 && !matchedReference.has(referenceMatches[0]!)) {
+          const matchedIndex = referenceMatches[0]!;
           matchedReference.add(matchedIndex);
           candidateOutcome[position] = {
             status: "matched_fallback",
             candidateIndex: position,
             referenceIndex: matchedIndex,
             candidateKey: identity.key,
-            referenceKey: referenceFallback[matchedIndex].key,
+            referenceKey: referenceFallback[matchedIndex]!.key,
             matchMethod: "fallback",
             keyFields: fallbackFields,
             ambiguity: null,
@@ -304,7 +306,7 @@ export function matchRecords(
       status: "candidate_only",
       candidateIndex,
       referenceIndex: null,
-      candidateKey: candidatePrimary[candidateIndex].key,
+      candidateKey: candidatePrimary[candidateIndex]!.key,
       referenceKey: null,
       matchMethod: null,
       keyFields: primaryKey,

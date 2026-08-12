@@ -20,12 +20,14 @@ function buildFieldChangeRows(analysis: AnalysisResult): FieldChangeRow[] {
 
   for (const record of Object.values(analysis.recordsById)) {
     for (const change of record.changedFields) {
-      if (!kindCounts[change.path]) {
-        kindCounts[change.path] = { emptied: 0, restored: 0, modified: 0 };
+      let counts = kindCounts[change.path];
+      if (!counts) {
+        counts = { emptied: 0, restored: 0, modified: 0 };
+        kindCounts[change.path] = counts;
       }
-      if (change.kind === "emptied") kindCounts[change.path].emptied += 1;
-      else if (change.kind === "restored") kindCounts[change.path].restored += 1;
-      else if (change.kind === "modified") kindCounts[change.path].modified += 1;
+      if (change.kind === "emptied") counts.emptied += 1;
+      else if (change.kind === "restored") counts.restored += 1;
+      else if (change.kind === "modified") counts.modified += 1;
     }
   }
 

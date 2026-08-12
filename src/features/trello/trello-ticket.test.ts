@@ -116,7 +116,7 @@ describe("duplicate detection", () => {
       "fp"
     );
     expect(attempts).toHaveLength(2);
-    expect(attempts[0].attemptedAt).toBe("2026-08-05T00:00:00.000Z");
+    expect(attempts[0]!.attemptedAt).toBe("2026-08-05T00:00:00.000Z");
   });
 });
 

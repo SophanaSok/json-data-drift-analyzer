@@ -50,7 +50,7 @@ describe("field-changes-table sorting", () => {
   it("sorts by changed records descending", () => {
     const sorted = sortFieldChangeRows(rows, "changedRecords", "desc");
     for (let index = 0; index < sorted.length - 1; index += 1) {
-      expect(sorted[index].changedRecords).toBeGreaterThanOrEqual(sorted[index + 1].changedRecords);
+      expect(sorted[index]!.changedRecords).toBeGreaterThanOrEqual(sorted[index + 1]!.changedRecords);
     }
   });
 
@@ -58,8 +58,8 @@ describe("field-changes-table sorting", () => {
     const sorted = sortFieldChangeRows(rows, "severity", "asc");
     const severityOrder = ["pass", "info", "warning", "high", "critical"];
     for (let index = 0; index < sorted.length - 1; index += 1) {
-      expect(severityOrder.indexOf(sorted[index].severity)).toBeLessThanOrEqual(
-        severityOrder.indexOf(sorted[index + 1].severity)
+      expect(severityOrder.indexOf(sorted[index]!.severity)).toBeLessThanOrEqual(
+        severityOrder.indexOf(sorted[index + 1]!.severity)
       );
     }
   });

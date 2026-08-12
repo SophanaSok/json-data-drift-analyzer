@@ -93,7 +93,7 @@ describe("findings: identifiers and action resolution", () => {
 describe("qa: required field missing or blank", () => {
   it("flags an absent required field as critical", () => {
     const report = run([], [{ Other: "x" }]);
-    const finding = of(report, "required_field_missing")[0];
+    const finding = of(report, "required_field_missing")[0]!;
 
     expect(finding.severity).toBe("critical");
     expect(finding.fieldPath).toBe("Id");
@@ -104,7 +104,7 @@ describe("qa: required field missing or blank", () => {
   it("flags a blank required field", () => {
     const report = run([], [{ Id: "   " }]);
     expect(of(report, "required_field_missing")).toHaveLength(1);
-    expect(of(report, "required_field_missing")[0].message).toContain("unpopulated");
+    expect(of(report, "required_field_missing")[0]!.message).toContain("unpopulated");
   });
 
   it("treats a placeholder as unpopulated for reporting", () => {
@@ -131,7 +131,7 @@ describe("qa: configured type and format validation", () => {
 
     const failures = of(report, "field_validation_failure");
     expect(failures).toHaveLength(1);
-    expect(failures[0].fieldPath).toBe("Link");
+    expect(failures[0]!.fieldPath).toBe("Link");
   });
 
   it("reports JSON and URL failures at medium severity", () => {
@@ -175,7 +175,7 @@ describe("qa: configured type and format validation", () => {
       validation: { urlFields: ["Link"] }
     };
     const report = run([], [rec({ Link: "not a url" })], profile);
-    expect(of(report, "field_validation_failure")[0].severity).toBe("high");
+    expect(of(report, "field_validation_failure")[0]!.severity).toBe("high");
   });
 
   it("does not validate blank values — that is the required-field check's job", () => {
@@ -188,7 +188,7 @@ describe("qa: configured type and format validation", () => {
     const profile = withValidation({ urlFields: ["Link"] });
     const report = run([], [rec({ Link: 42 })], profile);
 
-    const failure = of(report, "field_validation_failure")[0];
+    const failure = of(report, "field_validation_failure")[0]!;
     expect(failure.message).toContain("holds a number");
   });
 
@@ -201,7 +201,7 @@ describe("qa: configured type and format validation", () => {
 describe("qa: field regression against a matched reference", () => {
   it("flags a value that was present in the reference and is blank in the candidate", () => {
     const report = run([rec({ Title: "Kept" })], [rec({ Title: "" })]);
-    const regression = of(report, "field_regression")[0];
+    const regression = of(report, "field_regression")[0]!;
 
     expect(regression.severity).toBe("high");
     expect(regression.fieldPath).toBe("Title");
@@ -213,15 +213,15 @@ describe("qa: field regression against a matched reference", () => {
   it("escalates a regression on a hard-required field to critical", () => {
     const profile: SourceProfile = { ...genericProfile, hardRequiredFields: ["Id", "Title"] };
     const report = run([rec({ Title: "Kept" })], [rec({ Title: "" })], profile);
-    expect(of(report, "field_regression")[0].severity).toBe("critical");
+    expect(of(report, "field_regression")[0]!.severity).toBe("critical");
   });
 
   it("marks a regression backfill_allowed only when the profile permits the field", () => {
     const permitted: SourceProfile = { ...genericProfile, safeBackfillFields: ["Title"] };
-    expect(of(run([rec({ Title: "Kept" })], [rec({ Title: "" })], permitted), "field_regression")[0].recommendedAction).toBe(
+    expect(of(run([rec({ Title: "Kept" })], [rec({ Title: "" })], permitted), "field_regression")[0]!.recommendedAction).toBe(
       "backfill_allowed"
     );
-    expect(of(run([rec({ Title: "Kept" })], [rec({ Title: "" })]), "field_regression")[0].recommendedAction).toBe(
+    expect(of(run([rec({ Title: "Kept" })], [rec({ Title: "" })]), "field_regression")[0]!.recommendedAction).toBe(
       "report_only"
     );
   });
@@ -230,7 +230,7 @@ describe("qa: field regression against a matched reference", () => {
     // isEmpty says blank (so it is a regression); rule 4's strict gate says not blank.
     const permitted: SourceProfile = { ...genericProfile, safeBackfillFields: ["Title"] };
     const report = run([rec({ Title: "Kept" })], [rec({ Title: "N/A" })], permitted);
-    const regression = of(report, "field_regression")[0];
+    const regression = of(report, "field_regression")[0]!;
 
     expect(regression).toBeDefined();
     expect(regression.recommendedAction).toBe("manual_review");
@@ -256,7 +256,7 @@ describe("qa: field regression against a matched reference", () => {
 describe("qa: field conflict against a matched reference", () => {
   it("flags two differing non-blank values at medium severity", () => {
     const report = run([rec({ Title: "Old" })], [rec({ Title: "New" })]);
-    const conflict = of(report, "field_conflict")[0];
+    const conflict = of(report, "field_conflict")[0]!;
 
     expect(conflict.severity).toBe("medium");
     expect(conflict.referenceValue).toBe("Old");
@@ -267,7 +267,7 @@ describe("qa: field conflict against a matched reference", () => {
   it("never recommends backfill for a conflict, even on a permitted field", () => {
     const permitted: SourceProfile = { ...genericProfile, safeBackfillFields: ["Title"] };
     const report = run([rec({ Title: "Old" })], [rec({ Title: "New" })], permitted);
-    expect(of(report, "field_conflict")[0].recommendedAction).toBe("manual_review");
+    expect(of(report, "field_conflict")[0]!.recommendedAction).toBe("manual_review");
   });
 
   it("does not flag identical values", () => {
@@ -317,7 +317,7 @@ describe("qa: field conflict against a matched reference", () => {
 describe("qa: schema field disappearance", () => {
   it("flags a field present in the reference schema and absent from every candidate record", () => {
     const report = run([rec({ Gone: "value" })], [rec()]);
-    const finding = of(report, "schema_field_missing")[0];
+    const finding = of(report, "schema_field_missing")[0]!;
 
     expect(finding.severity).toBe("high");
     expect(finding.fieldPath).toBe("Gone");
@@ -333,7 +333,7 @@ describe("qa: schema field disappearance", () => {
   it("downgrades an excluded field to informational", () => {
     const profile: SourceProfile = { ...genericProfile, excludedFields: ["Gone"] };
     const report = run([rec({ Gone: "v" })], [rec()], profile);
-    const finding = of(report, "schema_field_missing")[0];
+    const finding = of(report, "schema_field_missing")[0]!;
 
     expect(finding.severity).toBe("info");
     expect(finding.recommendedAction).toBe("exclude");
@@ -343,7 +343,7 @@ describe("qa: schema field disappearance", () => {
 describe("qa: duplicate identity and dedupe keys", () => {
   it("flags duplicates on the candidate side", () => {
     const report = run([], [rec(), rec()]);
-    const duplicate = of(report, "duplicate_identity_key")[0];
+    const duplicate = of(report, "duplicate_identity_key")[0]!;
 
     expect(duplicate.severity).toBe("high");
     expect(duplicate.evidence.side).toBe("candidate");
@@ -353,7 +353,7 @@ describe("qa: duplicate identity and dedupe keys", () => {
 
   it("flags duplicates on the reference side", () => {
     const report = run([rec(), rec()], []);
-    expect(of(report, "duplicate_identity_key")[0].evidence.side).toBe("reference");
+    expect(of(report, "duplicate_identity_key")[0]!.evidence.side).toBe("reference");
   });
 
   it("reports once when primaryKey and dedupeKey are identical", () => {
@@ -378,7 +378,7 @@ describe("qa: duplicate identity and dedupe keys", () => {
 describe("qa: record-count anomaly", () => {
   it("reports a count difference at informational severity with no configured tolerance", () => {
     const report = run([rec(), rec({ Id: "b" })], [rec()]);
-    const anomaly = of(report, "record_count_anomaly")[0];
+    const anomaly = of(report, "record_count_anomaly")[0]!;
 
     expect(anomaly.severity).toBe("info");
     expect(anomaly.candidateValue).toBe(1);
@@ -391,7 +391,7 @@ describe("qa: record-count anomaly", () => {
   it("escalates when drift exceeds a configured tolerance", () => {
     const profile: SourceProfile = { ...genericProfile, recordCountTolerance: 0.1 };
     const report = run([rec(), rec({ Id: "b" })], [rec()], profile);
-    const anomaly = of(report, "record_count_anomaly")[0];
+    const anomaly = of(report, "record_count_anomaly")[0]!;
 
     expect(anomaly.severity).toBe("high");
     expect(anomaly.evidence.exceedsTolerance).toBe(true);
@@ -400,7 +400,7 @@ describe("qa: record-count anomaly", () => {
   it("stays informational when drift is inside the tolerance", () => {
     const profile: SourceProfile = { ...genericProfile, recordCountTolerance: 0.9 };
     const report = run([rec(), rec({ Id: "b" })], [rec()], profile);
-    expect(of(report, "record_count_anomaly")[0].severity).toBe("info");
+    expect(of(report, "record_count_anomaly")[0]!.severity).toBe("info");
   });
 
   it("reports nothing when the counts agree", () => {
@@ -415,14 +415,14 @@ describe("qa: ambiguous or invalid identity", () => {
     const issues = of(report, "identity_match_issue");
 
     expect(issues.length).toBeGreaterThan(0);
-    expect(issues[0].severity).toBe("high");
-    expect(issues[0].recommendedAction).toBe("manual_review");
-    expect(issues[0].evidence.status).toBe("ambiguous_primary");
+    expect(issues[0]!.severity).toBe("high");
+    expect(issues[0]!.recommendedAction).toBe("manual_review");
+    expect(issues[0]!.evidence.status).toBe("ambiguous_primary");
   });
 
   it("recommends excluding a record that cannot be keyed", () => {
     const report = run([], [{ Id: "  " }]);
-    const invalid = of(report, "identity_match_issue")[0];
+    const invalid = of(report, "identity_match_issue")[0]!;
 
     expect(invalid.evidence.status).toBe("invalid_identity");
     expect(invalid.recommendedAction).toBe("exclude");
@@ -554,15 +554,15 @@ describe("qa: real Bellingham fixtures", () => {
     // Candidate holds "[]" — a non-blank string — so rule 3 keeps it out of backfill.
     const documentConflicts = of(report, "field_conflict").filter((f) => f.fieldPath === "BidDocuments");
     expect(documentConflicts).toHaveLength(2);
-    expect(documentConflicts[0].candidateValue).toBe("[]");
-    expect(documentConflicts[0].recommendedAction).toBe("manual_review");
+    expect(documentConflicts[0]!.candidateValue).toBe("[]");
+    expect(documentConflicts[0]!.recommendedAction).toBe("manual_review");
   });
 
   it("reports the single genuine description edit as a conflict", () => {
     const descriptionConflicts = of(report, "field_conflict").filter((f) => f.fieldPath === "Description");
     expect(descriptionConflicts).toHaveLength(1);
-    expect(String(descriptionConflicts[0].referenceValue)).toContain("July 29");
-    expect(String(descriptionConflicts[0].candidateValue)).toContain("August 4th");
+    expect(String(descriptionConflicts[0]!.referenceValue)).toContain("July 29");
+    expect(String(descriptionConflicts[0]!.candidateValue)).toContain("August 4th");
   });
 
   it("finds no required-field, schema, duplicate, or identity problems", () => {
@@ -600,9 +600,9 @@ describe("qa: a record that disappeared from the candidate", () => {
 
     const missing = of(report, "record_missing_from_candidate");
     expect(missing).toHaveLength(1);
-    expect(missing[0].severity).toBe("high");
-    expect(missing[0].recordKey).toContain("dropped");
-    expect(missing[0].message).toContain("absent from the candidate");
+    expect(missing[0]!.severity).toBe("high");
+    expect(missing[0]!.recordKey).toContain("dropped");
+    expect(missing[0]!.message).toContain("absent from the candidate");
   });
 
   it("is not reported when every reference record has a counterpart", () => {
@@ -616,7 +616,7 @@ describe("qa: a record that disappeared from the candidate", () => {
 
     expect(missing).toHaveLength(1);
     const dropped = referenceRecords.find(
-      (record) => record.BidURL && missing[0].recordKey?.includes(String(record.BidURL))
+      (record) => record.BidURL && missing[0]!.recordKey?.includes(String(record.BidURL))
     );
     expect(dropped?.ProjectCode).toBe("3B-2018");
   });
@@ -631,10 +631,10 @@ describe("qa: systemic field regression", () => {
     const systemic = of(report, "systemic_field_regression");
 
     expect(systemic).toHaveLength(1);
-    expect(systemic[0].fieldPath).toBe("Note");
-    expect(systemic[0].severity).toBe("high");
-    expect(systemic[0].message).toContain("all 2 matched record(s)");
-    expect(systemic[0].evidence.referencePopulated).toBe(2);
+    expect(systemic[0]!.fieldPath).toBe("Note");
+    expect(systemic[0]!.severity).toBe("high");
+    expect(systemic[0]!.message).toContain("all 2 matched record(s)");
+    expect(systemic[0]!.evidence.referencePopulated).toBe(2);
   });
 
   it("does not fire below total loss — partial loss stays per-record only", () => {
@@ -665,8 +665,8 @@ describe("qa: systemic field regression", () => {
 
     const perRecord = of(report, "field_regression").filter((finding) => finding.fieldPath === "Note");
     expect(perRecord).toHaveLength(500);
-    expect(perRecord[0].evidence.sampledExemplar).toBe(true);
-    expect(perRecord[0].evidence.totalRegressedCount).toBe(size);
+    expect(perRecord[0]!.evidence.sampledExemplar).toBe(true);
+    expect(perRecord[0]!.evidence.totalRegressedCount).toBe(size);
 
     const systemic = of(report, "systemic_field_regression").find((finding) => finding.fieldPath === "Note");
     // The exact counts survive on the dataset-level finding.

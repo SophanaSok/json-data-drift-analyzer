@@ -182,7 +182,7 @@ describe("ticket template: required content", () => {
     expect(markdown).toContain("## Evidence");
     expect(markdown).toContain("Expected (reference):");
     expect(markdown).toContain("Actual (candidate):");
-    expect(markdown).toContain(examples[0].recordKey);
+    expect(markdown).toContain(examples[0]!.recordKey);
   });
 
   it("states business impact", () => {
@@ -268,7 +268,7 @@ describe("ticket template: safety", () => {
 
   it("never includes a full record payload", () => {
     // Only the named field's value can appear, and only truncated.
-    const record = candidateRecords[0];
+    const record = candidateRecords[0]!;
     expect(draft.markdownDescription).not.toContain(JSON.stringify(record));
     expect(draft.markdownDescription).not.toContain(String(record.Description));
   });

@@ -89,7 +89,7 @@ const VALIDATORS: Record<ValidationKind, (value: string) => ValidationOutcome> =
       : { valid: true, reason: "" },
   emailFields: (value) => {
     const parts = value.split("@");
-    const shaped = parts.length === 2 && parts[0].length > 0 && parts[1].includes(".") && !/\s/.test(value);
+    const shaped = parts.length === 2 && parts[0]!.length > 0 && parts[1]!.includes(".") && !/\s/.test(value);
     return shaped ? { valid: true, reason: "" } : { valid: false, reason: "not shaped like an email address" };
   },
   phoneFields: (value) => {
@@ -388,7 +388,7 @@ export function runQa(
 
   // ---- Record level: required fields and configured validation ------------------
   candidateRecords.forEach((record, candidateIndex) => {
-    const recordKey = candidateKeys[candidateIndex];
+    const recordKey = candidateKeys[candidateIndex] ?? null;
 
     for (const field of profile.hardRequiredFields) {
       const present = field in record;
@@ -477,9 +477,9 @@ export function runQa(
   // emitted here — whether a field's loss is systemic is only known once every
   // pair has been counted, and systemic fields must be sampled (see below).
   for (const pair of matchedPairs) {
-    const candidate = candidateRecords[pair.candidateIndex as number];
-    const reference = referenceRecords[pair.referenceIndex as number];
-    const recordKey = candidateKeys[pair.candidateIndex as number] ?? referenceKeys[pair.referenceIndex as number];
+    const candidate = candidateRecords[pair.candidateIndex as number]!;
+    const reference = referenceRecords[pair.referenceIndex as number]!;
+    const recordKey = candidateKeys[pair.candidateIndex as number] ?? referenceKeys[pair.referenceIndex as number] ?? null;
     const comparableFields = [...new Set([...Object.keys(reference), ...Object.keys(candidate)])].sort();
 
     for (const field of comparableFields) {
@@ -551,9 +551,9 @@ export function runQa(
 
   for (const pair of matchedPairs) {
     if (remainingBudget === 0) break;
-    const candidate = candidateRecords[pair.candidateIndex as number];
-    const reference = referenceRecords[pair.referenceIndex as number];
-    const recordKey = candidateKeys[pair.candidateIndex as number] ?? referenceKeys[pair.referenceIndex as number];
+    const candidate = candidateRecords[pair.candidateIndex as number]!;
+    const reference = referenceRecords[pair.referenceIndex as number]!;
+    const recordKey = candidateKeys[pair.candidateIndex as number] ?? referenceKeys[pair.referenceIndex as number] ?? null;
 
     for (const [field, budget] of regressionBudgets) {
       if (budget.left === 0) continue;

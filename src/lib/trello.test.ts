@@ -28,7 +28,7 @@ describe("postCard: success", () => {
     const fetchImpl = mockFetch({ jsonBody: { id: "card-1", shortUrl: "u" } });
     await postCard(CARD, CREDENTIALS, { fetchImpl: fetchImpl as unknown as typeof fetch });
 
-    const [url, init] = fetchImpl.mock.calls[0];
+    const [url, init] = fetchImpl.mock.calls[0]!;
     const headers = (init ?? {}).headers as Record<string, string>;
 
     expect(url).toBe("https://api.trello.com/1/cards");
@@ -43,7 +43,7 @@ describe("postCard: success", () => {
       fetchImpl: fetchImpl as unknown as typeof fetch
     });
 
-    const [, init] = fetchImpl.mock.calls[0];
+    const [, init] = fetchImpl.mock.calls[0]!;
     expect(JSON.parse(init?.body as string)).toEqual({
       idList: "list-1",
       name: "Ticket title",
@@ -56,7 +56,7 @@ describe("postCard: success", () => {
     const fetchImpl = mockFetch({ jsonBody: { id: "c", shortUrl: "u" } });
     await postCard(CARD, CREDENTIALS, { fetchImpl: fetchImpl as unknown as typeof fetch });
 
-    expect(JSON.parse(fetchImpl.mock.calls[0][1]?.body as string)).not.toHaveProperty("idLabels");
+    expect(JSON.parse(fetchImpl.mock.calls[0]![1]?.body as string)).not.toHaveProperty("idLabels");
   });
 
   it("posts exactly once per call", async () => {

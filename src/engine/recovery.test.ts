@@ -94,7 +94,7 @@ describe("recovery: profile gates which fields may be backfilled", () => {
 describe("recovery: successful safe backfill", () => {
   it("fills a blank candidate field from the matched reference", () => {
     const result = recover([rec({ Note: "from reference" })], [rec({ Note: "" })]);
-    const record = result.recovered[0];
+    const record = result.recovered[0]!;
 
     expect(record.record.Note).toBe("from reference");
     expect(record.backfilledFields).toEqual(["Note"]);
@@ -105,7 +105,7 @@ describe("recovery: successful safe backfill", () => {
 
   it("fills an absent field as well as a blank one", () => {
     const result = recover([rec({ Note: "v" })], [{ Id: "a" }]);
-    expect(result.recovered[0].record.Note).toBe("v");
+    expect(result.recovered[0]!.record.Note).toBe("v");
   });
 
   it("backfills through a fallback match", () => {
@@ -114,20 +114,20 @@ describe("recovery: successful safe backfill", () => {
     const candidate = [{ Id: "a", Url: "https://a.test/2", Note: "" }];
 
     const result = recover(reference, candidate, profile);
-    expect(result.recovered[0].matchStatus).toBe("matched_fallback");
-    expect(result.recovered[0].record.Note).toBe("v");
+    expect(result.recovered[0]!.matchStatus).toBe("matched_fallback");
+    expect(result.recovered[0]!.record.Note).toBe("v");
   });
 
   it("does not backfill from a blank reference value", () => {
     const result = recover([rec({ Note: "" })], [rec({ Note: "" })]);
-    expect(result.recovered[0].backfilledFields).toEqual([]);
+    expect(result.recovered[0]!.backfilledFields).toEqual([]);
     expect(result.containsReferenceDerivedValues).toBe(false);
   });
 
   it("does not backfill a field the profile does not list", () => {
     const result = recover([rec({ Other: "v" })], [rec({ Other: "" })]);
-    expect(result.recovered[0].backfilledFields).toEqual([]);
-    expect(result.recovered[0].record.Other).toBe("");
+    expect(result.recovered[0]!.backfilledFields).toEqual([]);
+    expect(result.recovered[0]!.record.Other).toBe("");
   });
 });
 
@@ -135,20 +135,20 @@ describe("recovery: never overwrites a non-empty candidate value", () => {
   it("leaves a populated candidate value untouched", () => {
     const result = recover([rec({ Note: "reference" })], [rec({ Note: "candidate" })]);
 
-    expect(result.recovered[0].record.Note).toBe("candidate");
-    expect(result.recovered[0].backfilledFields).toEqual([]);
+    expect(result.recovered[0]!.record.Note).toBe("candidate");
+    expect(result.recovered[0]!.backfilledFields).toEqual([]);
     expect(result.provenance).toHaveLength(0);
   });
 
   it("treats a placeholder as a value, not a blank — rule 3 protects it", () => {
     const result = recover([rec({ Note: "reference" })], [rec({ Note: "N/A" })]);
-    expect(result.recovered[0].record.Note).toBe("N/A");
-    expect(result.recovered[0].backfilledFields).toEqual([]);
+    expect(result.recovered[0]!.record.Note).toBe("N/A");
+    expect(result.recovered[0]!.backfilledFields).toEqual([]);
   });
 
   it("treats a JSON-encoded empty array as a value, not a blank", () => {
     const result = recover([rec({ Note: '[{"a":1}]' })], [rec({ Note: "[]" })]);
-    expect(result.recovered[0].record.Note).toBe("[]");
+    expect(result.recovered[0]!.record.Note).toBe("[]");
   });
 });
 
@@ -157,8 +157,8 @@ describe("recovery: never backfills ambiguous or unkeyable matches", () => {
     const result = recover([rec({ Note: "v" }), rec({ Note: "v" })], [rec({ Note: "" })]);
 
     expect(result.recovered).toHaveLength(0);
-    expect(result.excluded[0].reason).toBe("ambiguous_identity");
-    expect(result.excluded[0].detail).toContain("ambiguous_primary");
+    expect(result.excluded[0]!.reason).toBe("ambiguous_identity");
+    expect(result.excluded[0]!.detail).toContain("ambiguous_primary");
     expect(result.provenance).toHaveLength(0);
   });
 
@@ -166,8 +166,8 @@ describe("recovery: never backfills ambiguous or unkeyable matches", () => {
     const result = recover([rec({ Note: "v" })], [{ Id: "   ", Note: "" }]);
 
     expect(result.recovered).toHaveLength(0);
-    expect(result.excluded[0].reason).toBe("invalid_identity");
-    expect(result.excluded[0].offendingFields).toContain("Id");
+    expect(result.excluded[0]!.reason).toBe("invalid_identity");
+    expect(result.excluded[0]!.offendingFields).toContain("Id");
   });
 
   it("cites the QA findings that justified an unkeyable record's exclusion", () => {
@@ -181,7 +181,7 @@ describe("recovery: never backfills ambiguous or unkeyable matches", () => {
     });
     const result = runRecovery([{ Id: "   ", Note: "" }], [rec({ Note: "v" })], genericProfile, matchReport, qa.findings, RUNS);
 
-    const excluded = result.excluded[0];
+    const excluded = result.excluded[0]!;
     expect(excluded.reason).toBe("invalid_identity");
     expect(excluded.findingIds.length).toBeGreaterThan(0);
 
@@ -210,8 +210,8 @@ describe("recovery: prohibited date-sensitive fields", () => {
     };
     const result = recover(reference, candidate, withheldProfile);
 
-    expect(result.recovered[0].record.DueDate).toBe("");
-    expect(result.recovered[0].backfilledFields).toEqual([]);
+    expect(result.recovered[0]!.record.DueDate).toBe("");
+    expect(result.recovered[0]!.backfilledFields).toEqual([]);
     expect(result.summary.dateSensitiveFieldsWithheld).toEqual(["DueDate"]);
   });
 
@@ -224,7 +224,7 @@ describe("recovery: prohibited date-sensitive fields", () => {
     const result = recover(reference, candidate, profile);
     const entry = result.provenance.find((item) => item.field === "DueDate");
 
-    expect(result.recovered[0].record.DueDate).toBe("8/4/2026 11:00 AM");
+    expect(result.recovered[0]!.record.DueDate).toBe("8/4/2026 11:00 AM");
     expect(entry?.ruleId).toContain("rule6");
     expect(entry?.reason).toContain("rule 6");
   });
@@ -249,7 +249,7 @@ describe("recovery: candidate-only record policy", () => {
     const result = recover(reference, candidate);
 
     expect(result.candidateOnly).toHaveLength(1);
-    expect(result.candidateOnly[0].policy).toBe("keep");
+    expect(result.candidateOnly[0]!.policy).toBe("keep");
     expect(result.recovered.map((r) => r.candidateIndex)).toContain(1);
     expect(result.summary.excludedByReason.candidate_only_policy).toBe(0);
   });
@@ -258,7 +258,7 @@ describe("recovery: candidate-only record policy", () => {
     const profile: SourceProfile = { ...genericProfile, candidateOnlyPolicy: "exclude" };
     const result = recover(reference, candidate, profile);
 
-    expect(result.candidateOnly[0].policy).toBe("exclude");
+    expect(result.candidateOnly[0]!.policy).toBe("exclude");
     expect(result.summary.excludedByReason.candidate_only_policy).toBe(1);
     expect(result.recovered.map((r) => r.candidateIndex)).not.toContain(1);
   });
@@ -284,8 +284,8 @@ describe("recovery: hard-required exclusion applied after recovery", () => {
     const result = recover([rec({ Title: "t" })], [rec({ Title: "" })], profile);
 
     expect(result.recovered).toHaveLength(0);
-    expect(result.excluded[0].reason).toBe("hard_required_field_missing");
-    expect(result.excluded[0].offendingFields).toEqual(["Title"]);
+    expect(result.excluded[0]!.reason).toBe("hard_required_field_missing");
+    expect(result.excluded[0]!.offendingFields).toEqual(["Title"]);
   });
 
   it("keeps a record whose required field was repaired by the backfill", () => {
@@ -297,8 +297,8 @@ describe("recovery: hard-required exclusion applied after recovery", () => {
     const result = recover([rec({ Title: "t" })], [rec({ Title: "" })], profile);
 
     expect(result.excluded).toHaveLength(0);
-    expect(result.recovered[0].record.Title).toBe("t");
-    expect(result.recovered[0].backfilledFields).toEqual(["Title"]);
+    expect(result.recovered[0]!.record.Title).toBe("t");
+    expect(result.recovered[0]!.backfilledFields).toEqual(["Title"]);
   });
 
   it("evaluates the requirement after recovery, not before", () => {
@@ -321,7 +321,7 @@ describe("recovery: hard-required exclusion applied after recovery", () => {
 describe("recovery: provenance and rule 9", () => {
   it("labels every output value, defaulting unchanged fields to candidate", () => {
     const result = recover([rec({ Note: "from reference" })], [rec({ Note: "" })]);
-    const audit = auditRecoveredRecord(result, result.recovered[0].recordKey);
+    const audit = auditRecoveredRecord(result, result.recovered[0]!.recordKey);
 
     expect(audit?.fields.Note).toBe("reference_backfill");
     expect(audit?.fields.Id).toBe("candidate");
@@ -331,7 +331,7 @@ describe("recovery: provenance and rule 9", () => {
 
   it("never presents a reference-derived value as candidate-scraped", () => {
     const result = recover([rec({ Note: "from reference" })], [rec({ Note: "" })]);
-    const key = result.recovered[0].recordKey;
+    const key = result.recovered[0]!.recordKey;
 
     expect(resolveFieldProvenance(key, "Note", result.provenance)).toBe("reference_backfill");
     expect(result.containsReferenceDerivedValues).toBe(true);
@@ -340,12 +340,12 @@ describe("recovery: provenance and rule 9", () => {
   it("reports no reference-derived values when nothing was backfilled", () => {
     const result = recover([rec({ Note: "r" })], [rec({ Note: "c" })]);
     expect(result.containsReferenceDerivedValues).toBe(false);
-    expect(auditRecoveredRecord(result, result.recovered[0].recordKey)?.containsReferenceDerivedValues).toBe(false);
+    expect(auditRecoveredRecord(result, result.recovered[0]!.recordKey)?.containsReferenceDerivedValues).toBe(false);
   });
 
   it("carries the full rule 7 audit tuple on every entry", () => {
     const result = recover([rec({ Note: "from reference" })], [rec({ Note: "" })]);
-    const entry = result.provenance[0];
+    const entry = result.provenance[0]!;
 
     expect(entry.sourceRun).toBe("candidate.json");
     expect(entry.referenceRun).toBe("reference.json");
@@ -363,16 +363,16 @@ describe("recovery: provenance and rule 9", () => {
   it("records a manual override as user-actioned and distinct from backfill", () => {
     const matchReport = matchRecords([rec({ Note: "r" })], [rec({ Note: "c" })], genericProfile);
     const qa = runQa([rec({ Note: "r" })], [rec({ Note: "c" })], genericProfile, { matchReport, generatedAt: FIXED_NOW });
-    const key = matchReport.results[0].candidateKey as string;
+    const key = matchReport.results[0]!.candidateKey as string;
 
     const result = runRecovery([rec({ Note: "c" })], [rec({ Note: "r" })], genericProfile, matchReport, qa.findings, {
       ...RUNS,
       manualOverrides: [{ recordKey: key, field: "Note", value: "chosen", reason: "operator decision" }]
     });
 
-    const entry = result.provenance[0];
-    expect(result.recovered[0].record.Note).toBe("chosen");
-    expect(result.recovered[0].overriddenFields).toEqual(["Note"]);
+    const entry = result.provenance[0]!;
+    expect(result.recovered[0]!.record.Note).toBe("chosen");
+    expect(result.recovered[0]!.overriddenFields).toEqual(["Note"]);
     expect(entry.source).toBe("manual_override");
     expect(entry.actor).toBe("user");
     expect(entry.reason).toBe("operator decision");
@@ -387,7 +387,7 @@ describe("recovery: provenance and rule 9", () => {
 
     const matchReport = matchRecords(reference, candidate, profile);
     const qa = runQa(reference, candidate, profile, { matchReport, generatedAt: FIXED_NOW });
-    const key = matchReport.results[0].candidateKey as string;
+    const key = matchReport.results[0]!.candidateKey as string;
 
     const result = runRecovery(candidate, reference, profile, matchReport, qa.findings, {
       ...RUNS,
@@ -396,7 +396,7 @@ describe("recovery: provenance and rule 9", () => {
 
     // Two events for one field; the later one is what the value actually is.
     expect(result.provenance.filter((entry) => entry.field === "Note")).toHaveLength(2);
-    expect(result.recovered[0].record.Note).toBe("operator value");
+    expect(result.recovered[0]!.record.Note).toBe("operator value");
     expect(resolveFieldProvenance(key, "Note", result.provenance)).toBe("manual_override");
     expect(auditRecoveredRecord(result, key)?.fields.Note).toBe("manual_override");
   });
@@ -415,14 +415,14 @@ describe("recovery: provenance and rule 9", () => {
     const qa = runQa(reference, candidate, profile, { matchReport, generatedAt: FIXED_NOW });
     const result = runRecovery(candidate, reference, profile, matchReport, qa.findings, RUNS);
 
-    expect(result.recovered[0].matchStatus).toBe("matched_fallback");
-    expect(result.provenance[0].matchingKey).toEqual(["Id"]);
+    expect(result.recovered[0]!.matchStatus).toBe("matched_fallback");
+    expect(result.provenance[0]!.matchingKey).toEqual(["Id"]);
   });
 
   it("refuses a manual override with a blank reason", () => {
     const matchReport = matchRecords([rec()], [rec()], genericProfile);
     const qa = runQa([rec()], [rec()], genericProfile, { matchReport, generatedAt: FIXED_NOW });
-    const key = matchReport.results[0].candidateKey as string;
+    const key = matchReport.results[0]!.candidateKey as string;
 
     expect(() =>
       runRecovery([rec()], [rec()], genericProfile, matchReport, qa.findings, {
@@ -434,7 +434,7 @@ describe("recovery: provenance and rule 9", () => {
 
   it("builds a total field map for a record", () => {
     const result = recover([rec({ Note: "from reference" })], [rec({ Note: "" })]);
-    const record = result.recovered[0];
+    const record = result.recovered[0]!;
     const provenance = buildRecordProvenance(record.recordKey, record.record, result.provenance);
 
     expect(Object.keys(provenance.fields).sort()).toEqual(Object.keys(record.record).sort());
@@ -456,11 +456,11 @@ describe("recovery: immutability", () => {
     const candidate = [rec({ Nested: { a: 1 } })];
     const result = recover([rec({ Note: "v" })], candidate);
 
-    expect(result.recovered[0].record).not.toBe(candidate[0]);
-    expect(result.recovered[0].record.Nested).not.toBe(candidate[0].Nested);
+    expect(result.recovered[0]!.record).not.toBe(candidate[0]);
+    expect(result.recovered[0]!.record.Nested).not.toBe(candidate[0]!.Nested);
 
-    (result.recovered[0].record.Nested as { a: number }).a = 99;
-    expect((candidate[0].Nested as { a: number }).a).toBe(1);
+    (result.recovered[0]!.record.Nested as { a: number }).a = 99;
+    expect((candidate[0]!.Nested as { a: number }).a).toBe(1);
   });
 });
 
@@ -586,7 +586,7 @@ describe("recovery: applying overrides to a finished result", () => {
   // and its audit trail move together — the decision log and the export can never
   // silently disagree.
   const baseResult = () => recover([rec({ Note: "from reference" })], [rec({ Note: "" })]);
-  const key = () => baseResult().recovered[0].recordKey;
+  const key = () => baseResult().recovered[0]!.recordKey;
 
   it("applies an override to the recovered record with full provenance", () => {
     const result = baseResult();
@@ -599,7 +599,7 @@ describe("recovery: applying overrides to a finished result", () => {
     expect(applied.appliedCount).toBe(1);
     expect(applied.unapplied).toEqual([]);
 
-    const record = applied.recovery.recovered[0];
+    const record = applied.recovery.recovered[0]!;
     expect(record.record.Note).toBe("operator value");
     expect(record.overriddenFields).toEqual(["Note"]);
     expect(applied.recovery.summary.overriddenFieldCount).toBe(1);
@@ -632,7 +632,7 @@ describe("recovery: applying overrides to a finished result", () => {
 
     expect(applied.appliedCount).toBe(0);
     expect(applied.unapplied).toHaveLength(1);
-    expect(applied.unapplied[0].reason).toMatch(/No recovered record/);
+    expect(applied.unapplied[0]!.reason).toMatch(/No recovered record/);
     expect(applied.recovery.unappliedOverrides).toHaveLength(1);
   });
 
@@ -644,8 +644,8 @@ describe("recovery: applying overrides to a finished result", () => {
     );
 
     expect(applied.appliedCount).toBe(0);
-    expect(applied.unapplied[0].reason).toMatch(/hard-required/);
-    expect(applied.recovery.recovered[0].record.Id).toBe("a");
+    expect(applied.unapplied[0]!.reason).toMatch(/hard-required/);
+    expect(applied.recovery.recovered[0]!.record.Id).toBe("a");
   });
 
   it("refuses an override with a blank reason", () => {

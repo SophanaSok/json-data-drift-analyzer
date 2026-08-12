@@ -85,7 +85,7 @@ describe("lane classification", () => {
           ...review.qa,
           findings: [
             {
-              ...review.qa.findings[0],
+              ...review.qa.findings[0]!,
               recordKey: "k",
               fieldPath: "F",
               category: "field_regression",
@@ -98,8 +98,8 @@ describe("lane classification", () => {
       BELLINGHAM_PROCUREWARE
     );
 
-    expect(noReference[0].lane).toBe("ineligible");
-    expect(noReference[0].reason).toContain("nothing to decide between");
+    expect(noReference[0]!.lane).toBe("ineligible");
+    expect(noReference[0]!.reason).toContain("nothing to decide between");
   });
 });
 
@@ -196,7 +196,7 @@ describe("the log is append-only", () => {
   it("appends rather than replacing", () => {
     const log = appendDecision(appendDecision([], first), second);
     expect(log).toHaveLength(2);
-    expect(log[0].reason).toBe("first call");
+    expect(log[0]!.reason).toBe("first call");
   });
 
   it("does not mutate the log it was given", () => {
@@ -386,13 +386,13 @@ describe("bulk decisions", () => {
   });
 
   it("skips ineligible cells and reports them rather than dropping them", () => {
-    const ineligible: CellClassification = { ...dueDateCells[0], lane: "ineligible", recordKey: "no-reference" };
-    const result = createBulkDecisions([dueDateCells[0], ineligible], { action: "backfill", reason: "r" }, context);
+    const ineligible: CellClassification = { ...dueDateCells[0]!, lane: "ineligible", recordKey: "no-reference" };
+    const result = createBulkDecisions([dueDateCells[0]!, ineligible], { action: "backfill", reason: "r" }, context);
 
     expect(result.applied).toBe(1);
     expect(result.skipped).toHaveLength(1);
-    expect(result.skipped[0].recordKey).toBe("no-reference");
-    expect(result.skipped[0].reason).toContain("No reference value");
+    expect(result.skipped[0]!.recordKey).toBe("no-reference");
+    expect(result.skipped[0]!.reason).toContain("No reference value");
   });
 
   it("appends the whole batch without disturbing what came before", () => {
@@ -408,14 +408,14 @@ describe("bulk decisions", () => {
     const log = appendDecisions([existing], result.decisions);
 
     expect(log).toHaveLength(4);
-    expect(log[0].reason).toBe("earlier call");
+    expect(log[0]!.reason).toBe("earlier call");
     expect(new Set(log.map((entry) => entry.id)).size).toBe(4);
   });
 
   it("supersedes an earlier per-cell decision without erasing it", () => {
     const single = createDecision(
-      { recordKey: dueDateCells[0].recordKey, field: "DueDate", action: "keep_candidate", reason: "first" },
-      dueDateCells[0],
+      { recordKey: dueDateCells[0]!.recordKey, field: "DueDate", action: "keep_candidate", reason: "first" },
+      dueDateCells[0]!,
       context
     );
     const bulk = createBulkDecisions(dueDateCells.slice(0, 1), { action: "backfill", reason: "bulk override" }, {
@@ -426,8 +426,8 @@ describe("bulk decisions", () => {
     const resolved = resolveDecisions(log);
 
     expect(log).toHaveLength(2);
-    expect(resolved.get(cellId(dueDateCells[0].recordKey, "DueDate"))?.reason).toBe("bulk override");
-    expect(decisionHistory(log, dueDateCells[0].recordKey, "DueDate")).toHaveLength(2);
+    expect(resolved.get(cellId(dueDateCells[0]!.recordKey, "DueDate"))?.reason).toBe("bulk override");
+    expect(decisionHistory(log, dueDateCells[0]!.recordKey, "DueDate")).toHaveLength(2);
   });
 });
 
@@ -493,20 +493,20 @@ describe("decisions on fallback-matched records", () => {
   const fallbackContext = { review: fallbackReview, profile, timestamp: FIXED_NOW, sequence: 0 };
 
   it("is the scenario: the record matched on the fallback key", () => {
-    expect(fallbackReview.match.results[0].status).toBe("matched_fallback");
-    expect(fallbackReview.recovery.recovered[0].matchedKeyFields).toEqual(["AgentID", "ProjectCode"]);
+    expect(fallbackReview.match.results[0]!.status).toBe("matched_fallback");
+    expect(fallbackReview.recovery.recovered[0]!.matchedKeyFields).toEqual(["AgentID", "ProjectCode"]);
   });
 
   it("keys the recovered record by the identity QA and cells use", () => {
     const recordKeys = new Set(fallbackCells.map((cell) => cell.recordKey));
-    expect(recordKeys.has(fallbackReview.recovery.recovered[0].recordKey)).toBe(true);
+    expect(recordKeys.has(fallbackReview.recovery.recovered[0]!.recordKey)).toBe(true);
   });
 
   it("classifies its auto-backfilled cells as auto, not review", () => {
     const titleCell = fallbackCells.find((cell) => cell.field === "Title")!;
     const bidTypeCell = fallbackCells.find((cell) => cell.field === "BidType")!;
 
-    expect(fallbackReview.recovery.recovered[0].backfilledFields).toContain("Title");
+    expect(fallbackReview.recovery.recovered[0]!.backfilledFields).toContain("Title");
     expect(titleCell.lane).toBe("auto");
     expect(bidTypeCell.lane).toBe("auto");
   });
@@ -525,7 +525,7 @@ describe("decisions on fallback-matched records", () => {
       manualOverrides: decisionsToOverrides(resolveDecisions([decision]))
     });
 
-    const record = applied.recovery.recovered[0];
+    const record = applied.recovery.recovered[0]!;
     expect(record.record.DueDate).toBe("7/29/2026");
     expect(record.overriddenFields).toEqual(["DueDate"]);
     expect(applied.recovery.unappliedOverrides).toEqual([]);
@@ -539,9 +539,9 @@ describe("decisions on fallback-matched records", () => {
       ]
     });
 
-    expect(applied.recovery.recovered[0].overriddenFields).toEqual([]);
+    expect(applied.recovery.recovered[0]!.overriddenFields).toEqual([]);
     expect(applied.recovery.unappliedOverrides).toHaveLength(1);
-    expect(applied.recovery.unappliedOverrides[0].recordKey).toBe("no-such-record");
+    expect(applied.recovery.unappliedOverrides[0]!.recordKey).toBe("no-such-record");
   });
 });
 
@@ -639,7 +639,7 @@ describe("bulk decisions over a mixed batch", () => {
     expect(sensitiveSkips.length).toBe(
       impact.dateSensitive.reduce((total, entry) => total + entry.count, 0)
     );
-    expect(sensitiveSkips[0].reason).toContain("filter the queue");
+    expect(sensitiveSkips[0]!.reason).toContain("filter the queue");
     expect(result.applied + result.skipped.length).toBe(reviewCellsAll.length);
   });
 

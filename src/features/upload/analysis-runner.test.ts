@@ -67,7 +67,7 @@ describe("analysis runner: results reach only the run that asked for them", () =
     deliver(resultMessage("key-A", "analysis-A"));
 
     expect(runA.onResult).toHaveBeenCalledTimes(1);
-    const payload = runA.onResult.mock.calls[0][0] as { analysisKey: string };
+    const payload = runA.onResult.mock.calls[0]![0] as { analysisKey: string };
     expect(payload.analysisKey).toBe("key-A");
     // Run B's handlers — the ones that used to cache A's result under key B —
     // never see anything.
@@ -127,7 +127,7 @@ describe("analysis runner: results reach only the run that asked for them", () =
     crash("worker exploded");
 
     expect(run.onError).toHaveBeenCalledTimes(1);
-    expect(run.onError.mock.calls[0][0]).toContain("worker exploded");
+    expect(run.onError.mock.calls[0]![0]).toContain("worker exploded");
     expect(runner.isRunning()).toBe(false);
 
     // A late message from the dead run must not resurrect it.
@@ -181,7 +181,7 @@ describe("analysis runner: results reach only the run that asked for them", () =
     expect(posted).toHaveLength(2);
     deliver(resultMessage("key-B", "analysis-B"));
 
-    const payload = runB.onResult.mock.calls[0][0] as { analysisKey: string };
+    const payload = runB.onResult.mock.calls[0]![0] as { analysisKey: string };
     expect(payload.analysisKey).toBe("key-B");
   });
 });

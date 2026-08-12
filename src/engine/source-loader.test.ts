@@ -234,20 +234,20 @@ describe("source-loader: identity fields", () => {
     const result = verifyIdentityFieldsExist(referenceRecords, bellinghamProfile);
 
     expect(result.allPresent).toBe(true);
-    expect(result.fieldPresence.AgentID.present).toBe(500);
-    expect(result.fieldPresence.AgentID.missing).toBe(0);
-    expect(result.fieldPresence.BidURL.present).toBe(500);
-    expect(result.fieldPresence.BidURL.missing).toBe(0);
+    expect(result.fieldPresence.AgentID!.present).toBe(500);
+    expect(result.fieldPresence.AgentID!.missing).toBe(0);
+    expect(result.fieldPresence.BidURL!.present).toBe(500);
+    expect(result.fieldPresence.BidURL!.missing).toBe(0);
   });
 
   it("verifies AgentID and BidURL exist in all Bellingham candidate records", () => {
     const result = verifyIdentityFieldsExist(candidateRecords, bellinghamProfile);
 
     expect(result.allPresent).toBe(true);
-    expect(result.fieldPresence.AgentID.present).toBe(500);
-    expect(result.fieldPresence.AgentID.missing).toBe(0);
-    expect(result.fieldPresence.BidURL.present).toBe(500);
-    expect(result.fieldPresence.BidURL.missing).toBe(0);
+    expect(result.fieldPresence.AgentID!.present).toBe(500);
+    expect(result.fieldPresence.AgentID!.missing).toBe(0);
+    expect(result.fieldPresence.BidURL!.present).toBe(500);
+    expect(result.fieldPresence.BidURL!.missing).toBe(0);
   });
 
   it("validates identity fields on individual records", () => {

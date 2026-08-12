@@ -111,11 +111,11 @@ describe("DecisionRow: recording", () => {
 
     const [next] = onRecord.mock.calls[0] as [RecoveryDecision[]];
     expect(next).toHaveLength(1);
-    expect(next[0].action).toBe("backfill");
-    expect(next[0].reason).toBe("confirmed with the city");
-    expect(next[0].actor).toBe("user");
-    expect(next[0].outputValue).toBe(reviewCell.referenceValue);
-    expect(next[0].profileVersion).toBe(BELLINGHAM_PROCUREWARE.version);
+    expect(next[0]!.action).toBe("backfill");
+    expect(next[0]!.reason).toBe("confirmed with the city");
+    expect(next[0]!.actor).toBe("user");
+    expect(next[0]!.outputValue).toBe(reviewCell.referenceValue);
+    expect(next[0]!.profileVersion).toBe(BELLINGHAM_PROCUREWARE.version);
   });
 
   it("records keeping the candidate as a decision in its own right", async () => {
@@ -127,8 +127,8 @@ describe("DecisionRow: recording", () => {
     await user.click(screen.getByTestId("decision-keep"));
 
     const [next] = onRecord.mock.calls[0] as [RecoveryDecision[]];
-    expect(next[0].action).toBe("keep_candidate");
-    expect(next[0].outputValue).toBe(reviewCell.candidateValue);
+    expect(next[0]!.action).toBe("keep_candidate");
+    expect(next[0]!.outputValue).toBe(reviewCell.candidateValue);
   });
 
   it("refuses a custom decision with no value", async () => {
@@ -153,8 +153,8 @@ describe("DecisionRow: recording", () => {
     await user.click(screen.getByTestId("decision-custom-apply"));
 
     const [next] = onRecord.mock.calls[0] as [RecoveryDecision[]];
-    expect(next[0].action).toBe("use_custom");
-    expect(next[0].outputValue).toBe("8/4/2026 11:00 AM");
+    expect(next[0]!.action).toBe("use_custom");
+    expect(next[0]!.outputValue).toBe("8/4/2026 11:00 AM");
   });
 
   it("lets a person overwrite a populated value, which automation may not", async () => {
@@ -167,8 +167,8 @@ describe("DecisionRow: recording", () => {
 
     const [next] = onRecord.mock.calls[0] as [RecoveryDecision[]];
     expect(conflictCell.candidateIsBlank).toBe(false);
-    expect(next[0].actor).toBe("user");
-    expect(next[0].outputValue).toBe(conflictCell.referenceValue);
+    expect(next[0]!.actor).toBe("user");
+    expect(next[0]!.outputValue).toBe(conflictCell.referenceValue);
   });
 
   it("appends to an existing log rather than replacing it", async () => {
@@ -198,7 +198,7 @@ describe("DecisionRow: recording", () => {
 
     const [next] = onRecord.mock.calls[0] as [RecoveryDecision[]];
     expect(next).toHaveLength(2);
-    expect(next[0].reason).toBe("earlier call");
+    expect(next[0]!.reason).toBe("earlier call");
   });
 
   it("closes the form and clears the reason after recording", async () => {

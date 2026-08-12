@@ -41,12 +41,12 @@ describe("record-table sorting", () => {
 
   it("sorts by record key ascending by default", () => {
     const sorted = sortRecordIds(ids, recordsById, "recordKey", "asc");
-    expect(sorted.map((id) => recordsById[id].recordKey)).toEqual(["91B-2023", "92C-2023", "NEW-100"]);
+    expect(sorted.map((id) => recordsById[id]!.recordKey)).toEqual(["91B-2023", "92C-2023", "NEW-100"]);
   });
 
   it("sorts by due date descending with empty values last", () => {
     const sorted = sortRecordIds(ids, recordsById, "dueDate", "desc");
-    expect(sorted.map((id) => getRecordFieldValue(recordsById[id], "DueDate"))).toEqual([
+    expect(sorted.map((id) => getRecordFieldValue(recordsById[id]!, "DueDate"))).toEqual([
       "2023-09-01",
       "2023-06-15",
       ""
@@ -55,6 +55,6 @@ describe("record-table sorting", () => {
 
   it("sorts by changed field count descending", () => {
     const sorted = sortRecordIds(ids, recordsById, "changedFields", "desc");
-    expect(recordsById[sorted[0]].changedFieldCount).toBeGreaterThanOrEqual(recordsById[sorted[1]].changedFieldCount);
+    expect(recordsById[sorted[0]!]!.changedFieldCount).toBeGreaterThanOrEqual(recordsById[sorted[1]!]!.changedFieldCount);
   });
 });

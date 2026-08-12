@@ -152,7 +152,7 @@ export function FindingsExplorer({ findings }: { findings: Finding[] }) {
         <div ref={scrollRef} className="mt-3 max-h-[26rem] overflow-auto rounded border">
           <div style={{ height: virtualizer.getTotalSize(), position: "relative", width: "100%" }}>
             {virtualizer.getVirtualItems().map((virtualRow) => {
-              const finding = visible[virtualRow.index];
+              const finding = visible[virtualRow.index]!;
               return (
                 <div
                   key={finding.id}

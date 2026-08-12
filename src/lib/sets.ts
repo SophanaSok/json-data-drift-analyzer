@@ -5,7 +5,7 @@ export function intersectSets(sets: Array<Set<string> | undefined>): Set<string>
   }
   const [first, ...rest] = valid.sort((a, b) => a.size - b.size);
   const output = new Set<string>();
-  for (const id of first) {
+  for (const id of first!) {
     if (rest.every((set) => set.has(id))) {
       output.add(id);
     }
