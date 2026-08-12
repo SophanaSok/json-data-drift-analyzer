@@ -16,6 +16,33 @@ recovery policy model.
 Each release is tagged `vX.Y.Z` on `main`. The deployed footer shows the version
 and the exact build commit; exported artifacts carry both in their metadata.
 
+## [1.1.0] — 2026-08-12
+
+### Added
+
+- **Explore tab** — a field-first view of both exports. Pick a field to see
+  every record's candidate and reference value side by side, the distribution
+  of reference values (distinct values grouped exactly, case variants kept
+  separate), per-field evidence in the audit proposal's own terms (eligible
+  count, conflicts, comparable pairs, "volatility unmeasurable from this run
+  pair"), and the profile's policy for the field.
+- **Backfill decisions in place**: per-row and bulk decisions from the Explore
+  tab through the same append-only, reasoned decision log as the Recovery
+  queue — with the decision lane and its reason now visible on every cell, and
+  bulk scope named in words (field, situation, value group).
+- **Vetoing an automatic backfill** is now a first-class action, and the veto
+  reaches the exported artifact: keeping the candidate value on an
+  auto-backfilled cell writes that value back, so the log and the artifact
+  cannot disagree.
+- Field Changes rows and Data Health issue fields deep-link into the Explore
+  tab.
+
+### Fixed
+
+- Cells beyond the QA exemplar sampling cap (systemic fields over 500 records)
+  are now decidable: the Explore tab classifies lanes per selected field from
+  the records themselves rather than from the capped findings.
+
 ## [1.0.0] — 2026-08-12
 
 First production release. The full production-readiness audit — three
@@ -56,5 +83,6 @@ Low-severity findings — is resolved, each fix with a proving test.
 Initial development version, superseded by 1.0.0. Kept for reference: this is
 the version every pre-release commit reported.
 
+[1.1.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.1.0
 [1.0.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.0.0
 [0.1.0]: https://github.com/SophanaSok/json-data-drift-analyzer/commits/main
