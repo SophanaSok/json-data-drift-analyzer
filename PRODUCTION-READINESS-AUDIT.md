@@ -40,9 +40,10 @@ polish items landed in PRs #49–#53:
 
 ### The work that remains
 
-- **PR #46: typescript 5.9 → 7.0.** Two majors. A deliberate migration with its
-  own session, not a rubber stamp.
 - **Remaining Low items** in §1.5, §2.6, §3, and §4 below. None block use.
+  (The TypeScript 5.9 → 7.0 migration landed in #55: cold typecheck clean, a
+  canary proved the pass non-vacuous, full gates green — the old #46 had been
+  failing only on the since-fixed coverage threshold.)
 - **Coverage thresholds** (`vitest.config.ts`: 90/81/87/91) are anchored just
   below coverage as measured on merged `main`. If you add meaningfully-tested
   code, consider re-anchoring upward; the untested pockets are `ui-store.ts`
