@@ -6,8 +6,16 @@
  * and this falls back to "dev".
  */
 declare const __APP_COMMIT__: string;
+declare const __APP_VERSION__: string;
 
 export const BUILD_COMMIT: string = typeof __APP_COMMIT__ !== "undefined" ? __APP_COMMIT__ : "dev";
 
 /** Short form for display surfaces. */
 export const BUILD_COMMIT_SHORT: string = BUILD_COMMIT === "dev" ? "dev" : BUILD_COMMIT.slice(0, 12);
+
+/**
+ * The release version from package.json, stamped at build time. The commit
+ * pins the exact build; the version names the release humans talk about.
+ * Absent in test runners, where "dev" is the honest answer.
+ */
+export const APP_VERSION: string = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";

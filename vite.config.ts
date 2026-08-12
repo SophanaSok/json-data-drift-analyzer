@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import { version } from "./package.json";
 
 /**
  * The policy applied to the deployed build.
@@ -63,6 +64,8 @@ export default defineConfig({
     // Stamped into the UI footer and export metadata so a report can be tied to
     // the exact build that produced it. GITHUB_SHA is set by Actions; local
     // builds say "dev" rather than pretending to a provenance they lack.
-    __APP_COMMIT__: JSON.stringify(process.env.GITHUB_SHA ?? "dev")
+    __APP_COMMIT__: JSON.stringify(process.env.GITHUB_SHA ?? "dev"),
+    // The human-readable release the commit belongs to; see CHANGELOG.md.
+    __APP_VERSION__: JSON.stringify(version)
   }
 });
