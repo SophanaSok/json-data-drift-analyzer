@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useUiStore } from "../../stores/ui-store";
 
 export function DataHealthPage() {
@@ -14,6 +15,20 @@ export function DataHealthPage() {
             <li key={issue.id} className="rounded border p-2">
               <p className="font-medium">[{issue.severity}] {issue.title}</p>
               <p>{issue.description}</p>
+              {issue.relatedFields.length > 0 ? (
+                <p className="mt-1 flex flex-wrap gap-1 text-xs">
+                  {issue.relatedFields.map((field) => (
+                    <Link
+                      key={field}
+                      className="rounded bg-slate-100 px-1.5 py-0.5 text-sky-700 underline hover:bg-sky-50"
+                      data-testid={`issue-field-link-${field}`}
+                      to={`/results?tab=explore&field=${encodeURIComponent(field)}`}
+                    >
+                      {field}
+                    </Link>
+                  ))}
+                </p>
+              ) : null}
             </li>
           ))}
         </ul>

@@ -67,7 +67,10 @@ export function FieldChangesPage() {
   };
 
   const selectField = (field: string) => {
-    navigate(`/results?tab=records&field=${encodeURIComponent(field)}`);
+    // The Explore tab is the field-first drill-down this click was always
+    // reaching for: values, distribution, and per-record rows for one field.
+    // (The Records tab, by contrast, lists records that changed ANY field.)
+    navigate(`/results?tab=explore&field=${encodeURIComponent(field)}`);
   };
 
   return (
