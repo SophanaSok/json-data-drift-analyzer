@@ -27,7 +27,8 @@ function record(recordKey: string): DiffRecord {
     changedFields: [],
     changedFieldCount: 1,
     documentDiffs: {},
-    severity: "medium"
+    severity: "warning",
+    qualityIssueIds: []
   };
 }
 
