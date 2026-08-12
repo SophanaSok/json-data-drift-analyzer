@@ -30,3 +30,8 @@ playwright-report
 *.sln
 *.sw?
 coverage/
+
+# Local measurement scripts
+.probe.mjs
+.fold-check.mjs
+.live-check.mjs

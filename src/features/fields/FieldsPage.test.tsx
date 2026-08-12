@@ -470,3 +470,38 @@ describe("FieldsPage: focus mode", () => {
     expect(screen.getByTestId("keymap-help").textContent).toContain("accept all pending");
   });
 });
+
+describe("FieldsPage: manual value entry", () => {
+  it("offers typing on a field that is blank in both files", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&mode=record&record=1B-2020");
+
+    await user.click(screen.getByTestId("toggle-unchanged"));
+    const row = screen.getByTestId("record-cell-ContractValue");
+    // Nothing to accept — the control says so and offers typing instead.
+    const control = within(row).getByTestId("decide-1B-2020-ContractValue");
+    expect(control.textContent).toContain("Type a value");
+
+    await user.click(control);
+    expect(within(row).queryByTestId("decision-backfill")).toBeNull();
+    await user.type(within(row).getByTestId("decision-reason"), "from the award letter");
+    await user.type(within(row).getByTestId("decision-custom"), "48250.00");
+    await user.click(within(row).getByTestId("decision-custom-apply"));
+
+    expect(mockDb.persisted).toHaveLength(1);
+    const saved = mockDb.persisted[0] as { field: string; action: string; outputValue: string };
+    expect(saved.field).toBe("ContractValue");
+    expect(saved.action).toBe("use_custom");
+    expect(saved.outputValue).toBe("48250.00");
+    expect(screen.getByTestId("record-output-ContractValue").textContent).toContain("48250.00");
+  });
+
+  it("locks profile-excluded fields", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&mode=record&record=1B-2020");
+
+    await user.click(screen.getByTestId("toggle-unchanged"));
+    const row = screen.getByTestId("record-cell-Created");
+    expect(within(row).queryByTestId("decide-1B-2020-Created")).toBeNull();
+  });
+});

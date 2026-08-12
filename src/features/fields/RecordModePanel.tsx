@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type MutableRefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { cellId, type CellClassification, type DecisionContext, type RecoveryDecision } from "../../engine/decisions";
 import type { FieldCell, RecordDetailModel } from "../../engine/field-view";
 import { formatCellValue } from "../../engine/field-view";
@@ -87,6 +87,7 @@ export function RecordModePanel({
   const [showContext, setShowContext] = useState(false);
   const [selected, setSelected] = useState(0);
   const [keyError, setKeyError] = useState<string | null>(null);
+  const bulkApplyRef = useRef<((action: "backfill" | "keep_candidate") => void) | null>(null);
 
   const decisionFor = (field: string) =>
     detail.decisionRecordKey ? resolved.get(cellId(detail.decisionRecordKey, field)) : undefined;
@@ -134,14 +135,8 @@ export function RecordModePanel({
   // The page-level keymap delegates here; a ref avoids a render loop while
   // keeping every command bound to this record's current state.
   actionsRef.current = {
-    acceptAll: () => {
-      const button = document.querySelector<HTMLButtonElement>('[data-testid="record-accept-all"]');
-      button?.click();
-    },
-    keepAll: () => {
-      const button = document.querySelector<HTMLButtonElement>('[data-testid="record-keep-all"]');
-      button?.click();
-    },
+    acceptAll: () => bulkApplyRef.current?.("backfill"),
+    keepAll: () => bulkApplyRef.current?.("keep_candidate"),
     selectField: (position) => {
       if (position < pending.length) setSelected(position);
     },
@@ -249,6 +244,7 @@ export function RecordModePanel({
           acknowledgedFields={acknowledgedFields}
           onAcknowledge={onAcknowledge}
           onRecorded={(applied) => onDecisionsRecorded(applied, true)}
+          applyRef={bulkApplyRef}
         />
       ) : null}
 
@@ -333,14 +329,41 @@ export function RecordModePanel({
             {showContext ? "Hide" : "Show"} {contextRows.length} other field(s)
           </button>
           {showContext ? (
-            <dl className="mt-2 grid gap-x-4 gap-y-1 text-xs md:grid-cols-2" data-testid="unchanged-fields">
-              {contextRows.map((cell) => (
-                <div key={cell.field} className="flex gap-2">
-                  <dt className="w-40 shrink-0 font-mono text-slate-500">{cell.field}</dt>
-                  <dd className="min-w-0 break-words">{formatCellValue(cell.candidateValue)}</dd>
-                </div>
-              ))}
-            </dl>
+            <table className="mt-2 w-full text-xs" data-testid="unchanged-fields">
+              <tbody>
+                {contextRows.map((cell) => {
+                  const output = outputOf(cell);
+                  return (
+                    <tr key={cell.field} className="border-t align-top" data-testid={`record-cell-${cell.field}`}>
+                      <td className="w-40 p-1 font-mono text-slate-500">{cell.field}</td>
+                      <td className="min-w-0 break-words p-1" data-testid={`record-output-${cell.field}`}>
+                        {formatCellValue(output.value)}
+                      </td>
+                      <td className="w-56 p-1">
+                        {makeContext ? (
+                          <FieldDecisionControl
+                            cell={cell}
+                            resolved={resolved}
+                            log={log}
+                            makeContext={makeContext}
+                            onRecord={onRecord}
+                            draftScope={draftScope}
+                            defaultReason={sessionReason}
+                            editSeedValue={
+                              typeof output.value === "string"
+                                ? output.value
+                                : typeof cell.referenceValue === "string"
+                                  ? cell.referenceValue
+                                  : ""
+                            }
+                          />
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           ) : null}
         </div>
       </div>

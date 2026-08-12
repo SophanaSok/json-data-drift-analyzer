@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type MutableRefObject } from "react";
 import {
   appendDecisions,
   createBulkDecisions,
@@ -24,6 +24,11 @@ type RecordBulkBarProps = {
   onAcknowledge: (fields: string[]) => void;
   /** Called after decisions are recorded, so the queue can advance. */
   onRecorded?: (applied: number) => void;
+  /**
+   * Populated with this bar's apply function so keyboard commands invoke the
+   * same code path as the buttons, rather than synthesizing DOM clicks.
+   */
+  applyRef?: MutableRefObject<((action: "backfill" | "keep_candidate") => void) | null>;
 };
 
 /**
@@ -47,7 +52,8 @@ export function RecordBulkBar({
   onReasonChange,
   acknowledgedFields,
   onAcknowledge,
-  onRecorded
+  onRecorded,
+  applyRef
 }: RecordBulkBarProps) {
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
@@ -66,6 +72,16 @@ export function RecordBulkBar({
   const covered =
     !engineWouldSkip ||
     (acknowledgedFields !== null && dateSensitiveFields.every((field) => acknowledgedFields.includes(field)));
+
+  if (applyRef) {
+    applyRef.current = (action) => {
+      // Accepting needs the rule-6 approval; keeping never did.
+      if (action === "backfill" && !covered) return;
+      if (pendingCells.length === 0) return;
+      setOutcome(null);
+      apply(action);
+    };
+  }
 
   if (pendingCells.length === 0 && outcome === null && error === null) return null;
 

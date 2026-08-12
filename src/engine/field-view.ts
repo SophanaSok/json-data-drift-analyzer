@@ -60,6 +60,14 @@ export type FieldCell = {
   laneReason: string;
   /** A CellClassification accepted by createDecision, when the cell is decidable. */
   classification: CellClassification | null;
+  /**
+   * A classification usable for `use_custom` only — present whenever the RECORD
+   * can carry a decision and the profile does not exclude the field, even where
+   * there is nothing to copy (both sides equal, both blank, no reference).
+   * Typing a value needs no reference; accepting one does. Kept separate so the
+   * lane semantics the field view depends on are untouched.
+   */
+  manualClassification: CellClassification | null;
 };
 
 export type FieldValueGroup = {
@@ -418,6 +426,34 @@ export function classifyCell(
     };
   }
 
+  // Manual entry is offered wherever the record itself is decidable: the
+  // blockers below are about attributing a decision to a row, not about having
+  // something to copy into it.
+  const recordDecidable =
+    ctx.bridge.available &&
+    ctx.profile !== null &&
+    decisionRecordKey !== null &&
+    !recordCtx.duplicateKey &&
+    recordCtx.pairingOk &&
+    situation !== "record_removed";
+  const manualClassification: CellClassification | null =
+    recordDecidable && !ctx.excludedFields.has(field)
+      ? (classification ?? {
+          recordKey: decisionRecordKey!,
+          field,
+          // Always ineligible: this classification exists only so a value can
+          // be TYPED. There is nothing here worth copying — the two files
+          // agree, or neither holds a value — so createDecision keeps refusing
+          // backfill and keep_candidate, and permits use_custom alone.
+          lane: "ineligible",
+          reason: laneReason,
+          candidateValue: candidate,
+          referenceValue: reference,
+          candidateIsBlank: isBlankStrict(candidate),
+          profilePermitsField: ctx.permitted.has(field)
+        })
+      : null;
+
   return {
     field,
     recordId: record.id,
@@ -428,7 +464,8 @@ export function classifyCell(
     situation,
     lane,
     laneReason,
-    classification
+    classification,
+    manualClassification
   };
 }
 

@@ -18,7 +18,7 @@ import {
   type RecoveryDecision
 } from "./decisions";
 import { runRecoveryReview } from "./review";
-import { runRecovery } from "./recovery";
+import { applyOverridesToRecovery, runRecovery } from "./recovery";
 import { matchRecords } from "./matchRecords";
 import { runQa } from "./qa";
 import { BELLINGHAM_PROCUREWARE } from "../profiles";
@@ -245,6 +245,9 @@ describe("applying decisions", () => {
 
     expect(overrides).toEqual([
       {
+        // Carried so the exported audit can distinguish an accepted reference
+        // value from a typed one.
+        action: "backfill",
         recordKey: "record-1",
         field: "DueDate",
         value: reviewCell.referenceValue,
@@ -727,5 +730,66 @@ describe("rule-6 acknowledgment on bulk decisions", () => {
   it("keep_candidate needs no acknowledgment, as before", () => {
     const result = createBulkDecisions(batch, { action: "keep_candidate", reason: "leave them" }, context);
     expect(result.applied).toBe(2);
+  });
+});
+
+describe("a typed value is distinguishable in the audit", () => {
+  const target = cells.find((cell) => cell.lane === "review" && cell.field === "DueDate")!;
+
+  it("stamps a different provenance rule for a typed value than an accepted reference", () => {
+    const matchReport = matchRecords(referenceRecords, candidateRecords, BELLINGHAM_PROCUREWARE);
+    const qa = runQa(referenceRecords, candidateRecords, BELLINGHAM_PROCUREWARE, { matchReport, generatedAt: FIXED_NOW });
+    const base = runRecovery(candidateRecords, referenceRecords, BELLINGHAM_PROCUREWARE, matchReport, qa.findings, {
+      generatedAt: FIXED_NOW
+    });
+
+    const accepted = createDecision(
+      { recordKey: target.recordKey, field: "DueDate", action: "backfill", reason: "accepted the reference" },
+      target,
+      context
+    );
+    const typed = createDecision(
+      {
+        recordKey: target.recordKey,
+        field: "PublishedDate",
+        action: "use_custom",
+        customValue: "9/9/2026",
+        reason: "read off the award letter"
+      },
+      { ...target, field: "PublishedDate" },
+      context
+    );
+
+    const applied = applyOverridesToRecovery(
+      base,
+      decisionsToOverrides(resolveDecisions([accepted, typed])),
+      BELLINGHAM_PROCUREWARE
+    );
+
+    const ruleFor = (field: string) =>
+      applied.recovery.provenance.find(
+        (entry) => entry.field === field && entry.recordKey === target.recordKey && entry.source === "manual_override"
+      )?.ruleId ?? "";
+
+    // A reader of the exported audit can tell them apart — proposal §9 q4.
+    expect(ruleFor("DueDate")).toContain("manual_reference_accept");
+    expect(ruleFor("PublishedDate")).toContain("manual_custom_value");
+  });
+
+  it("refuses an override on a profile-excluded field", () => {
+    const matchReport = matchRecords(referenceRecords, candidateRecords, BELLINGHAM_PROCUREWARE);
+    const qa = runQa(referenceRecords, candidateRecords, BELLINGHAM_PROCUREWARE, { matchReport, generatedAt: FIXED_NOW });
+    const base = runRecovery(candidateRecords, referenceRecords, BELLINGHAM_PROCUREWARE, matchReport, qa.findings, {
+      generatedAt: FIXED_NOW
+    });
+
+    const applied = applyOverridesToRecovery(
+      base,
+      [{ recordKey: target.recordKey, field: "Created", value: "2026-01-01", reason: "should not land" }],
+      BELLINGHAM_PROCUREWARE
+    );
+
+    expect(applied.appliedCount).toBe(0);
+    expect(applied.unapplied[0]!.reason).toContain("excluded from comparison");
   });
 });
