@@ -49,10 +49,10 @@ of passing over zero records) plus the #60 follow-up. Two notes:
   split: the date-ordering alert says "is not older than latest", which is
   accurate for both the reversed and the equal case. Split the copy if the
   distinction ever matters.
-- **Release hygiene** (§4) is done except versioning: the commit SHA is stamped
-  into the footer and export metadata, but the package version is still 0.1.0
-  with no tags or CHANGELOG. That is a process decision for the maintainer, not
-  a code change.
+- **Release hygiene** (§4) is fully done as of `v1.0.0` (#62): semantic
+  versioning with the contract defined in CHANGELOG.md, the version stamped
+  next to the commit in the footer and export metadata, and a documented
+  tag-and-release process in the README.
 
 **Coverage thresholds** (`vitest.config.ts`: 76/70/70/78) are anchored just
 below coverage measured against the whole `src/` tree — the denominator is
