@@ -41,12 +41,12 @@ function fakeWorker() {
   return { worker, posted, deliver, crash, garble };
 }
 
-function handlers(): AnalysisRunHandlers & {
-  onProgress: ReturnType<typeof vi.fn>;
-  onError: ReturnType<typeof vi.fn>;
-  onResult: ReturnType<typeof vi.fn>;
-} {
-  return { onProgress: vi.fn(), onError: vi.fn(), onResult: vi.fn() };
+function handlers() {
+  return {
+    onProgress: vi.fn<AnalysisRunHandlers["onProgress"]>(),
+    onError: vi.fn<AnalysisRunHandlers["onError"]>(),
+    onResult: vi.fn<AnalysisRunHandlers["onResult"]>()
+  } satisfies AnalysisRunHandlers;
 }
 
 describe("analysis runner: results reach only the run that asked for them", () => {
