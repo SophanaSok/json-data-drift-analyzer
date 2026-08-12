@@ -154,7 +154,7 @@ describe("ticket template: required content", () => {
 
   it("identifies the source and the reporting bot", () => {
     expect(markdown).toContain("JSON Data Drift Analyzer");
-    expect(markdown).toContain("bellingham-procureware` v4");
+    expect(markdown).toContain("bellingham-procureware` v5");
     expect(markdown).toContain("Bellingham WA - PW-02");
   });
 

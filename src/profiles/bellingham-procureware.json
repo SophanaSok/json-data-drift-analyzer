@@ -1,6 +1,6 @@
 {
   "id": "bellingham-procureware",
-  "version": 4,
+  "version": 5,
   "collectionPath": "Export",
   "primaryKey": [
     "AgentID",
@@ -81,6 +81,25 @@
     "FACT — SEPARATE ISSUE: three records (32B-2018, 15B-2021, 7B-2026) also lost Description and retain only 14 of 45 fields non-blank. Two of them are the same records that lost their document arrays. This pattern is record-scoped rather than field-scoped and should be investigated as a distinct per-record fetch failure, not folded into the header-block regression.",
     "OPEN QUESTION — LOWER CONFIDENCE: both runs contain exactly 500 records, and the candidate gained one while dropping one, which is consistent with a page-size or result cap. This is NOT established: the dropped record 3B-2018 sat at reference index 444 and the gained record 33B-2026 at candidate index 50, and array order is unstable between runs, so no recency-based eviction policy can be confirmed from the data. Verify against the scraper's pagination configuration.",
     "The candidate file analyzed was lambda-20260715-080212-d3836a0d_2026-07-15.json. The request named lambda-20260715-080212-d3836a0d_2026-07-15-2.json, which does not exist in the repository root; the analyzed file is the only one carrying run id d3836a0d. Re-run this analysis if a distinct -2 export exists elsewhere.",
-    "SCOPE: this profile describes matching, dedupe, and review policy only. It authorizes no writes, no exports, and no external actions. The primary remedy for this regression is a fixed scraper re-run; recovery is a stopgap that must produce a new, clearly-labelled artifact per AGENTS.md rule 2."
-  ]
+    "SCOPE: this profile describes matching, dedupe, and review policy only. It authorizes no writes, no exports, and no external actions. The primary remedy for this regression is a fixed scraper re-run; recovery is a stopgap that must produce a new, clearly-labelled artifact per AGENTS.md rule 2.",
+    "CORROBORATION (v4 -> v5): textFields/deadlineCues configure the advisory review signal in src/engine/corroboration.ts. It reads the candidate's surviving Description for a deadline date and compares it with the reference value a backfill would write. MEASURED on the shipped pair: of 499 DueDate backfill candidates, 188 are corroborated by the text, 23 disagree, 288 say nothing -- 89% agreement where the text states a deadline at all, which is what earns DueDate the signal. PublishedDate and AwardDate agree about 2% of the time (the prose is not about them), so the calibration withholds the signal there rather than flagging 44% of records for nothing. The cue list is what separates a submission deadline from a pre-bid walkthrough or a work-completion date; without it, records 60B-2019 and 63B-2023 were flagged wrongly. This signal is advisory under AGENTS.md rule 5: it ranks review candidates and never modifies output, changes a lane, or decides anything. Bumping the version because provenance must identify the policy a decision was made under, and this changes what a reviewer is shown."
+  ],
+  "corroboration": {
+    "textFields": [
+      "Description"
+    ],
+    "deadlineCues": [
+      "no later than",
+      "not later than",
+      "until",
+      "due by",
+      "due on",
+      "received by",
+      "submitted by",
+      "deadline",
+      "bids are due",
+      "proposals are due",
+      "closing"
+    ]
+  }
 }

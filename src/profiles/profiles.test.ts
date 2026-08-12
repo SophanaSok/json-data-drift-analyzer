@@ -72,10 +72,10 @@ describe("profile contradiction checks", () => {
 describe("Bellingham profile: the approved policy", () => {
   const profile = BELLINGHAM_PROCUREWARE;
 
-  it("is at v4 with exactly the four approved fields", () => {
+  it("is at v5 with exactly the four approved fields", () => {
     // Deliberately literal: a policy change must fail this test and be re-confirmed
     // by a person, not quietly absorbed by deriving from the profile itself.
-    expect(profile.version).toBe(4);
+    expect(profile.version).toBe(5);
     expect(profile.safeBackfillFields).toEqual(["ContactPhone", "ContactEmail", "BidType", "Title"]);
   });
 
