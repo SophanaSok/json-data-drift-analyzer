@@ -40,14 +40,25 @@ polish items landed in PRs #49–#53:
 
 ### The work that remains
 
-- **Remaining Low items** in §1.5, §2.6, §3, and §4 below. None block use.
-  (The TypeScript 5.9 → 7.0 migration landed in #55: cold typecheck clean, a
-  canary proved the pass non-vacuous, full gates green — the old #46 had been
-  failing only on the since-fixed coverage threshold.)
-- **Coverage thresholds** (`vitest.config.ts`: 90/81/87/91) are anchored just
-  below coverage as measured on merged `main`. If you add meaningfully-tested
-  code, consider re-anchoring upward; the untested pockets are `ui-store.ts`
-  and parts of `toast-store.ts`.
+Every finding in this audit is now resolved. The TypeScript 5.9 → 7.0 migration
+landed in #55, and the Low-severity items landed in #57–#59 (engine/db/worker,
+UI, build/tooling — with a wrong collection path now quarantining loudly instead
+of passing over zero records) plus the #60 follow-up. Two notes:
+
+- **Equal export timestamps** (§1.5) are resolved by wording rather than a code
+  split: the date-ordering alert says "is not older than latest", which is
+  accurate for both the reversed and the equal case. Split the copy if the
+  distinction ever matters.
+- **Release hygiene** (§4) is done except versioning: the commit SHA is stamped
+  into the footer and export metadata, but the package version is still 0.1.0
+  with no tags or CHANGELOG. That is a process decision for the maintainer, not
+  a code change.
+
+**Coverage thresholds** (`vitest.config.ts`: 76/70/70/78) are anchored just
+below coverage measured against the whole `src/` tree — the denominator is
+deterministic now (`coverage.include`), so it no longer shifts when a test
+imports new files. Re-anchor upward as coverage grows; the untested pockets are
+`ui-store.ts` and parts of the page components.
 
 ### Environment
 
@@ -84,6 +95,12 @@ polish items landed in PRs #49–#53:
 4. **The Bellingham fixtures carry a UTF-8 BOM** (deliberately — real scraper
    exports do). Anything that `JSON.parse`s them outside the engine (e2e specs,
    scripts) must strip `\uFEFF` first; the engine's `parseJSON` already does.
+5. **Parallel PRs can each be green and still break `main` together.** #58
+   added `coverage.all` to vitest.config.ts while #59 made that file
+   typechecked; vitest 4 had removed the option, so only merged `main` failed
+   (#60 fixed it). When two open branches touch config and the tooling that
+   checks that config, run the combined gates locally before assuming green
+   PRs make a green main.
 
 ---
 
