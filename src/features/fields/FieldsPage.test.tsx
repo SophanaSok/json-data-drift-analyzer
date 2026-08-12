@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { FieldsPage } from "./FieldsPage";
@@ -10,8 +10,23 @@ import { runAnalysis } from "../../engine/diff";
 import { runRecoveryReview } from "../../engine/review";
 import { BELLINGHAM_PROCUREWARE } from "../../profiles";
 import { useUiStore } from "../../stores/ui-store";
+import { useDraftStore } from "../../stores/draft-store";
 import referenceData from "../../test/fixtures/bellingham-reference.json";
 import candidateData from "../../test/fixtures/bellingham-candidate.json";
+
+// The decision log lives in IndexedDB, which jsdom does not provide; the mock
+// serves whatever rows a test staged and records what was persisted.
+const mockDb = vi.hoisted(() => ({ rows: [] as unknown[], persisted: [] as unknown[] }));
+vi.mock("../../db", () => ({
+  db: {
+    decisions: {
+      where: () => ({ equals: () => ({ toArray: async () => mockDb.rows }) }),
+      bulkPut: async (rows: unknown[]) => {
+        mockDb.persisted.push(...rows);
+      }
+    }
+  }
+}));
 
 // jsdom gives every element zero size, so the real virtualizer renders no
 // rows; this stand-in renders them all. The table's behavior is under test,
@@ -51,6 +66,9 @@ const review = runRecoveryReview(referenceRecords, candidateRecords, BELLINGHAM_
 afterEach(() => {
   cleanup();
   useUiStore.setState({ analysis: null, review: null });
+  useDraftStore.getState().reset();
+  mockDb.rows = [];
+  mockDb.persisted = [];
 });
 
 function renderPage(initialEntry = "/results?tab=explore", withReview = true) {
@@ -157,5 +175,77 @@ describe("FieldsPage", () => {
       </MemoryRouter>
     );
     expect(screen.getByText("Run an analysis first.")).toBeTruthy();
+  });
+});
+
+describe("FieldsPage decisions", () => {
+  it("records a per-row decision with its reason and persists it", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&field=DueDate");
+
+    const row = screen.getByTestId("field-cell-1B-2020");
+    await user.click(within(row).getByTestId("decide-1B-2020"));
+    await user.type(within(row).getByTestId("decision-reason"), "confirmed with the agency");
+    await user.click(within(row).getByTestId("decision-backfill"));
+
+    expect(within(row).getByTestId("cell-decided").textContent).toContain("use reference");
+    expect(mockDb.persisted).toHaveLength(1);
+    const saved = mockDb.persisted[0] as { field: string; reason: string; actor: string };
+    expect(saved.field).toBe("DueDate");
+    expect(saved.reason).toBe("confirmed with the agency");
+    expect(saved.actor).toBe("user");
+  });
+
+  it("renders the lane reason visibly and refuses a reasonless decision in place", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&field=DueDate");
+
+    const row = screen.getByTestId("field-cell-1B-2020");
+    expect(row.textContent).toContain("does not approve this field");
+
+    await user.click(within(row).getByTestId("decide-1B-2020"));
+    await user.click(within(row).getByTestId("decision-backfill"));
+    expect(within(row).getByTestId("decision-error").textContent).toContain("reason is required");
+    expect(mockDb.persisted).toHaveLength(0);
+  });
+
+  it("offers a veto on an auto-lane cell and marks it vetoed", async () => {
+    const user = userEvent.setup();
+    // Title is profile-approved: its blank cells were auto-backfilled.
+    renderPage("/results?tab=explore&field=Title");
+
+    const row = screen.getByTestId("field-cell-1B-2020");
+    expect(row.textContent).toContain("auto");
+    await user.click(within(row).getByTestId("decide-1B-2020"));
+    await user.type(within(row).getByTestId("decision-reason"), "title was renamed upstream");
+    await user.click(within(row).getByTestId("decision-veto"));
+
+    expect(within(row).getByTestId("cell-decided").textContent).toBe("vetoed");
+  });
+
+  it("bulk-decides the filtered scope after an explicit confirmation naming rule 6", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&field=DueDate");
+
+    await user.type(screen.getByTestId("bulk-reason"), "deadline list confirmed in writing");
+    await user.click(screen.getByTestId("bulk-backfill"));
+
+    const confirmation = screen.getByTestId("bulk-confirm").textContent ?? "";
+    expect(confirmation).toContain("499");
+    expect(screen.getByTestId("bulk-breakdown").textContent).toContain("rule-6 date-sensitive");
+
+    await user.click(screen.getByTestId("bulk-confirm-apply"));
+    expect(screen.getByTestId("bulk-outcome").textContent).toContain("Recorded 499 decision(s).");
+    expect(mockDb.persisted).toHaveLength(499);
+  });
+
+  it("scopes bulk to a selected value group and says so", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&field=ContactEmail");
+
+    await user.click(screen.getByTestId("value-group-purchasing@cob.org"));
+    const scope = screen.getByTestId("bulk-scope").textContent ?? "";
+    expect(scope).toContain("1 decidable cell(s)");
+    expect(scope).toContain("purchasing@cob.org");
   });
 });

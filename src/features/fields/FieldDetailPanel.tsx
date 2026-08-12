@@ -7,8 +7,8 @@ import { filterCells, formatPercent, sortCells, type CellSortColumn, type Situat
 type FieldDetailPanelProps = {
   detail: FieldDetail;
   renderDecision?: (cell: FieldCell) => ReactNode;
-  /** Bulk controls, rendered above the table with the filtered cells in scope. */
-  renderBulk?: (visibleCells: FieldCell[]) => ReactNode;
+  /** Bulk controls, given the filtered cells and the filter scope in words. */
+  renderBulk?: (visibleCells: FieldCell[], scopeDescription: string) => ReactNode;
 };
 
 const SITUATION_OPTIONS: Array<{ value: SituationFilter; label: string }> = [
@@ -143,7 +143,20 @@ export function FieldDetailPanel({ detail, renderDecision, renderBulk }: FieldDe
           ) : null}
         </div>
 
-        {renderBulk ? <div className="mt-3">{renderBulk(visibleCells)}</div> : null}
+        {renderBulk ? (
+          <div className="mt-3">
+            {renderBulk(
+              visibleCells,
+              [
+                situation !== "all" ? SITUATION_OPTIONS.find((option) => option.value === situation)?.label : null,
+                valueGroup !== null ? `value ${valueGroup}` : null,
+                search.trim() !== "" ? `search "${search.trim()}"` : null
+              ]
+                .filter(Boolean)
+                .join(" · ")
+            )}
+          </div>
+        ) : null}
 
         {visibleCells.length === 0 ? (
           <p className="mt-3 text-sm text-slate-600" data-testid="field-cells-empty">

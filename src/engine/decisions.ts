@@ -103,13 +103,18 @@ export function cellId(recordKey: string, field: string): string {
  * comparison. A field no finding covered has no reference value on record and so
  * offers a reviewer nothing to decide between.
  */
-export function classifyCells(review: RecoveryReview, profile: SourceProfile): CellClassification[] {
-  const permitted = new Set(profile.safeBackfillFields);
-  const backfilled = new Set(
+/** cellIds recovery auto-backfilled — the auto lane's source of truth. */
+export function backfilledCellIds(review: RecoveryReview): Set<string> {
+  return new Set(
     review.recovery.provenance
       .filter((entry) => entry.source === "reference_backfill")
       .map((entry) => cellId(entry.recordKey, entry.field))
   );
+}
+
+export function classifyCells(review: RecoveryReview, profile: SourceProfile): CellClassification[] {
+  const permitted = new Set(profile.safeBackfillFields);
+  const backfilled = backfilledCellIds(review);
 
   const cells: CellClassification[] = [];
 
@@ -289,9 +294,22 @@ export function decisionHistory(log: RecoveryDecision[], recordKey: string, fiel
  * `keep_candidate` produces no override: it records that a person looked and chose
  * to change nothing, which is a decision worth having on record but not an edit.
  */
-export function decisionsToOverrides(resolved: Map<string, RecoveryDecision>): ManualOverride[] {
+export function decisionsToOverrides(
+  resolved: Map<string, RecoveryDecision>,
+  /**
+   * Cells recovery auto-backfilled (see `backfilledCellIds`). A keep_candidate
+   * on one of these is a VETO — the backfill is already in the artifact, so
+   * "keep the candidate" is an edit that must write the candidate value back.
+   * Without this set, keep_candidate stays a pure log entry, which is correct
+   * for review-lane cells where nothing was applied.
+   */
+  autoCellIds: ReadonlySet<string> = new Set()
+): ManualOverride[] {
   return [...resolved.values()]
-    .filter((decision) => decision.action !== "keep_candidate")
+    .filter(
+      (decision) =>
+        decision.action !== "keep_candidate" || autoCellIds.has(cellId(decision.recordKey, decision.field))
+    )
     .sort((left, right) =>
       left.recordKey === right.recordKey
         ? left.field.localeCompare(right.field)

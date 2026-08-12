@@ -1,4 +1,4 @@
-import { cellId, describeLane, type CellClassification, type DecisionLane } from "./decisions";
+import { backfilledCellIds, cellId, describeLane, type CellClassification, type DecisionLane } from "./decisions";
 import { isBlankStrict } from "./empty";
 import { buildIdentityKey } from "./normalize";
 import type { SourceProfile } from "./adapter-types";
@@ -214,15 +214,6 @@ export function describeFieldPolicy(profile: SourceProfile, field: string): Fiel
     description = "No profile ruling; not approved for automatic backfill.";
   }
   return { safeBackfill, manualReview, excluded, dateSensitive, description };
-}
-
-/** cellIds recovery actually backfilled — the auto lane's source of truth. */
-function backfilledCellIds(review: RecoveryReview): Set<string> {
-  const ids = new Set<string>();
-  for (const entry of review.recovery.provenance) {
-    if (entry.source === "reference_backfill") ids.add(cellId(entry.recordKey, entry.field));
-  }
-  return ids;
 }
 
 /**

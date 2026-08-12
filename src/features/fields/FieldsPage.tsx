@@ -1,8 +1,12 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { resolveDecisions } from "../../engine/decisions";
 import { buildFieldDetail, buildFieldSummaries } from "../../engine/field-view";
 import { getProfile } from "../../profiles";
 import { useUiStore } from "../../stores/ui-store";
+import { useDecisionLog } from "../recovery/use-decision-log";
+import { FieldBulkBar } from "./FieldBulkBar";
+import { FieldDecisionControl } from "./FieldDecisionControl";
 import { FieldDetailPanel } from "./FieldDetailPanel";
 import { FieldList } from "./FieldList";
 import type { FieldListSortColumn, SortDirection } from "./field-view-table";
@@ -28,6 +32,8 @@ export function FieldsPage() {
   // Never fall back to a default profile here: a silently substituted policy
   // would put the wrong badges behind every field.
   const profile = review ? getProfile(review.profileId) : null;
+  const { log, record } = useDecisionLog(review);
+  const resolved = useMemo(() => resolveDecisions(log), [log]);
 
   const summaries = useMemo(
     () => (analysis ? buildFieldSummaries(analysis, review, profile) : []),
@@ -90,7 +96,39 @@ export function FieldsPage() {
           degraded={!review || !profile}
         />
         {detail ? (
-          <FieldDetailPanel key={detail.field} detail={detail} />
+          <FieldDetailPanel
+            key={detail.field}
+            detail={detail}
+            renderDecision={
+              review && profile && detail.decisionsUnavailableReason === null
+                ? (cell) => (
+                    <FieldDecisionControl
+                      cell={cell}
+                      resolved={resolved}
+                      log={log}
+                      makeContext={() => ({ review, profile, timestamp: new Date().toISOString(), sequence: log.length })}
+                      onRecord={record}
+                      draftScope={review.generatedAt}
+                    />
+                  )
+                : undefined
+            }
+            renderBulk={
+              review && profile && detail.decisionsUnavailableReason === null
+                ? (visibleCells, scopeDescription) => (
+                    <FieldBulkBar
+                      field={detail.field}
+                      visibleCells={visibleCells}
+                      scopeDescription={scopeDescription}
+                      profile={profile}
+                      log={log}
+                      makeContext={() => ({ review, profile, timestamp: new Date().toISOString(), sequence: log.length })}
+                      onRecord={record}
+                    />
+                  )
+                : undefined
+            }
+          />
         ) : (
           <p className="rounded border bg-white p-6 text-sm text-slate-600" data-testid="field-detail-prompt">
             Select a field on the left to see every record's candidate and reference value.
