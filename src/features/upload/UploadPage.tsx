@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { DateOrderingAlert } from "../../components/upload/DateOrderingAlert";
 import { ExportDateIndicators } from "../../components/upload/ExportDateIndicators";
 import { ANALYSIS_CACHE_SCHEMA_VERSION, db, putAnalysisBounded } from "../../db";
@@ -375,7 +375,11 @@ export function UploadPage() {
             export is blocked. Approved fields:{" "}
             {(resolvedProfile ?? sourceProfile).safeBackfillFields.length > 0
               ? (resolvedProfile ?? sourceProfile).safeBackfillFields.join(", ")
-              : "none"}.
+              : "none"}
+            .{" "}
+            <Link className="text-sky-700 underline" to={`/profiles?id=${sourceProfileId}`} data-testid="manage-profiles-link">
+              Manage profiles
+            </Link>
           </span>
           {overrideActive && resolvedProfile ? (
             <span

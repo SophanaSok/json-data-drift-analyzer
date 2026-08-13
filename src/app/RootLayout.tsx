@@ -13,9 +13,14 @@ export function RootLayout() {
         <Link to="/" onClick={reset} className="text-sm font-semibold text-slate-900">
           JSON Data Drift Analyzer
         </Link>
-        <Link to="/" onClick={reset} className="rounded px-3 py-1 text-sm text-sky-700 hover:bg-slate-100" data-testid="new-analysis-link">
-          New analysis
-        </Link>
+        <nav className="flex items-center gap-1">
+          <Link to="/profiles" className="rounded px-3 py-1 text-sm text-sky-700 hover:bg-slate-100" data-testid="profiles-link">
+            Profiles
+          </Link>
+          <Link to="/" onClick={reset} className="rounded px-3 py-1 text-sm text-sky-700 hover:bg-slate-100" data-testid="new-analysis-link">
+            New analysis
+          </Link>
+        </nav>
       </header>
       <FileOrderNotice />
       <Outlet />
