@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { DateOrderingAlert } from "../../components/upload/DateOrderingAlert";
 import { ExportDateIndicators } from "../../components/upload/ExportDateIndicators";
 import { ANALYSIS_CACHE_SCHEMA_VERSION, db, putAnalysisBounded } from "../../db";
-import { defaultProfile } from "../../engine/profile";
 import { ENGINE_SEMANTICS_VERSION } from "../../engine/version";
 import { BELLINGHAM_PROCUREWARE, PROFILES, getProfile } from "../../profiles";
+import { resolveEffectiveProfile } from "../../profiles/resolve";
 import { hashText } from "../../lib/hash";
 import { assessFileOrderFromJson } from "../../lib/file-order";
 import { useUiStore } from "../../stores/ui-store";
@@ -31,7 +31,7 @@ export function UploadPage() {
   const [baselineFile, setBaselineFile] = useState<File | null>(null);
   const [latestFile, setLatestFile] = useState<File | null>(null);
   const [collectionPath, setCollectionPath] = useState("Export");
-  const [identityKeys, setIdentityKeys] = useState(defaultProfile.identityDefault.join(","));
+  const [identityKeys, setIdentityKeys] = useState(BELLINGHAM_PROCUREWARE.quality.identityDefault.join(","));
   const [ignoredFields, setIgnoredFields] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pendingAlert, setPendingAlert] = useState(false);
@@ -43,6 +43,10 @@ export function UploadPage() {
   const [sourceProfileId, setSourceProfileId] = useState(BELLINGHAM_PROCUREWARE.id);
   // Falls back rather than crashing if a stored id ever names an unregistered profile.
   const sourceProfile = getProfile(sourceProfileId) ?? BELLINGHAM_PROCUREWARE;
+  // Resolved policy identity: base + delta (local overrides arrive with the
+  // override store; until then resolution runs with none). What the worker
+  // receives and what the cache key pins.
+  const resolvedProfile = useMemo(() => resolveEffectiveProfile(sourceProfile, null).profile, [sourceProfile]);
   const showToast = useToastStore((state) => state.showToast);
   const fileOrderAssessment = useUiStore((state) => state.fileOrderAssessment);
   const setFileOrderAssessment = useUiStore((state) => state.setFileOrderAssessment);
@@ -125,12 +129,13 @@ export function UploadPage() {
           collectionPath,
           identityFields.join("|"),
           ignored.join("|"),
-          defaultProfile.id,
-          String(defaultProfile.version),
-          // Approving a field bumps the source profile version, which must
-          // invalidate the cache rather than reuse the previous policy's outcome.
-          sourceProfile.id,
-          String(sourceProfile.version),
+          // The policy hash pins the full resolved policy — base + delta +
+          // any local override, quality section included — so ANY policy
+          // change invalidates the cache rather than reusing the previous
+          // policy's outcome. (It subsumes the old defaultProfile and
+          // version entries.)
+          resolvedProfile.id,
+          resolvedProfile.policyHash,
           // A cached entry written under an older persisted shape must be a cache
           // miss, not a review missing fields the current code assumes exist.
           String(ANALYSIS_CACHE_SCHEMA_VERSION),
@@ -163,10 +168,9 @@ export function UploadPage() {
             collectionPath,
             identityFields,
             ignoredFields: ignored,
-            profileId: defaultProfile.id
+            profileId: resolvedProfile.id
           },
-          profile: defaultProfile,
-          sourceProfileId: sourceProfile.id
+          sourceProfile: resolvedProfile
         }
       };
 

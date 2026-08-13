@@ -10,7 +10,7 @@ import type { PostedTicketRecord, TrelloTarget } from "../features/trello/trello
  * field: entries written under the old shape then miss the cache and are rebuilt,
  * instead of being served with fields the current code assumes exist.
  */
-export const ANALYSIS_CACHE_SCHEMA_VERSION = 2;
+export const ANALYSIS_CACHE_SCHEMA_VERSION = 3;
 
 export type SavedAnalysis = {
   analysisKey: string;

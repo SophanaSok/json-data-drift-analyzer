@@ -1,5 +1,6 @@
-import type { AnalysisResult, ComparisonConfig, QualityProfile } from "../engine/types";
+import type { AnalysisResult, ComparisonConfig } from "../engine/types";
 import type { RecoveryReview } from "../engine/review";
+import type { ResolvedSourceProfile } from "../profiles/resolve";
 
 export type WorkerStep =
   /** Emitted by the worker, which is where parsing actually happens. */
@@ -25,9 +26,16 @@ export type AnalyzeRequest = {
     latestText: string;
     config: ComparisonConfig;
     analysisKey: string;
-    profile?: QualityProfile;
-    /** Source profile governing recovery. Absent means no recovery review is produced. */
-    sourceProfileId?: string;
+    /**
+     * The fully resolved source profile: base + delta + any local override,
+     * stamped with its policy identity. The worker must never resolve policy
+     * itself — override state lives in the main thread's IndexedDB, and a
+     * worker-side lookup could race a mid-run override edit. Governs the
+     * recovery review AND supplies the quality-analysis configuration (via
+     * toQualityProfile). Absent means no recovery review and the deprecated
+     * default quality profile.
+     */
+    sourceProfile?: ResolvedSourceProfile;
   };
 };
 
