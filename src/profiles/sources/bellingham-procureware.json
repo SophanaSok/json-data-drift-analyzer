@@ -1,7 +1,9 @@
 {
   "id": "bellingham-procureware",
-  "version": 5,
-  "collectionPath": "Export",
+  "sourceUrl": "https://cob.procureware.com",
+  "displayName": "Bellingham ProcureWare",
+  "agency": "City of Bellingham",
+  "version": 6,
   "primaryKey": [
     "AgentID",
     "BidURL"
@@ -16,45 +18,18 @@
     "AgentID",
     "BidURL"
   ],
-  "hardRequiredFields": [
-    "AgentID",
-    "ProjectCode",
-    "BidURL"
-  ],
   "safeBackfillFields": [
     "ContactPhone",
     "ContactEmail",
     "BidType",
     "Title"
   ],
-  "manualReviewFields": [
-    "BidStatus",
-    "PublishedDate",
-    "DueDate",
-    "AwardDate",
-    "Description",
-    "BidDocuments",
-    "BidDocumentHashes",
-    "ContractValue"
-  ],
-  "excludedFields": [
-    "Created",
-    "Refreshed"
-  ],
-  "minimumMatchRate": 0.95,
-  "dateSensitiveFields": [
-    "DueDate",
-    "PublishedDate",
-    "AwardDate",
-    "BidStatus",
-    "ContractValue"
-  ],
   "notes": [
     "STATUS: PARTIALLY APPROVED at v4. ContactPhone, ContactEmail, BidType, and Title are approved for automatic backfill. Every other field remains unapproved, and per AGENTS.md rule 4 a field is backfillable only when it appears in safeBackfillFields. The five rule 6 date-sensitive fields remain withheld and require their own explicit decision.",
     "Derived from a read-only comparison of reference lambda-20260714-194920-c3177c97_2026-07-15.json (500 records) against candidate lambda-20260715-080212-d3836a0d_2026-07-15.json (500 records). Full evidence: docs/forensic-bellingham-report.md.",
     "RULE 6 GUARD: dateSensitiveFields names the five fields AGENTS.md rule 6 covers. Listing them here makes the guard explicit -- the recovery engine refuses them for automatic backfill unless the same field also appears in safeBackfillFields, and that combination is recorded in the audit trail as a rule 6 approval. Until this was added the fields were merely absent from safeBackfillFields, which is the same outcome by accident rather than by policy: adding one of them to safeBackfillFields would have been permitted silently, with no rule 6 marker in the provenance.",
     "SCHEMA NOTE: two fields were added to the originally-specified schema. (1) 'version' — AGENTS.md rule 7 requires the rule/profile version on every finding, recovery action, export, and Trello draft, and there is no other field to source it from; bump it on any change below, since decisions audited against v1 are not valid under v2. (2) 'collectionPath' — the records path must be declared, never inferred (rule 1); it follows the same convention as ComparisonConfig.collectionPath in src/engine/types.ts, where a root key name selects that key and '$' means the root itself is the array. Say the word if you want either kept out of the specified schema.",
-    "KEY SHAPE: primaryKey and dedupeKey are composite — all listed fields joined in order. fallbackKeys is an array of composite keys, each an array of field names.",
+    "KEY SHAPE: primaryKey and dedupeKey are composite — all listed fields joined in order. fallbackKeys is an array of composite keys, each an array of field names. The keys are restated in this delta rather than inherited from the base so the identity policy for this source is visible in this one file.",
     "FACT: source shape is {\"Export\": [...]}; individual bid records are at $.Export[*]. All 45 fields are present in 100% of records in both runs and every value is a JSON string — including list-valued fields (BidDocuments, BidDocumentHashes, AddendumDocuments, AwardDocuments), which are JSON-encoded strings such as \"[]\" and must be decoded before document-level diffing.",
     "FACT: both files begin with a UTF-8 BOM (U+FEFF) and fail JSON.parse unmodified. This repository parses uploaded text directly at src/workers/analysis.worker.ts:15-16 and src/lib/file-order.ts:15-16, so these exports cannot be loaded by the app as-is. Reported only; no code was changed.",
     "FACT: BidURL is 100% unique and non-blank in both runs (500/500 each). All 1000 values match https://cob.procureware.com/Bids/<guid> exactly, with zero trailing slashes, query strings, fragments, case variation, or whitespace. URL normalization (lowercase, strip query/fragment/trailing slash) is currently a no-op and is specified as defensive only.",
@@ -82,24 +57,7 @@
     "OPEN QUESTION — LOWER CONFIDENCE: both runs contain exactly 500 records, and the candidate gained one while dropping one, which is consistent with a page-size or result cap. This is NOT established: the dropped record 3B-2018 sat at reference index 444 and the gained record 33B-2026 at candidate index 50, and array order is unstable between runs, so no recency-based eviction policy can be confirmed from the data. Verify against the scraper's pagination configuration.",
     "The candidate file analyzed was lambda-20260715-080212-d3836a0d_2026-07-15.json. The request named lambda-20260715-080212-d3836a0d_2026-07-15-2.json, which does not exist in the repository root; the analyzed file is the only one carrying run id d3836a0d. Re-run this analysis if a distinct -2 export exists elsewhere.",
     "SCOPE: this profile describes matching, dedupe, and review policy only. It authorizes no writes, no exports, and no external actions. The primary remedy for this regression is a fixed scraper re-run; recovery is a stopgap that must produce a new, clearly-labelled artifact per AGENTS.md rule 2.",
-    "CORROBORATION (v4 -> v5): textFields/deadlineCues configure the advisory review signal in src/engine/corroboration.ts. It reads the candidate's surviving Description for a deadline date and compares it with the reference value a backfill would write. MEASURED on the shipped pair: of 499 DueDate backfill candidates, 188 are corroborated by the text, 23 disagree, 288 say nothing -- 89% agreement where the text states a deadline at all, which is what earns DueDate the signal. PublishedDate and AwardDate agree about 2% of the time (the prose is not about them), so the calibration withholds the signal there rather than flagging 44% of records for nothing. The cue list is what separates a submission deadline from a pre-bid walkthrough or a work-completion date; without it, records 60B-2019 and 63B-2023 were flagged wrongly. This signal is advisory under AGENTS.md rule 5: it ranks review candidates and never modifies output, changes a lane, or decides anything. Bumping the version because provenance must identify the policy a decision was made under, and this changes what a reviewer is shown."
-  ],
-  "corroboration": {
-    "textFields": [
-      "Description"
-    ],
-    "deadlineCues": [
-      "no later than",
-      "not later than",
-      "until",
-      "due by",
-      "due on",
-      "received by",
-      "submitted by",
-      "deadline",
-      "bids are due",
-      "proposals are due",
-      "closing"
-    ]
-  }
+    "CORROBORATION (v4 -> v5): textFields/deadlineCues configure the advisory review signal in src/engine/corroboration.ts. It reads the candidate's surviving Description for a deadline date and compares it with the reference value a backfill would write. MEASURED on the shipped pair: of 499 DueDate backfill candidates, 188 are corroborated by the text, 23 disagree, 288 say nothing -- 89% agreement where the text states a deadline at all, which is what earns DueDate the signal. PublishedDate and AwardDate agree about 2% of the time (the prose is not about them), so the calibration withholds the signal there rather than flagging 44% of records for nothing. The cue list is what separates a submission deadline from a pre-bid walkthrough or a work-completion date; without it, records 60B-2019 and 63B-2023 were flagged wrongly. This signal is advisory under AGENTS.md rule 5: it ranks review candidates and never modifies output, changes a lane, or decides anything. Bumping the version because provenance must identify the policy a decision was made under, and this changes what a reviewer is shown.",
+    "RESTRUCTURE (v5 -> v6): the profile was split into src/profiles/base.json (policy shared by all sources) plus this per-source delta, and the quality-analysis configuration that previously lived as the hardcoded defaultProfile in src/engine/profile.ts was absorbed into the profile as the 'quality' section. No policy value changed: the resolved profile is field-for-field identical to v5 plus that quality section, and sourceUrl/displayName/agency were added as identity metadata. Bumping the version because the profile's identity now covers the quality-analysis policy it previously did not — decisions recorded under v5 were made under a policy identity that did not pin quality config, and provenance must not conflate the two."
+  ]
 }

@@ -1,5 +1,13 @@
 import type { QualityProfile } from "./types";
 
+/**
+ * @deprecated Quality configuration is per-source policy and lives in the
+ * profile's `quality` section (src/profiles/base.json and per-source deltas);
+ * derive the engine view with `toQualityProfile(resolvedProfile)`. This
+ * remains only as the fallback for `runAnalysis` callers that supply no
+ * profile (engine tests). base.test.ts pins it equal to base.json's quality
+ * section so the two cannot drift.
+ */
 export const defaultProfile: QualityProfile = {
   id: "default-government-bids",
   version: 1,

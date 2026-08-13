@@ -5,9 +5,56 @@
  * Each source (e.g., bellingham-procureware) defines its own profile.
  */
 
+import type { EmptyRule, Severity } from "./types";
+
 // ============================================================================
 // Source Profile Types
 // ============================================================================
+
+/**
+ * Quality-analysis configuration for a source — which fields must be present,
+ * which are legitimately empty, how fields group into failure narratives, and
+ * where search draws its text from. Formerly the standalone `QualityProfile`
+ * (minus id/version/name, which the owning `SourceProfile` provides): folding
+ * it in gives each source ONE policy identity and version for the audit trail.
+ */
+export type QualitySection = {
+  requiredFields: string[];
+  optionalEmptyFields: string[];
+  emptyRules: Record<string, EmptyRule>;
+  identityDefault: string[];
+  fieldGroups: Array<{
+    id: string;
+    name: string;
+    fields: string[];
+    thresholdDrop: number;
+    minAffectedFields: number;
+    severity: Severity;
+    narrative: string;
+  }>;
+  /**
+   * List-valued fields diffed at document level, paired with their hash fields.
+   * Lives on the profile so engine code carries no source field names.
+   */
+  documentFieldPairs: Array<{ docs: string; hashes: string }>;
+  /** Source-record fields fed into the search index, by search role. */
+  searchSourceFields: { title: string; status: string; type: string; url: string };
+};
+
+/**
+ * How to recognize a source's exports from record content alone. Both halves
+ * default from other profile data — `urlFields` from
+ * `quality.searchSourceFields.url`, `urlPrefixes` from `[sourceUrl]` — so most
+ * sources auto-detect with no extra configuration. Detection is advisory: it
+ * suggests a profile, it never selects one silently over a manual choice. The
+ * lists are data, never code (AGENTS.md rule 1).
+ */
+export type ProfileDetectionHints = {
+  /** Record fields whose values identify the source. */
+  urlFields?: string[];
+  /** Value prefixes that identify this source. */
+  urlPrefixes?: string[];
+};
 
 /**
  * A source profile defines how to interpret and validate data from a specific
@@ -125,6 +172,38 @@ export type SourceProfile = {
 
   /** Optional notes documenting profile decisions and assumptions */
   notes?: string[];
+};
+
+/**
+ * A source profile as the registry serves it: recovery policy plus the
+ * source's identity metadata and quality-analysis configuration.
+ *
+ * The recovery/QA engine keeps consuming plain `SourceProfile` — it has no
+ * business reading URLs or quality thresholds — while the registry, picker,
+ * detection, and worker payload deal in this richer shape.
+ */
+export type RegisteredSourceProfile = SourceProfile & {
+  /**
+   * Canonical origin URL of the source this profile governs (e.g.
+   * "https://cob.procureware.com"). Unique across profiles. Identity and
+   * detection metadata only — the app never fetches it (AGENTS.md rule 8).
+   */
+  sourceUrl: string;
+
+  /** Human-readable picker label; falls back to `id` when absent. */
+  displayName?: string;
+
+  /** Optional owning-agency name, searchable in the profile picker. */
+  agency?: string;
+
+  detection?: ProfileDetectionHints;
+
+  /**
+   * Quality-analysis configuration for this source. Required: the drift
+   * engine's judgments (required fields, empty rules, field groups) are
+   * per-source policy, not app defaults.
+   */
+  quality: QualitySection;
 };
 
 // ============================================================================
