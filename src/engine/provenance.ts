@@ -43,6 +43,10 @@ export type ProvenanceEntry = {
   matchingKey: string[];
   profileId: string;
   profileVersion: number;
+  /** Hash of the resolved policy the run governed under; null when unstamped. */
+  policyHash: string | null;
+  /** Local-override revision active during the run; 0 when none. */
+  overrideRevision: number;
   sourceRun: string | null;
   referenceRun: string | null;
   timestamp: string;
@@ -52,6 +56,8 @@ export type ProvenanceEntry = {
 export type ProvenanceEnvelope = {
   profileId: string;
   profileVersion: number;
+  policyHash: string | null;
+  overrideRevision: number;
   matchingKey: string[];
   sourceRun: string | null;
   referenceRun: string | null;
@@ -89,6 +95,8 @@ export function createProvenanceEntry(
     matchingKey: matchingKey ?? envelope.matchingKey,
     profileId: envelope.profileId,
     profileVersion: envelope.profileVersion,
+    policyHash: envelope.policyHash,
+    overrideRevision: envelope.overrideRevision,
     sourceRun: envelope.sourceRun,
     referenceRun: envelope.referenceRun,
     timestamp: envelope.timestamp

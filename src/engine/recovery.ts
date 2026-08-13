@@ -30,7 +30,7 @@ import {
 } from "./provenance";
 import type { Finding } from "./findings";
 import type { MatchReport, MatchResult } from "./matchRecords";
-import type { SourceProfile } from "./adapter-types";
+import type { PolicyStamp, SourceProfile } from "./adapter-types";
 
 /** A value a person chose, overriding whatever either export held. */
 /**
@@ -131,6 +131,10 @@ export type RecoverySummary = {
 export type RecoveryResult = {
   profileId: string;
   profileVersion: number;
+  /** Hash of the resolved policy this run governed under; null when unstamped. */
+  policyHash: string | null;
+  /** Local-override revision active during the run; 0 when none. */
+  overrideRevision: number;
   generatedAt: string;
   sourceRun: string | null;
   referenceRun: string | null;
@@ -271,7 +275,7 @@ function findingsForRecord(
 export function runRecovery(
   candidateRecords: Array<Record<string, unknown>>,
   referenceRecords: Array<Record<string, unknown>>,
-  profile: SourceProfile,
+  profile: SourceProfile & PolicyStamp,
   matchReport: MatchReport,
   findings: Finding[],
   options: RecoveryOptions = {}
@@ -279,6 +283,8 @@ export function runRecovery(
   const envelope: ProvenanceEnvelope = {
     profileId: profile.id,
     profileVersion: profile.version,
+    policyHash: profile.policyHash ?? null,
+    overrideRevision: profile.overrideRevision ?? 0,
     matchingKey: profile.primaryKey,
     sourceRun: options.sourceRun ?? null,
     referenceRun: options.referenceRun ?? null,
@@ -513,6 +519,8 @@ export function runRecovery(
   return {
     profileId: profile.id,
     profileVersion: profile.version,
+    policyHash: envelope.policyHash,
+    overrideRevision: envelope.overrideRevision,
     generatedAt: envelope.timestamp,
     sourceRun: envelope.sourceRun,
     referenceRun: envelope.referenceRun,
@@ -569,7 +577,7 @@ export type OverrideApplication = {
 export function applyOverridesToRecovery(
   recovery: RecoveryResult,
   overrides: ManualOverride[],
-  profile: SourceProfile
+  profile: SourceProfile & PolicyStamp
 ): OverrideApplication {
   if (profile.id !== recovery.profileId || profile.version !== recovery.profileVersion) {
     throw new Error(
@@ -577,10 +585,26 @@ export function applyOverridesToRecovery(
         `${recovery.profileId}@${recovery.profileVersion}. Re-run the analysis before applying decisions.`
     );
   }
+  // Version equality is not policy equality once a local override can change
+  // content without touching the repo version — compare hashes when both runs
+  // were stamped (a null on either side means an unstamped engine-test run).
+  if (
+    profile.policyHash !== undefined &&
+    recovery.policyHash !== null &&
+    profile.policyHash !== recovery.policyHash
+  ) {
+    throw new Error(
+      `Overrides were resolved under policy ${profile.policyHash} (override revision ${profile.overrideRevision ?? 0}), ` +
+        `but this recovery ran under policy ${recovery.policyHash} (override revision ${recovery.overrideRevision}). ` +
+        `Re-run the analysis before applying decisions.`
+    );
+  }
 
   const envelope: ProvenanceEnvelope = {
     profileId: recovery.profileId,
     profileVersion: recovery.profileVersion,
+    policyHash: recovery.policyHash,
+    overrideRevision: recovery.overrideRevision,
     matchingKey: recovery.matchingKey,
     sourceRun: recovery.sourceRun,
     referenceRun: recovery.referenceRun,

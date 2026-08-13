@@ -48,6 +48,7 @@ const record = (overrides: Partial<PostedTicketRecord> = {}): PostedTicketRecord
   status: "success",
   profileId: "p",
   profileVersion: 1,
+  policyHash: null,
   sourceRun: null,
   referenceRun: null,
   title: "t",

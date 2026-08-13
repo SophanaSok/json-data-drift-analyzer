@@ -33,6 +33,8 @@ export type PostedTicketRecord = {
   status: "success" | "failed" | "unknown";
   profileId: string;
   profileVersion: number;
+  /** Hash of the resolved policy the reviewed run governed under; null when unstamped. */
+  policyHash: string | null;
   sourceRun: string | null;
   referenceRun: string | null;
   title: string;
@@ -61,7 +63,17 @@ export async function runFingerprint(review: RecoveryReview, draft: TicketDraft)
   const descriptionHash = await hashText(draft.markdownDescription);
 
   return hashText(
-    [review.profileId, String(review.profileVersion), candidate, reference, draft.title, descriptionHash].join("::")
+    [
+      review.profileId,
+      String(review.profileVersion),
+      // Policy content identity: a report made under a local override (or any
+      // policy change the version alone cannot see) is a different report.
+      review.policyHash ?? "no-policy-hash",
+      candidate,
+      reference,
+      draft.title,
+      descriptionHash
+    ].join("::")
   );
 }
 

@@ -68,6 +68,22 @@ describe("assessDecisionBridge", () => {
     expect(verdict.reason).toContain("version");
   });
 
+  it("refuses when the resolved policy hash differs, even at the same version", () => {
+    // A local override changes policy content without touching the repo
+    // version; the version check alone would wave it through.
+    const stampedReview = { ...review, policyHash: "aaaaaaaaaaaaaaaa" };
+    const differentPolicy = { ...profile, policyHash: "bbbbbbbbbbbbbbbb" };
+    const verdict = assessDecisionBridge(analysis, stampedReview, differentPolicy);
+    expect(verdict.available).toBe(false);
+    expect(verdict.reason).toContain("different resolved policy");
+
+    const samePolicy = { ...profile, policyHash: "aaaaaaaaaaaaaaaa" };
+    expect(assessDecisionBridge(analysis, stampedReview, samePolicy).available).toBe(true);
+
+    // Unstamped on either side (pure-engine runs) keeps the old behavior.
+    expect(assessDecisionBridge(analysis, review, profile).available).toBe(true);
+  });
+
   it("refuses when the analysis read a different collection than the profile governs", () => {
     const divergent = {
       ...analysis,

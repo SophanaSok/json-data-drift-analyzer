@@ -175,6 +175,22 @@ export type SourceProfile = {
 };
 
 /**
+ * The pinned policy identity a resolved profile carries (AGENTS.md rule 7).
+ *
+ * Engine functions accept `SourceProfile & PolicyStamp` so a fully resolved
+ * profile flows through unchanged while pure-engine tests may omit the stamp;
+ * artifacts record `policyHash: null` when no stamp was supplied. The numeric
+ * `version` alone cannot pin policy content once a profile is base + delta +
+ * optional local override — the hash is what provenance and staleness compare.
+ */
+export type PolicyStamp = {
+  /** FNV-1a 64 hash of the canonically serialized resolved profile. */
+  policyHash?: string;
+  /** Revision of the applied local override; 0 when none. */
+  overrideRevision?: number;
+};
+
+/**
  * A source profile as the registry serves it: recovery policy plus the
  * source's identity metadata and quality-analysis configuration.
  *

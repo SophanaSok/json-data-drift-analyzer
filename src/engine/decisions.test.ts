@@ -585,6 +585,8 @@ describe("orderDecisionLog: reload cannot flip which decision is in force", () =
     matchingKey: [],
     profileId: BELLINGHAM_PROCUREWARE.id,
     profileVersion: BELLINGHAM_PROCUREWARE.version,
+    policyHash: null,
+    overrideRevision: 0,
     timestamp,
     sequence
   });
