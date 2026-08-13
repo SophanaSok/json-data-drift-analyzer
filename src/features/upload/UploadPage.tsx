@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { DateOrderingAlert } from "../../components/upload/DateOrderingAlert";
 import { ExportDateIndicators } from "../../components/upload/ExportDateIndicators";
@@ -9,7 +9,10 @@ import { useEffectiveProfile } from "../profiles/use-effective-profile";
 import { ProfilePicker } from "./ProfilePicker";
 import { loadLastProfileId, saveLastProfileId } from "./last-profile";
 import { hashText } from "../../lib/hash";
-import { assessFileOrderFromJson } from "../../lib/file-order";
+import { parseExport } from "../../lib/file-order";
+import { assessFileOrder } from "../../engine/export-metadata";
+import { PROFILES } from "../../profiles";
+import { detectSourceProfile, type DetectionResult } from "../../profiles/detect";
 import { useUiStore } from "../../stores/ui-store";
 import { useToastStore } from "../../stores/toast-store";
 import { createAnalysisRunner } from "./analysis-runner";
@@ -54,6 +57,18 @@ export function UploadPage() {
   });
   const sourceProfile = getProfile(sourceProfileId) ?? BELLINGHAM_PROCUREWARE;
   const profileRows = useMemo(() => listProfiles(), []);
+  // Where the current selection came from. Detection may replace a default or
+  // persisted selection; it must never replace a person's (or its own,
+  // subsequently reviewed) choice — it warns instead.
+  const [selectionOrigin, setSelectionOrigin] = useState<"default" | "persisted" | "manual" | "detected">(
+    () => (loadLastProfileId() !== null ? "persisted" : "default")
+  );
+  const [detection, setDetection] = useState<{ baseline: DetectionResult; latest: DetectionResult } | null>(null);
+  const [mismatchDismissed, setMismatchDismissed] = useState(false);
+  // Refs so the file-parse effect can read the CURRENT origin/selection
+  // without re-parsing both files every time either changes.
+  const selectionRef = useRef({ origin: selectionOrigin, profileId: sourceProfileId });
+  selectionRef.current = { origin: selectionOrigin, profileId: sourceProfileId };
   // Resolved policy identity: base + delta + any local override. What the
   // worker receives and what the cache key pins. `loading` gates Analyze so a
   // run can never start under a policy whose override read has not settled.
@@ -90,16 +105,18 @@ export function UploadPage() {
   // profile switch — a manual edit surviving into a different source's analysis
   // is exactly the cross-source confusion to prevent; the badges below give a
   // deliberate edit an escape hatch instead.
-  const selectProfile = (id: string) => {
+  const applyProfileSelection = (id: string, origin: "manual" | "detected") => {
     const next = getProfile(id);
     if (!next) return;
     setSourceProfileId(id);
+    setSelectionOrigin(origin);
     saveLastProfileId(id);
     setCollectionPath(next.collectionPath);
     setIdentityKeys(next.quality.identityDefault.join(","));
     setCollectionPathCustomized(false);
     setIdentityCustomized(false);
   };
+  const selectProfile = (id: string) => applyProfileSelection(id, "manual");
 
   // Picking a different file abandons the run in flight — its result would
   // describe files the user has moved past, and the runner refusing "already
@@ -115,20 +132,34 @@ export function UploadPage() {
   useEffect(() => {
     let cancelled = false;
     setFileOrderAssessment(null);
+    setDetection(null);
+    setMismatchDismissed(false);
     if (!baselineFile || !latestFile) return;
 
     void Promise.all([baselineFile.text(), latestFile.text()])
       .then(([baselineText, latestText]) => {
         if (cancelled) return;
+        // Each file is parsed ONCE here and the parsed value feeds both the
+        // file-order assessment and profile detection — strictly cheaper than
+        // the previous parse-inside-assess, which detection would have doubled.
+        const baselineParsed = parseExport(baselineText);
+        const latestParsed = parseExport(latestText);
         setFileOrderAssessment(
-          assessFileOrderFromJson(
-            baselineText,
-            latestText,
-            baselineFile.name,
-            latestFile.name,
-            collectionPath
-          )
+          assessFileOrder(baselineParsed, latestParsed, baselineFile.name, latestFile.name, collectionPath)
         );
+
+        const registered = Object.values(PROFILES);
+        const baselineDetection = detectSourceProfile(baselineParsed, registered);
+        const latestDetection = detectSourceProfile(latestParsed, registered);
+        setDetection({ baseline: baselineDetection, latest: latestDetection });
+
+        // Auto-select only over a default or persisted selection. A manual
+        // choice — or a previous detection the user has had a chance to see —
+        // is never silently replaced; the mismatch notice below warns instead.
+        const { origin } = selectionRef.current;
+        if (baselineDetection.status === "match" && (origin === "default" || origin === "persisted")) {
+          applyProfileSelection(baselineDetection.match.profileId, "detected");
+        }
       })
       .catch(() => {
         if (!cancelled) {
@@ -363,6 +394,67 @@ export function UploadPage() {
             >
               A local override exists for this profile but was written against an older repo version and was NOT
               applied. Review it on the Profiles page.
+            </span>
+          ) : null}
+          {detection?.baseline.status === "match" &&
+          detection.baseline.match.profileId === sourceProfileId &&
+          selectionOrigin === "detected" ? (
+            <span
+              data-testid="profile-detection-notice"
+              className="mt-1 block rounded border border-sky-300 bg-sky-50 p-2 text-xs text-sky-800"
+            >
+              Detected from the uploaded file ({detection.baseline.match.matchedField} starts with{" "}
+              {detection.baseline.match.matchedPrefix}). Not this source? Pick another profile above.
+            </span>
+          ) : null}
+          {detection?.baseline.status === "match" &&
+          detection.baseline.match.profileId !== sourceProfileId &&
+          !mismatchDismissed ? (
+            <span
+              data-testid="profile-detection-mismatch"
+              className="mt-1 block rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800"
+            >
+              This file looks like{" "}
+              <strong>{PROFILES[detection.baseline.match.profileId]?.displayName ?? detection.baseline.match.profileId}</strong>{" "}
+              ({detection.baseline.match.matchedField} starts with {detection.baseline.match.matchedPrefix}), but{" "}
+              <strong>{sourceProfile.displayName ?? sourceProfile.id}</strong> is selected.{" "}
+              <button
+                type="button"
+                className="underline"
+                data-testid="use-detected-profile"
+                onClick={() => {
+                  const detected = detection.baseline;
+                  if (detected.status === "match") applyProfileSelection(detected.match.profileId, "detected");
+                }}
+              >
+                Use {PROFILES[detection.baseline.match.profileId]?.displayName ?? detection.baseline.match.profileId}
+              </button>{" "}
+              ·{" "}
+              <button type="button" className="underline" onClick={() => setMismatchDismissed(true)}>
+                Keep {sourceProfile.displayName ?? sourceProfile.id}
+              </button>
+            </span>
+          ) : null}
+          {detection?.baseline.status === "ambiguous" ? (
+            <span
+              data-testid="profile-detection-ambiguous"
+              className="mt-1 block rounded border border-slate-300 bg-slate-50 p-2 text-xs text-slate-600"
+            >
+              The uploaded file matches more than one profile (
+              {detection.baseline.matches.map((match) => match.profileId).join(", ")}) — their detection prefixes
+              overlap. Pick the right one manually.
+            </span>
+          ) : null}
+          {detection?.baseline.status === "match" &&
+          detection.latest.status === "match" &&
+          detection.baseline.match.profileId !== detection.latest.match.profileId ? (
+            <span
+              data-testid="profile-detection-cross-source"
+              className="mt-1 block rounded border border-red-300 bg-red-50 p-2 text-xs text-red-700"
+            >
+              The two files look like different sources: baseline matches{" "}
+              {detection.baseline.match.profileId}, latest matches {detection.latest.match.profileId}. Comparing
+              them would be cross-source drift, which no profile governs.
             </span>
           ) : null}
         </div>
