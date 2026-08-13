@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { resolveDecisions } from "../../engine/decisions";
+import { buildCorroborationReport } from "../../engine/corroboration";
 import {
   buildCellContext,
   buildFieldDetail,
@@ -63,6 +64,14 @@ export function FieldsPage() {
   const ctx = useMemo(
     () => (analysis ? buildCellContext(analysis, review, profile) : null),
     [analysis, review, profile]
+  );
+
+  // Advisory only (rule 5): quoted evidence that a reference value agrees or
+  // disagrees with text the candidate run still has. Never a lane, never a
+  // decision. Computed once per run.
+  const corroboration = useMemo(
+    () => (analysis ? buildCorroborationReport(analysis, profile) : null),
+    [analysis, profile]
   );
 
   const summaries = useMemo(
@@ -267,6 +276,7 @@ export function FieldsPage() {
             <FieldDetailPanel
               key={detail.field}
               detail={detail}
+              corroboration={corroboration}
               renderDecision={
                 makeContext && detail.decisionsUnavailableReason === null
                   ? (cell) => (
@@ -338,6 +348,7 @@ export function FieldsPage() {
               focusMode={focusMode}
               onToggleFocusMode={() => setParam("focus", focusMode ? null : "1")}
               onToggleHelp={() => setShowHelp((shown) => !shown)}
+              corroboration={corroboration}
             />
           ) : (
             <p className="rounded border bg-white p-6 text-sm text-slate-600" data-testid="record-detail-prompt">

@@ -7,6 +7,8 @@ import { FieldDecisionControl } from "./FieldDecisionControl";
 import { RecordBulkBar } from "./RecordBulkBar";
 import { recordCellDecision } from "./record-decision";
 import type { RecordQueue, RecordShortcutActions } from "./use-record-queue";
+import { CorroborationNote } from "./CorroborationNote";
+import { corroborationKey, type CorroborationReport } from "../../engine/corroboration";
 import { isLongValue, shortValue } from "./field-view-table";
 
 type RecordModePanelProps = {
@@ -29,6 +31,8 @@ type RecordModePanelProps = {
   focusMode: boolean;
   onToggleFocusMode: () => void;
   onToggleHelp: () => void;
+  /** Advisory evidence per cell; never affects what may be decided. */
+  corroboration: CorroborationReport | null;
 };
 
 const SOURCE_BADGE = {
@@ -82,7 +86,8 @@ export function RecordModePanel({
   onDecisionsRecorded,
   focusMode,
   onToggleFocusMode,
-  onToggleHelp
+  onToggleHelp,
+  corroboration
 }: RecordModePanelProps) {
   const [showContext, setShowContext] = useState(false);
   const [selected, setSelected] = useState(0);
@@ -284,6 +289,9 @@ export function RecordModePanel({
                   </td>
                   <td className="min-w-0 break-words p-2">
                     <Value value={cell.referenceValue} />
+                    <CorroborationNote
+                      corroboration={corroboration?.cells.get(corroborationKey(detail.recordId, cell.field))}
+                    />
                   </td>
                   <td className="min-w-0 break-words p-2" data-testid={`record-output-${cell.field}`}>
                     <Value value={output.value} />

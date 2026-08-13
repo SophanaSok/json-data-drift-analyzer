@@ -1,11 +1,23 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import type { FieldCell, FieldDetail } from "../../engine/field-view";
 import { FieldRecordsTable } from "./FieldRecordsTable";
 import { FieldValueDistribution } from "./FieldValueDistribution";
-import { filterCells, formatPercent, sortCells, type CellSortColumn, type SituationFilter, type SortDirection } from "./field-view-table";
+import {
+  filterCells,
+  formatPercent,
+  sortCells,
+  type CellSortColumn,
+  type CorroborationFilter,
+  type SituationFilter,
+  type SortDirection
+} from "./field-view-table";
+import { CorroborationNote } from "./CorroborationNote";
+import { corroborationKey, type CorroborationReport } from "../../engine/corroboration";
 
 type FieldDetailPanelProps = {
   detail: FieldDetail;
+  /** Advisory evidence per cell; null when the signal is unavailable. */
+  corroboration?: CorroborationReport | null;
   renderDecision?: (cell: FieldCell) => ReactNode;
   /** Bulk controls, given the filtered cells and the filter scope in words. */
   renderBulk?: (visibleCells: FieldCell[], scopeDescription: string) => ReactNode;
@@ -20,7 +32,7 @@ const SITUATION_OPTIONS: Array<{ value: SituationFilter; label: string }> = [
   { value: "only_one_file", label: "Only in one file" }
 ];
 
-export function FieldDetailPanel({ detail, renderDecision, renderBulk }: FieldDetailPanelProps) {
+export function FieldDetailPanel({ detail, corroboration, renderDecision, renderBulk }: FieldDetailPanelProps) {
   const [situation, setSituation] = useState<SituationFilter>("all");
   const [valueGroup, setValueGroup] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -28,10 +40,29 @@ export function FieldDetailPanel({ detail, renderDecision, renderBulk }: FieldDe
     column: "recordKey",
     direction: "asc"
   });
+  const [corroborationFilter, setCorroborationFilter] = useState<CorroborationFilter>("all");
+
+  const fieldSignal = corroboration?.fields.find((entry) => entry.field === detail.field);
+  const signalAvailable = fieldSignal?.trustworthy === true;
+  const verdictOf = useCallback(
+    (cell: { recordId: string }) => corroboration?.cells.get(corroborationKey(cell.recordId, detail.field))?.verdict,
+    [corroboration, detail.field]
+  );
 
   const visibleCells = useMemo(
-    () => sortCells(filterCells(detail.cells, { situation, valueGroup, search }), sort.column, sort.direction),
-    [detail.cells, situation, valueGroup, search, sort]
+    () =>
+      sortCells(
+        filterCells(detail.cells, {
+          situation,
+          valueGroup,
+          search,
+          corroboration: corroborationFilter,
+          corroborationOf: verdictOf
+        }),
+        sort.column,
+        sort.direction
+      ),
+    [detail.cells, situation, valueGroup, search, sort, corroborationFilter, verdictOf]
   );
 
   const onSort = (column: CellSortColumn) => {
@@ -76,6 +107,15 @@ export function FieldDetailPanel({ detail, renderDecision, renderBulk }: FieldDe
               </span>
             ) : null}
             {policy.description}
+          </p>
+        ) : null}
+
+        {signalAvailable ? (
+          <p className="mt-1 text-xs text-slate-600" data-testid="corroboration-summary">
+            The records&rsquo; own surviving text states a deadline for {fieldSignal!.corroborated + fieldSignal!.notCorroborated} of
+            these, agreeing {Math.round((fieldSignal!.agreementRate ?? 0) * 100)}% of the time —{" "}
+            <strong>{fieldSignal!.notCorroborated}</strong> disagree and are worth reading individually. Advisory only:
+            it never decides anything.
           </p>
         ) : null}
 
@@ -124,10 +164,25 @@ export function FieldDetailPanel({ detail, renderDecision, renderBulk }: FieldDe
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
+          {signalAvailable ? (
+            <label className="flex items-center gap-1">
+              <span className="text-xs text-slate-500">Own text</span>
+              <select
+                className="rounded border border-slate-300 p-1"
+                data-testid="filter-corroboration"
+                value={corroborationFilter}
+                onChange={(event) => setCorroborationFilter(event.target.value as CorroborationFilter)}
+              >
+                <option value="all">All</option>
+                <option value="not_corroborated">Disagrees ({fieldSignal!.notCorroborated})</option>
+                <option value="corroborated">Agrees ({fieldSignal!.corroborated})</option>
+              </select>
+            </label>
+          ) : null}
           <span className="text-xs text-slate-500" data-testid="field-cells-count" aria-live="polite">
             Showing {visibleCells.length} of {detail.cells.length}
           </span>
-          {valueGroup !== null || situation !== "all" || search !== "" ? (
+          {valueGroup !== null || situation !== "all" || search !== "" || corroborationFilter !== "all" ? (
             <button
               type="button"
               className="rounded border px-2 py-0.5 text-xs text-sky-700 hover:bg-slate-100"
@@ -136,6 +191,7 @@ export function FieldDetailPanel({ detail, renderDecision, renderBulk }: FieldDe
                 setSituation("all");
                 setValueGroup(null);
                 setSearch("");
+                setCorroborationFilter("all");
               }}
             >
               Reset filters
@@ -164,7 +220,15 @@ export function FieldDetailPanel({ detail, renderDecision, renderBulk }: FieldDe
           </p>
         ) : (
           <div className="mt-3">
-            <FieldRecordsTable cells={visibleCells} sort={sort} onSort={onSort} renderDecision={renderDecision} />
+            <FieldRecordsTable
+              cells={visibleCells}
+              sort={sort}
+              onSort={onSort}
+              renderDecision={renderDecision}
+              renderReferenceNote={(cell) => (
+                <CorroborationNote corroboration={corroboration?.cells.get(corroborationKey(cell.recordId, detail.field))} />
+              )}
+            />
           </div>
         )}
       </div>

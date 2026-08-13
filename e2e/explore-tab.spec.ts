@@ -169,11 +169,14 @@ test.describe("explore tab: by record", () => {
   test("edits one field to a corrected value, pre-filled from the reference", async ({ page }) => {
     await page.getByTestId("queue-record-1B-2020").click();
     const row = page.getByTestId("record-cell-DueDate");
-    const reference = (await row.locator("td").nth(3).textContent())?.trim() ?? "";
 
     await row.getByTestId("decide-1B-2020-DueDate").click();
-    // The custom box starts as the reference value — correct it, don't retype it.
-    await expect(row.getByTestId("decision-custom")).toHaveValue(reference);
+    // The custom box starts as the reference value — correct it, don't retype
+    // it. Asserted as a relationship rather than by scraping the cell's text,
+    // which also carries the advisory note.
+    const seeded = await row.getByTestId("decision-custom").inputValue();
+    expect(seeded).toMatch(/^\d{1,2}\/\d{1,2}\/\d{4}/);
+    await expect(row.locator("td").nth(3)).toContainText(seeded);
     await row.getByTestId("decision-reason").fill("description shows the deadline moved");
     await row.getByTestId("decision-custom").fill("8/4/2026 11:00 AM");
     await row.getByTestId("decision-custom-apply").click();
@@ -268,5 +271,49 @@ test.describe("explore tab: the record task queue", () => {
     expect(audit).toContain("48250.00");
     // A typed value is distinguishable from an accepted reference in the audit.
     expect(audit).toContain("manual_custom_value");
+  });
+});
+
+test.describe("explore tab: the corroboration signal", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("");
+    await page
+      .getByTestId("baseline-input")
+      .setInputFiles(path.join(root, "src/test/fixtures/bellingham-reference.json"));
+    await page
+      .getByTestId("latest-input")
+      .setInputFiles(path.join(root, "src/test/fixtures/bellingham-candidate.json"));
+    await page.getByTestId("analyze-button").click();
+    await page.getByRole("link", { name: "Explore", exact: true }).click();
+    await expect(page.getByTestId("fields-explorer")).toBeVisible({ timeout: 30000 });
+  });
+
+  test("narrows 499 look-alike DueDate rows to the 23 whose own text disagrees", async ({ page }) => {
+    await page.getByTestId("field-row-DueDate").click();
+    await expect(page.getByTestId("corroboration-summary")).toContainText("89%");
+
+    await page.getByTestId("filter-corroboration").selectOption("not_corroborated");
+    await expect(page.getByTestId("field-cells-count")).toContainText("Showing 23 of");
+  });
+
+  test("shows the quoted evidence on the record the profile notes cite", async ({ page }) => {
+    // 38B-2026 sorts well below the virtualized window; deep-link to it, which
+    // also exercises the restore-from-cache path.
+    await page.goto("results?tab=explore&mode=record&record=38B-2026");
+    await expect(page.getByTestId("record-mode-panel")).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("#record-detail-heading")).toHaveText("38B-2026");
+
+    const note = page.getByTestId("corroboration-DueDate");
+    await expect(note).toHaveAttribute("data-verdict", "not_corroborated");
+    await note.getByText(/different date/).click();
+    await expect(note).toContainText("no later than 11:00 AM on August 4th, 2026");
+    // Advisory: it never says the reference is wrong.
+    await expect(note).toContainText("This flag does not say which");
+  });
+
+  test("says nothing on a field the prose does not discuss", async ({ page }) => {
+    await page.getByTestId("field-row-PublishedDate").click();
+    await expect(page.getByTestId("filter-corroboration")).toHaveCount(0);
+    await expect(page.getByTestId("corroboration-summary")).toHaveCount(0);
   });
 });

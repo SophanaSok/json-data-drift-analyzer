@@ -14,6 +14,8 @@ type FieldRecordsTableProps = {
   onSort: (column: CellSortColumn) => void;
   /** Rendered in the last column when provided (the decision controls). */
   renderDecision?: (cell: FieldCell) => ReactNode;
+  /** Rendered under the reference value — advisory evidence about that value. */
+  renderReferenceNote?: (cell: FieldCell) => ReactNode;
 };
 
 const COLUMNS: Array<{ id: CellSortColumn; label: string }> = [
@@ -58,7 +60,7 @@ const SITUATION_BADGE: Record<FieldCell["situation"], string> = {
   record_removed: "bg-red-50 text-red-900"
 };
 
-export function FieldRecordsTable({ cells, sort, onSort, renderDecision }: FieldRecordsTableProps) {
+export function FieldRecordsTable({ cells, sort, onSort, renderDecision, renderReferenceNote }: FieldRecordsTableProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   // One expansion at a time keeps remeasurement cheap and the page readable.
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -152,6 +154,7 @@ export function FieldRecordsTable({ cells, sort, onSort, renderDecision }: Field
                     expanded={expandedKey === `reference-${cell.recordKey}`}
                     onToggle={() => toggleExpansion(`reference-${cell.recordKey}`)}
                   />
+                  {renderReferenceNote?.(cell)}
                 </div>
                 <div role="cell" className={CELL_CLASS}>
                   <span className={`rounded px-1.5 py-0.5 text-xs ${SITUATION_BADGE[cell.situation]}`}>

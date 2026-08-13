@@ -3,6 +3,9 @@ import { formatCellValue } from "../../engine/field-view";
 
 export type SituationFilter = "all" | "candidate_blank" | "conflict" | "reference_blank" | "unchanged" | "only_one_file";
 
+/** Advisory corroboration filter; "all" when the signal is unavailable. */
+export type CorroborationFilter = "all" | "not_corroborated" | "corroborated";
+
 export type FieldListSortColumn = "field" | "latestFill" | "change" | "review";
 export type CellSortColumn = "recordKey" | "candidate" | "reference" | "situation";
 export type SortDirection = "asc" | "desc";
@@ -24,11 +27,20 @@ export function matchesSituation(cell: FieldCell, filter: SituationFilter): bool
 
 export function filterCells(
   cells: FieldCell[],
-  options: { situation: SituationFilter; valueGroup: string | null; search: string }
+  options: {
+    situation: SituationFilter;
+    valueGroup: string | null;
+    search: string;
+    corroboration?: CorroborationFilter;
+    corroborationOf?: (cell: FieldCell) => string | undefined;
+  }
 ): FieldCell[] {
   const query = options.search.trim().toLowerCase();
   return cells.filter((cell) => {
     if (!matchesSituation(cell, options.situation)) return false;
+    if (options.corroboration && options.corroboration !== "all") {
+      if (options.corroborationOf?.(cell) !== options.corroboration) return false;
+    }
     if (options.valueGroup !== null && formatCellValue(cell.referenceValue) !== options.valueGroup) return false;
     if (query.length > 0) {
       const haystack =

@@ -86,6 +86,25 @@ export type SourceProfile = {
   dateSensitiveFields?: string[];
 
   /**
+   * Configuration for the advisory corroboration signal (see
+   * src/engine/corroboration.ts). Absent, no signal is produced.
+   *
+   * It lives on the profile because both halves are source-specific: which
+   * fields still carry prose after a regression, and how that prose introduces
+   * a deadline. AGENTS.md rule 1 keeps such knowledge out of engine code.
+   */
+  corroboration?: {
+    /** Candidate fields whose surviving text may restate a lost value. */
+    textFields: string[];
+    /**
+     * Phrases that introduce a deadline. A date not preceded by one of these
+     * is ignored — otherwise a pre-bid meeting or completion date reads as a
+     * disagreement about the due date.
+     */
+    deadlineCues: string[];
+  };
+
+  /**
    * What a recovered artifact should do with candidate records that have no
    * reference counterpart. Defaults to "keep": dropping records the candidate run
    * genuinely scraped would lose data, which is the more damaging error.
