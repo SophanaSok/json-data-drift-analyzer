@@ -143,9 +143,10 @@ test.describe("recovery review: findings explorer", () => {
 
 test("source profile is selectable and governs the review", async ({ page }) => {
   await page.goto("");
-  const select = page.getByTestId("source-profile-select");
-  await expect(select).toBeVisible();
-  await expect(select).toHaveValue("bellingham-procureware");
+  // The picker is a combobox now; its closed value renders the display name.
+  const picker = page.getByTestId("source-profile-select");
+  await expect(picker).toBeVisible();
+  await expect(picker).toHaveValue(/Bellingham ProcureWare · v6/);
   await expect(page.getByText("Approved fields:")).toContainText("ContactPhone");
 });
 

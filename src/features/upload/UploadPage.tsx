@@ -4,8 +4,10 @@ import { DateOrderingAlert } from "../../components/upload/DateOrderingAlert";
 import { ExportDateIndicators } from "../../components/upload/ExportDateIndicators";
 import { ANALYSIS_CACHE_SCHEMA_VERSION, db, putAnalysisBounded } from "../../db";
 import { ENGINE_SEMANTICS_VERSION } from "../../engine/version";
-import { BELLINGHAM_PROCUREWARE, PROFILES, getProfile } from "../../profiles";
+import { BELLINGHAM_PROCUREWARE, getProfile, listProfiles } from "../../profiles";
 import { useEffectiveProfile } from "../profiles/use-effective-profile";
+import { ProfilePicker } from "./ProfilePicker";
+import { loadLastProfileId, saveLastProfileId } from "./last-profile";
 import { hashText } from "../../lib/hash";
 import { assessFileOrderFromJson } from "../../lib/file-order";
 import { useUiStore } from "../../stores/ui-store";
@@ -30,9 +32,13 @@ export function UploadPage() {
   const navigate = useNavigate();
   const [baselineFile, setBaselineFile] = useState<File | null>(null);
   const [latestFile, setLatestFile] = useState<File | null>(null);
-  const [collectionPath, setCollectionPath] = useState("Export");
+  const [collectionPath, setCollectionPath] = useState(BELLINGHAM_PROCUREWARE.collectionPath);
   const [identityKeys, setIdentityKeys] = useState(BELLINGHAM_PROCUREWARE.quality.identityDefault.join(","));
   const [ignoredFields, setIgnoredFields] = useState("");
+  // Set when the user edits a profile-derived input after the last profile
+  // change; a customized value survives a re-render but not a profile switch.
+  const [collectionPathCustomized, setCollectionPathCustomized] = useState(false);
+  const [identityCustomized, setIdentityCustomized] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingAlert, setPendingAlert] = useState(false);
   const [running, setRunning] = useState(false);
@@ -40,9 +46,14 @@ export function UploadPage() {
   const setStep = useUiStore((state) => state.setWorkerStep);
   const setAnalysis = useUiStore((state) => state.setAnalysis);
   const setReview = useUiStore((state) => state.setReview);
-  const [sourceProfileId, setSourceProfileId] = useState(BELLINGHAM_PROCUREWARE.id);
-  // Falls back rather than crashing if a stored id ever names an unregistered profile.
+  // Last-used profile, validated against the registry: a stored id from a
+  // removed profile falls back to the default rather than crashing.
+  const [sourceProfileId, setSourceProfileId] = useState(() => {
+    const stored = loadLastProfileId();
+    return stored !== null && getProfile(stored) !== null ? stored : BELLINGHAM_PROCUREWARE.id;
+  });
   const sourceProfile = getProfile(sourceProfileId) ?? BELLINGHAM_PROCUREWARE;
+  const profileRows = useMemo(() => listProfiles(), []);
   // Resolved policy identity: base + delta + any local override. What the
   // worker receives and what the cache key pins. `loading` gates Analyze so a
   // run can never start under a policy whose override read has not settled.
@@ -74,6 +85,21 @@ export function UploadPage() {
       runner.cancel();
     };
   }, []);
+
+  // Derive the comparison inputs from the selected profile. Unconditional on a
+  // profile switch — a manual edit surviving into a different source's analysis
+  // is exactly the cross-source confusion to prevent; the badges below give a
+  // deliberate edit an escape hatch instead.
+  const selectProfile = (id: string) => {
+    const next = getProfile(id);
+    if (!next) return;
+    setSourceProfileId(id);
+    saveLastProfileId(id);
+    setCollectionPath(next.collectionPath);
+    setIdentityKeys(next.quality.identityDefault.join(","));
+    setCollectionPathCustomized(false);
+    setIdentityCustomized(false);
+  };
 
   // Picking a different file abandons the run in flight — its result would
   // describe files the user has moved past, and the runner refusing "already
@@ -279,22 +305,40 @@ export function UploadPage() {
       <section className="grid gap-4 md:grid-cols-3">
         <label className="text-sm">
           <span className="mb-1 block font-medium">Collection path</span>
-          <input className="w-full rounded border border-slate-300 p-2" value={collectionPath} onChange={(event) => setCollectionPath(event.target.value)} placeholder="Export or $" />
+          <input
+            className="w-full rounded border border-slate-300 p-2"
+            value={collectionPath}
+            onChange={(event) => {
+              setCollectionPath(event.target.value);
+              setCollectionPathCustomized(event.target.value !== sourceProfile.collectionPath);
+            }}
+            placeholder="Export or $"
+          />
+          {collectionPathCustomized ? (
+            <span className="mt-1 block text-xs text-amber-700" data-testid="collection-path-customized">
+              Edited — differs from the profile ({sourceProfile.collectionPath}). Drift comparison will read “
+              {collectionPath}”, but recovery always reads the profile's path.{" "}
+              <button
+                type="button"
+                className="underline"
+                onClick={() => {
+                  setCollectionPath(sourceProfile.collectionPath);
+                  setCollectionPathCustomized(false);
+                }}
+              >
+                Reset to profile
+              </button>
+            </span>
+          ) : null}
         </label>
-        <label className="block text-sm">
+        <div className="block text-sm">
           <span className="font-medium">Source profile</span>
-          <select
-            className="mt-1 w-full rounded border border-slate-300 p-2"
-            data-testid="source-profile-select"
+          <ProfilePicker
+            profiles={profileRows}
             value={sourceProfileId}
-            onChange={(event) => setSourceProfileId(event.target.value)}
-          >
-            {Object.values(PROFILES).map((profile) => (
-              <option key={profile.id} value={profile.id}>
-                {profile.id} (v{profile.version})
-              </option>
-            ))}
-          </select>
+            onChange={selectProfile}
+            overriddenIds={overrideActive ? new Set([sourceProfile.id]) : undefined}
+          />
           <span className="mt-1 block text-xs text-slate-500">
             Governs recovery: which fields may be backfilled, how records are matched, and when an
             export is blocked. Approved fields:{" "}
@@ -321,10 +365,32 @@ export function UploadPage() {
               applied. Review it on the Profiles page.
             </span>
           ) : null}
-        </label>
+        </div>
         <label className="text-sm">
           <span className="mb-1 block font-medium">Identity fields (comma-separated)</span>
-          <input className="w-full rounded border border-slate-300 p-2" value={identityKeys} onChange={(event) => setIdentityKeys(event.target.value)} />
+          <input
+            className="w-full rounded border border-slate-300 p-2"
+            value={identityKeys}
+            onChange={(event) => {
+              setIdentityKeys(event.target.value);
+              setIdentityCustomized(event.target.value !== sourceProfile.quality.identityDefault.join(","));
+            }}
+          />
+          {identityCustomized ? (
+            <span className="mt-1 block text-xs text-amber-700" data-testid="identity-customized">
+              Edited — differs from the profile ({sourceProfile.quality.identityDefault.join(",")}).{" "}
+              <button
+                type="button"
+                className="underline"
+                onClick={() => {
+                  setIdentityKeys(sourceProfile.quality.identityDefault.join(","));
+                  setIdentityCustomized(false);
+                }}
+              >
+                Reset to profile
+              </button>
+            </span>
+          ) : null}
         </label>
         <label className="text-sm">
           <span className="mb-1 block font-medium">Ignored fields</span>
