@@ -1,2 +1,0 @@
-async function e(e){if(typeof crypto?.subtle?.digest!=`function`)throw Error(`Hashing requires a secure context (HTTPS or localhost); this page was served over an origin where SubtleCrypto is unavailable.`);let t=new TextEncoder().encode(e),n=await crypto.subtle.digest(`SHA-256`,t);return[...new Uint8Array(n)].map(e=>e.toString(16).padStart(2,`0`)).join(``)}export{e as t};
-//# sourceMappingURL=hash-CnM31I92.js.map
