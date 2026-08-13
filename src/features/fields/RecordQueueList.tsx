@@ -24,15 +24,21 @@ export function RecordQueueList({ rows, selectedRecordKey, onSelectRecord }: Rec
   const rowVirtualizer = useVirtualizer({
     count: visible.length,
     getScrollElement: () => scrollRef.current,
+    // Fixed-height rows (one line plus badges), so no dynamic measurement:
+    // measureElement flushes synchronously, and scrolling to a distant index
+    // mounts enough rows at once to do that mid-render.
     estimateSize: () => 40,
-    measureElement: (element) => element.getBoundingClientRect().height,
     overscan: 8
   });
 
   // Keep the selection in view: after a few `n` presses the highlighted row is
   // otherwise off-screen and orientation is lost.
   useEffect(() => {
-    if (selectedIndex >= 0) rowVirtualizer.scrollToIndex(selectedIndex, { align: "auto" });
+    if (selectedIndex < 0) return;
+    // Deferred out of the effect body: the virtualizer flushes synchronously,
+    // and React refuses that while it is still rendering.
+    const frame = requestAnimationFrame(() => rowVirtualizer.scrollToIndex(selectedIndex, { align: "auto" }));
+    return () => cancelAnimationFrame(frame);
   }, [selectedIndex, rowVirtualizer]);
 
   return (
@@ -54,7 +60,6 @@ export function RecordQueueList({ rows, selectedRecordKey, onSelectRecord }: Rec
             return (
               <div
                 key={row.recordId}
-                ref={rowVirtualizer.measureElement}
                 data-index={virtualItem.index}
                 data-testid={`queue-record-${row.recordKey}`}
                 data-selected={isSelected ? "true" : "false"}

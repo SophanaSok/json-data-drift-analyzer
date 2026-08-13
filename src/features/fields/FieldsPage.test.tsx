@@ -505,3 +505,42 @@ describe("FieldsPage: manual value entry", () => {
     expect(within(row).queryByTestId("decide-1B-2020-Created")).toBeNull();
   });
 });
+
+describe("FieldsPage: corroboration signal", () => {
+  it("flags 38B-2026 in record mode with the quoted sentence, not a verdict", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&mode=record&record=38B-2026");
+
+    const note = screen.getByTestId("corroboration-DueDate");
+    expect(note.dataset.verdict).toBe("not_corroborated");
+    expect(note.textContent).toContain("the record's own text says a different date");
+
+    await user.click(within(note).getByText(/different date/));
+    expect(note.textContent).toContain("no later than");
+    expect(note.textContent).toContain("August 4");
+    // It must not claim which side is wrong.
+    expect(note.textContent).toContain("This flag does not say which");
+  });
+
+  it("marks a record whose text agrees", () => {
+    renderPage("/results?tab=explore&mode=record&record=34B-2026");
+    const note = screen.getByTestId("corroboration-DueDate");
+    expect(note.dataset.verdict).toBe("corroborated");
+    expect(note.textContent).toContain("agrees");
+  });
+
+  it("offers the disagreement filter on DueDate and narrows 499 rows to 23", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&field=DueDate");
+
+    expect(screen.getByTestId("corroboration-summary").textContent).toContain("89%");
+    await user.selectOptions(screen.getByTestId("filter-corroboration"), "not_corroborated");
+    expect(screen.getByTestId("field-cells-count").textContent).toContain("Showing 23 of");
+  });
+
+  it("withholds the filter on a field the text does not discuss", () => {
+    renderPage("/results?tab=explore&field=PublishedDate");
+    expect(screen.queryByTestId("filter-corroboration")).toBeNull();
+    expect(screen.queryByTestId("corroboration-summary")).toBeNull();
+  });
+});
