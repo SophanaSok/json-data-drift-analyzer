@@ -16,6 +16,38 @@ recovery policy model.
 Each release is tagged `vX.Y.Z` on `main`. The deployed footer shows the version
 and the exact build commit; exported artifacts carry both in their metadata.
 
+## [1.4.0] — 2026-08-12
+
+### Added
+
+- **Corroboration signal**: where a record's own surviving text still states a
+  value that was lost, the tool compares it with the reference value a backfill
+  would write and shows the quoted sentence. On the shipped pair this turns 499
+  identical-looking DueDate decisions into a review list of 23 whose text
+  disagrees, and marks 188 as agreeing. Record mode shows the evidence beside
+  the reference value; field mode adds a Disagrees/Agrees filter.
+- The signal **calibrates itself per field, per run**, and stays silent on
+  fields the prose does not discuss — on this data PublishedDate and AwardDate
+  agree about 2% of the time, so flagging them would be noise. Dates must be
+  introduced by a deadline cue, which keeps a pre-bid meeting or a completion
+  date from reading as a deadline disagreement.
+- It is **advisory only** (AGENTS.md rule 5): it identifies review candidates
+  and never decides, never changes a decision lane, and never modifies an
+  artifact. It deliberately does not say which side is stale — an extended
+  deadline leaves the old text behind, a stale reference leaves the new text
+  behind — it shows the disagreement and the sentence.
+
+### Changed
+
+- The Bellingham source profile moves to v5, adding the text fields and
+  deadline phrasing the signal reads, with the measured accuracy recorded in
+  its notes.
+
+### Fixed
+
+- The record queue no longer measures its fixed-height rows dynamically, which
+  had caused a synchronous flush mid-render when scrolling to a distant record.
+
 ## [1.3.0] — 2026-08-12
 
 ### Added
@@ -139,6 +171,7 @@ Low-severity findings — is resolved, each fix with a proving test.
 Initial development version, superseded by 1.0.0. Kept for reference: this is
 the version every pre-release commit reported.
 
+[1.4.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.4.0
 [1.3.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.3.0
 [1.2.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.2.0
 [1.1.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.1.0
