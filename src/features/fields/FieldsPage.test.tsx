@@ -18,6 +18,7 @@ import candidateData from "../../test/fixtures/bellingham-candidate.json";
 // serves whatever rows a test staged and records what was persisted.
 const mockDb = vi.hoisted(() => ({ rows: [] as unknown[], persisted: [] as unknown[] }));
 vi.mock("../../db", () => ({
+  getProfileOverride: async () => null,
   db: {
     decisions: {
       where: () => ({ equals: () => ({ toArray: async () => mockDb.rows }) }),

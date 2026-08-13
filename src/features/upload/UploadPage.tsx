@@ -5,7 +5,7 @@ import { ExportDateIndicators } from "../../components/upload/ExportDateIndicato
 import { ANALYSIS_CACHE_SCHEMA_VERSION, db, putAnalysisBounded } from "../../db";
 import { ENGINE_SEMANTICS_VERSION } from "../../engine/version";
 import { BELLINGHAM_PROCUREWARE, PROFILES, getProfile } from "../../profiles";
-import { resolveEffectiveProfile } from "../../profiles/resolve";
+import { useEffectiveProfile } from "../profiles/use-effective-profile";
 import { hashText } from "../../lib/hash";
 import { assessFileOrderFromJson } from "../../lib/file-order";
 import { useUiStore } from "../../stores/ui-store";
@@ -43,18 +43,24 @@ export function UploadPage() {
   const [sourceProfileId, setSourceProfileId] = useState(BELLINGHAM_PROCUREWARE.id);
   // Falls back rather than crashing if a stored id ever names an unregistered profile.
   const sourceProfile = getProfile(sourceProfileId) ?? BELLINGHAM_PROCUREWARE;
-  // Resolved policy identity: base + delta (local overrides arrive with the
-  // override store; until then resolution runs with none). What the worker
-  // receives and what the cache key pins.
-  const resolvedProfile = useMemo(() => resolveEffectiveProfile(sourceProfile, null).profile, [sourceProfile]);
+  // Resolved policy identity: base + delta + any local override. What the
+  // worker receives and what the cache key pins. `loading` gates Analyze so a
+  // run can never start under a policy whose override read has not settled.
+  const {
+    profile: resolvedProfileOrNull,
+    overrideActive,
+    overrideStale,
+    loading: profileResolving
+  } = useEffectiveProfile(sourceProfile.id);
+  const resolvedProfile = resolvedProfileOrNull;
   const showToast = useToastStore((state) => state.showToast);
   const fileOrderAssessment = useUiStore((state) => state.fileOrderAssessment);
   const setFileOrderAssessment = useUiStore((state) => state.setFileOrderAssessment);
   // Includes `running`: a second Analyze while one is live would either interleave
   // two runs on one worker or be refused by the runner — disable it instead.
   const disabled = useMemo(
-    () => !baselineFile || !latestFile || !fileOrderAssessment || running,
-    [baselineFile, fileOrderAssessment, latestFile, running]
+    () => !baselineFile || !latestFile || !fileOrderAssessment || running || profileResolving,
+    [baselineFile, fileOrderAssessment, latestFile, running, profileResolving]
   );
   const dateOrderingIssues = fileOrderAssessment?.issues ?? [];
   const baselineExportDates = fileOrderAssessment?.baseline.dates ?? {};
@@ -111,7 +117,7 @@ export function UploadPage() {
   }, [baselineFile, collectionPath, latestFile, setFileOrderAssessment]);
 
   const runAnalysis = async () => {
-    if (!baselineFile || !latestFile) return;
+    if (!baselineFile || !latestFile || !resolvedProfile) return;
     setError(null);
     try {
       const baselineText = await baselineFile.text();
@@ -292,8 +298,29 @@ export function UploadPage() {
           <span className="mt-1 block text-xs text-slate-500">
             Governs recovery: which fields may be backfilled, how records are matched, and when an
             export is blocked. Approved fields:{" "}
-            {sourceProfile.safeBackfillFields.length > 0 ? sourceProfile.safeBackfillFields.join(", ") : "none"}.
+            {(resolvedProfile ?? sourceProfile).safeBackfillFields.length > 0
+              ? (resolvedProfile ?? sourceProfile).safeBackfillFields.join(", ")
+              : "none"}.
           </span>
+          {overrideActive && resolvedProfile ? (
+            <span
+              data-testid="profile-override-badge"
+              className="mt-1 block rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800"
+            >
+              Local override active: this analysis will run under repo v{sourceProfile.version} + override rev{" "}
+              {resolvedProfile.overrideRevision} (policy {resolvedProfile.policyHash.slice(0, 8)}…), not the
+              unmodified repo policy.
+            </span>
+          ) : null}
+          {overrideStale ? (
+            <span
+              data-testid="profile-override-stale"
+              className="mt-1 block rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800"
+            >
+              A local override exists for this profile but was written against an older repo version and was NOT
+              applied. Review it on the Profiles page.
+            </span>
+          ) : null}
         </label>
         <label className="text-sm">
           <span className="mb-1 block font-medium">Identity fields (comma-separated)</span>

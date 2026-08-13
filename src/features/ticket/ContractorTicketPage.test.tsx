@@ -14,6 +14,7 @@ import { useDraftStore } from "../../stores/draft-store";
 // The page reads posting history and the saved Trello list from IndexedDB,
 // which jsdom does not provide; empty history is the state under test anyway.
 vi.mock("../../db", () => ({
+  getProfileOverride: async () => null,
   db: {
     postedTickets: { toArray: async () => [], put: async () => undefined },
     trelloTarget: { get: async () => undefined, put: async () => undefined }

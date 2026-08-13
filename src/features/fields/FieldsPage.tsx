@@ -9,7 +9,7 @@ import {
   buildRecordDetail,
   buildRecordSummaries
 } from "../../engine/field-view";
-import { getProfile } from "../../profiles";
+import { useEffectiveProfile } from "../profiles/use-effective-profile";
 import { useUiStore } from "../../stores/ui-store";
 import { useDecisionLog } from "../recovery/use-decision-log";
 import { FieldBulkBar } from "./FieldBulkBar";
@@ -51,8 +51,11 @@ export function FieldsPage() {
   const workspaceRef = useRef<HTMLDivElement | null>(null);
 
   // Never fall back to a default profile here: a silently substituted policy
-  // would put the wrong badges behind every field.
-  const profile = review ? getProfile(review.profileId) : null;
+  // would put the wrong badges behind every field. The effective profile
+  // includes any local override; assessDecisionBridge compares its policy
+  // hash against the review's, so a mid-session override change refuses
+  // decisions rather than mislabeling them.
+  const { profile } = useEffectiveProfile(review?.profileId ?? null);
   const { log, record } = useDecisionLog(review);
   const resolved = useMemo(() => resolveDecisions(log), [log]);
 
