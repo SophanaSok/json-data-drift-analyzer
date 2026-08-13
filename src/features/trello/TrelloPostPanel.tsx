@@ -95,6 +95,7 @@ export function TrelloPostPanel({
         status: outcome.status === "created" ? "success" : outcome.status === "failed" ? "failed" : "unknown",
         profileId: review.profileId,
         profileVersion: review.profileVersion,
+        policyHash: review.policyHash,
         sourceRun: review.sourceRun,
         referenceRun: review.referenceRun,
         title: draft.title,

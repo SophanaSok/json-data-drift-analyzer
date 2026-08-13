@@ -48,7 +48,15 @@ Each file is a JSON export: a root object containing an array of record objects 
 
 ### Source profiles
 
-A **source profile** (`src/profiles/*.json`) is the per-source policy: matching keys, dedupe key, hard-required fields, which fields may be auto-backfilled, date-sensitive fields (backfillable only when explicitly double-approved), minimum match rate, validation rules, and export gating. The profile's `version` is stamped into every finding, provenance entry, decision, and ticket; bumping it invalidates the analysis cache and flags decisions made under the older policy. There is currently no in-app profile editor — approving a new backfill field means editing the JSON and bumping `version`.
+A **source profile** is the per-source policy: matching keys, dedupe key, hard-required fields, which fields may be auto-backfilled, date-sensitive fields (backfillable only when explicitly double-approved), minimum match rate, validation rules, quality-analysis configuration, and export gating.
+
+Profiles resolve in layers, built for hundreds of sources sharing one schema:
+
+- **`src/profiles/base.json`** holds the policy the sources share; **`src/profiles/sources/<id>.json`** holds one small delta per source (auto-registered — adding a file is adding a source). A delta key replaces the base value wholesale; a delta MUST state `id`, `sourceUrl`, `version`, and `safeBackfillFields` explicitly (even `[]`) — backfill approval never inherits. Scaffold a new source with `npm run new-profile -- --id <id> --source-url <url>`.
+- **Local overrides** (the *Profiles* page in the app) amend a source's policy in this browser only, without a release: edit the field lists or import a delta JSON, give a required reason, and export the result for upstreaming into the repo delta. An override written against an older repo version is flagged stale and not applied.
+- The **resolved policy identity** — repo `version`, override revision, and a `policyHash` over the full resolved content — is stamped into every finding, provenance entry, decision, export, and ticket; any policy change invalidates the analysis cache and flags decisions made under the older policy. `src/profiles/policy-manifest.json` pins every profile's identity in CI: a policy edit fails the tests until `npm run profiles:manifest` is run deliberately, and that tool refuses a content change without a version bump.
+
+On the upload page, profiles are chosen through a searchable picker, and the right one is suggested automatically by matching URL values inside the uploaded records against each profile's `sourceUrl` — a manual selection is never silently replaced.
 
 ## Privacy model
 
@@ -124,7 +132,8 @@ src/
 ├── features/     # upload, overview, records, field-changes, data-health,
 │                 # recovery review, contractor ticket, trello
 ├── lib/          # Trello client, safe storage, misc helpers
-├── profiles/     # source profiles (per-source recovery policy)
+├── profiles/     # base.json + sources/*.json deltas, registry, resolver,
+│                 # validator, detection, policy manifest
 ├── stores/       # zustand UI state
 ├── test/         # fixtures (incl. real-world reference/candidate exports)
 └── workers/      # analysis worker + message protocol
@@ -136,7 +145,7 @@ Built with React 19, TypeScript (strict), Vite, Tailwind CSS, Zustand, Dexie, Mi
 
 ## Limitations
 
-- One source profile ships today (`bellingham-procureware`); adding a source means writing a profile JSON.
+- One source profile ships today (`bellingham-procureware`); onboarding a source means scaffolding a delta (`npm run new-profile`) and verifying its keys against real exports before first use.
 - Systemic field loss is flagged only at exactly 100% loss — partial thresholds are deliberately not invented.
 - Dropped baseline records are reported per record but never reinstated into the recovered artifact.
 - The recovered artifact is a stopgap for triage: the primary remedy for systemic loss is fixing and re-running the scraper.

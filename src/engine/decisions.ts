@@ -68,6 +68,10 @@ export type RecoveryDecision = {
   matchingKey: string[];
   profileId: string;
   profileVersion: number;
+  /** Hash of the resolved policy the decision was made under; null when unstamped. */
+  policyHash: string | null;
+  /** Local-override revision active when the decision was made; 0 when none. */
+  overrideRevision: number;
   timestamp: string;
   /**
    * Position in the append-only log at recording time. Persisted because it is what
@@ -243,6 +247,8 @@ export function createDecision(
     matchingKey: context.profile.primaryKey,
     profileId: context.profile.id,
     profileVersion: context.profile.version,
+    policyHash: context.review.policyHash,
+    overrideRevision: context.review.overrideRevision,
     timestamp: context.timestamp,
     sequence: context.sequence
   };

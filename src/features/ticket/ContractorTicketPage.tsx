@@ -7,7 +7,7 @@ import {
   type TicketDraftForm
 } from "./ticket-draft-view";
 import { buildFileName, buildTicketInputFromExport, downloadArtifact } from "../../engine/export";
-import { getProfile } from "../../profiles";
+import { useEffectiveProfile } from "../profiles/use-effective-profile";
 import { copyTextToClipboard } from "../../lib/clipboard";
 import { useUiStore } from "../../stores/ui-store";
 import { useToastStore } from "../../stores/toast-store";
@@ -54,7 +54,7 @@ export function ContractorTicketPage() {
     };
   }, [review, analysisKey]);
 
-  const profile = review ? getProfile(review.profileId) : null;
+  const { profile } = useEffectiveProfile(review?.profileId ?? null);
 
   const baseInput = useMemo(() => {
     if (!review || !profile) return null;

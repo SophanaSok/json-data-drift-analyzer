@@ -6,6 +6,19 @@ import {
 import { stripBOM } from "../engine/source-loader";
 import { useToastStore } from "../stores/toast-store";
 
+/**
+ * Parse an uploaded export exactly the way the worker does: strip the UTF-8
+ * BOM real scraper exports ship with, then JSON.parse. Still throws on
+ * genuinely malformed JSON, which the caller surfaces to the user.
+ *
+ * Exported so the upload page can parse each file ONCE and feed the parsed
+ * value to both the file-order assessment and profile detection. If parsing
+ * ever moves off the main thread, detection moves with it.
+ */
+export function parseExport(text: string): unknown {
+  return JSON.parse(stripBOM(text).content) as unknown;
+}
+
 export function assessFileOrderFromJson(
   baselineText: string,
   latestText: string,
@@ -13,13 +26,9 @@ export function assessFileOrderFromJson(
   latestFileName: string,
   collectionPath = "Export"
 ): FileOrderAssessment {
-  // Strips a UTF-8 BOM before parsing; real scraper exports ship with one. Still
-  // throws on genuinely malformed JSON, which the caller surfaces to the user.
-  const baseline = JSON.parse(stripBOM(baselineText).content) as unknown;
-  const latest = JSON.parse(stripBOM(latestText).content) as unknown;
   return assessFileOrder(
-    baseline,
-    latest,
+    parseExport(baselineText),
+    parseExport(latestText),
     baselineFileName,
     latestFileName,
     collectionPath

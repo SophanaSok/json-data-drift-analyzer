@@ -90,6 +90,8 @@ describe("DecisionQueue: the log", () => {
       matchingKey: [],
       profileId: BELLINGHAM_PROCUREWARE.id,
       profileVersion: 4,
+      policyHash: null,
+      overrideRevision: 0,
       timestamp: FIXED_NOW,
       sequence: 0
     };

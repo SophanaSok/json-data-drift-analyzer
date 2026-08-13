@@ -74,6 +74,8 @@ describe("DecisionRow: what it shows", () => {
       matchingKey: [],
       profileId: BELLINGHAM_PROCUREWARE.id,
       profileVersion: 4,
+      policyHash: null,
+      overrideRevision: 0,
       timestamp: FIXED_NOW,
       sequence: 0
     };
@@ -187,6 +189,8 @@ describe("DecisionRow: recording", () => {
       matchingKey: [],
       profileId: BELLINGHAM_PROCUREWARE.id,
       profileVersion: 4,
+      policyHash: null,
+      overrideRevision: 0,
       timestamp: FIXED_NOW,
       sequence: 0
     };

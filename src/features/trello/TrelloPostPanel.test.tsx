@@ -15,6 +15,7 @@ const NOW = "2026-08-10T00:00:00.000Z";
 const review = {
   profileId: "bellingham-procureware",
   profileVersion: 4,
+  policyHash: null,
   generatedAt: NOW,
   sourceRun: "candidate.json",
   referenceRun: "reference.json",
@@ -234,6 +235,7 @@ describe("TrelloPostPanel: duplicate prevention", () => {
     status: "success",
     profileId: "bellingham-procureware",
     profileVersion: 4,
+    policyHash: null,
     sourceRun: null,
     referenceRun: null,
     title: draft.title,

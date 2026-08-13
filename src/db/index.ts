@@ -3,6 +3,7 @@ import type { AnalysisResult } from "../engine/types";
 import type { RecoveryReview } from "../engine/review";
 import type { RecoveryDecision } from "../engine/decisions";
 import type { PostedTicketRecord, TrelloTarget } from "../features/trello/trello-ticket";
+import type { ProfileOverride } from "../profiles/schema";
 
 /**
  * Version of the persisted analysis/review shape, folded into the analysis cache
@@ -10,7 +11,7 @@ import type { PostedTicketRecord, TrelloTarget } from "../features/trello/trello
  * field: entries written under the old shape then miss the cache and are rebuilt,
  * instead of being served with fields the current code assumes exist.
  */
-export const ANALYSIS_CACHE_SCHEMA_VERSION = 2;
+export const ANALYSIS_CACHE_SCHEMA_VERSION = 3;
 
 export type SavedAnalysis = {
   analysisKey: string;
@@ -54,12 +55,22 @@ export type TextDiffCache = {
   latestLength: number;
 };
 
+/**
+ * A local per-source policy override: a delta applied over the repo profile at
+ * resolution time (see src/profiles/resolve.ts). One row per profile. The
+ * `reason` is required — an override is a policy decision and must be
+ * auditable (AGENTS.md rule 7); the resolved policy hash changes with it, so
+ * every artifact records that it ran under the override.
+ */
+export type SavedProfileOverride = ProfileOverride;
+
 class DriftDatabase extends Dexie {
   analyses!: Table<SavedAnalysis, string>;
   decisions!: Table<SavedDecision, string>;
   postedTickets!: Table<SavedPostedTicket, string>;
   trelloTarget!: Table<SavedTrelloTarget, string>;
   textDiffs!: Table<TextDiffCache, string>;
+  profileOverrides!: Table<SavedProfileOverride, string>;
 
   constructor() {
     super("json-data-drift-analyzer");
@@ -98,6 +109,17 @@ class DriftDatabase extends Dexie {
       trelloTarget: "id",
       textDiffs: "id",
       profiles: null
+    });
+    // Deliberately NOT named `profiles` (the store v5 deletes): this table
+    // stores DELTAS over repo profiles, never whole profiles — the repo files
+    // stay the source of truth and an override is a local amendment to them.
+    this.version(6).stores({
+      analyses: "analysisKey, createdAt",
+      decisions: "id, analysisKey, timestamp",
+      postedTickets: "id, runFingerprint, analysisKey, attemptedAt",
+      trelloTarget: "id",
+      textDiffs: "id",
+      profileOverrides: "profileId, updatedAt"
     });
   }
 }
@@ -165,4 +187,49 @@ export async function putAnalysisBounded(entry: SavedAnalysis, table: AnalysesTa
     await table.put(entry);
   }
   await evictOldestAnalyses(table, ANALYSIS_CACHE_MAX_ENTRIES);
+}
+
+// ---------------------------------------------------------------------------
+// Profile overrides
+// ---------------------------------------------------------------------------
+
+/** The slice of the overrides table the helpers need; injectable for tests. */
+export type ProfileOverridesTableLike = {
+  get: (key: string) => Promise<SavedProfileOverride | undefined>;
+  put: (row: SavedProfileOverride) => Promise<unknown>;
+  delete: (key: string) => Promise<unknown>;
+};
+
+/**
+ * Read a profile's local override. Degrades to "no override" on a failing
+ * IndexedDB (private browsing, corrupted DB): analysis must still run — it
+ * just runs under the unmodified repo policy, which the resolved policy hash
+ * records faithfully either way.
+ */
+export async function getProfileOverride(
+  profileId: string,
+  table: ProfileOverridesTableLike = db.profileOverrides
+): Promise<SavedProfileOverride | null> {
+  const row = await table.get(profileId).catch(() => undefined);
+  return row ?? null;
+}
+
+/**
+ * Save (create or replace) a profile's local override. Write failures
+ * propagate: unlike a cache miss, a policy edit the user believes was saved
+ * but was not is a silent policy divergence.
+ */
+export async function putProfileOverride(
+  override: SavedProfileOverride,
+  table: ProfileOverridesTableLike = db.profileOverrides
+): Promise<void> {
+  await table.put(override);
+}
+
+/** Remove a profile's local override, restoring the repo policy. */
+export async function deleteProfileOverride(
+  profileId: string,
+  table: ProfileOverridesTableLike = db.profileOverrides
+): Promise<void> {
+  await table.delete(profileId);
 }

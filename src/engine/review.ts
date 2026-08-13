@@ -16,11 +16,15 @@ import { runQa, type QaReport } from "./qa";
 import { runRecovery, type RecoveryOptions, type RecoveryResult } from "./recovery";
 import { runDedupe, type DedupeResult } from "./dedupe";
 import type { InputFileHash } from "./export";
-import type { SourceProfile } from "./adapter-types";
+import type { PolicyStamp, SourceProfile } from "./adapter-types";
 
 export type RecoveryReview = {
   profileId: string;
   profileVersion: number;
+  /** Hash of the resolved policy this review ran under; null when unstamped. */
+  policyHash: string | null;
+  /** Local-override revision active during the run; 0 when none. */
+  overrideRevision: number;
   generatedAt: string;
   sourceRun: string | null;
   referenceRun: string | null;
@@ -44,7 +48,7 @@ export type RecoveryReviewOptions = {
 export function runRecoveryReview(
   referenceRecords: Array<Record<string, unknown>>,
   candidateRecords: Array<Record<string, unknown>>,
-  profile: SourceProfile,
+  profile: SourceProfile & PolicyStamp,
   options: RecoveryReviewOptions = {}
 ): RecoveryReview {
   const generatedAt = options.generatedAt ?? new Date().toISOString();
@@ -65,6 +69,8 @@ export function runRecoveryReview(
   return {
     profileId: profile.id,
     profileVersion: profile.version,
+    policyHash: profile.policyHash ?? null,
+    overrideRevision: profile.overrideRevision ?? 0,
     generatedAt,
     sourceRun: options.sourceRun ?? null,
     referenceRun: options.referenceRun ?? null,

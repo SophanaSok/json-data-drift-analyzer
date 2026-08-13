@@ -218,6 +218,10 @@ function buildRunMetadata(inputs: ExportInputs) {
     appVersion: APP_VERSION,
     profileId: inputs.profile.id,
     profileVersion: inputs.profile.version,
+    // From the run itself, not the current profile: the artifact must record
+    // the policy that actually governed it (AGENTS.md rule 7).
+    profilePolicyHash: inputs.recovery.policyHash,
+    profileOverrideRevision: inputs.recovery.overrideRevision,
     matchingKey: inputs.profile.primaryKey,
     dedupeKey: inputs.profile.dedupeKey,
     sourceRun: inputs.sourceRun ?? inputs.recovery.sourceRun,
@@ -274,6 +278,8 @@ export function buildRecoveredArtifact(inputs: ExportInputs): ExportArtifact {
           generatedAt: inputs.generatedAt,
           profileId: inputs.profile.id,
           profileVersion: inputs.profile.version,
+          profilePolicyHash: inputs.recovery.policyHash,
+          profileOverrideRevision: inputs.recovery.overrideRevision,
           containsReferenceDerivedValues: inputs.recovery.containsReferenceDerivedValues,
           referenceDerivedValueCount: inputs.recovery.summary.backfilledFieldCount,
           manualOverrideCount: inputs.recovery.summary.overriddenFieldCount,

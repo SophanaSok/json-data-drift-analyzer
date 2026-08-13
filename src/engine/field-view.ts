@@ -2,7 +2,7 @@ import { backfilledCellIds, cellId, describeLane, type CellClassification, type 
 import { baselineSnapshot } from "./diff";
 import { isBlankStrict } from "./empty";
 import { buildIdentityKey } from "./normalize";
-import type { SourceProfile } from "./adapter-types";
+import type { PolicyStamp, SourceProfile } from "./adapter-types";
 import type { RecoveryReview } from "./review";
 import type { AnalysisResult, DiffRecord } from "./types";
 
@@ -147,7 +147,7 @@ export type FieldDetail = {
 export function assessDecisionBridge(
   analysis: AnalysisResult,
   review: RecoveryReview | null,
-  profile: SourceProfile | null
+  profile: (SourceProfile & PolicyStamp) | null
 ): { available: boolean; reason: string | null } {
   if (!review || !profile) {
     return { available: false, reason: "No recovery review was produced for this run, so there is nothing to decide against." };
@@ -159,6 +159,17 @@ export function assessDecisionBridge(
     return {
       available: false,
       reason: `The review was produced under profile version ${review.profileVersion}, but the current profile is version ${profile.version}. Re-run the analysis to decide under the current policy.`
+    };
+  }
+  if (
+    profile.policyHash !== undefined &&
+    review.policyHash !== null &&
+    review.policyHash !== profile.policyHash
+  ) {
+    return {
+      available: false,
+      reason:
+        "The review was produced under a different resolved policy than the current one (a local profile override was applied or removed since). Re-run the analysis to decide under the current policy."
     };
   }
   if (analysis.metadata.collectionPath !== profile.collectionPath) {

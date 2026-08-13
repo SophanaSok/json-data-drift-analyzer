@@ -15,6 +15,7 @@ import { useUiStore } from "../../stores/ui-store";
 // exercised without a browser database.
 const mockDb = vi.hoisted(() => ({ rows: [] as Array<RecoveryDecision & { analysisKey: string }> }));
 vi.mock("../../db", () => ({
+  getProfileOverride: async () => null,
   db: {
     decisions: {
       where: () => ({ equals: () => ({ toArray: async () => mockDb.rows }) }),

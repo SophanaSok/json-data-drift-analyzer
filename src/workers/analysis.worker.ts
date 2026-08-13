@@ -4,7 +4,7 @@ import { getCollection } from "../engine/normalize";
 import { hashInputFile } from "../engine/export";
 import { runRecoveryReview } from "../engine/review";
 import { parseJSON } from "../engine/source-loader";
-import { getProfile } from "../profiles";
+import { toQualityProfile } from "../profiles/resolve";
 import type { AnalyzeRequest, WorkerMessage } from "./protocol";
 
 function post(message: WorkerMessage): void {
@@ -53,7 +53,10 @@ async function handle(event: MessageEvent<AnalyzeRequest>): Promise<void> {
       baselineFileName: payload.baselineFileName,
       latestFileName: payload.latestFileName,
       analysisKey: payload.analysisKey,
-      profile: payload.profile,
+      // The quality-analysis config is a view of the same per-source policy
+      // that governs recovery; absent a profile, runAnalysis falls back to the
+      // deprecated defaultProfile.
+      profile: payload.sourceProfile ? toQualityProfile(payload.sourceProfile) : undefined,
       onProgress: (step) => post({ type: "progress", payload: { analysisKey, step } })
     });
 
@@ -76,11 +79,7 @@ async function buildReview(
   baselineData: unknown,
   latestData: unknown
 ): Promise<Awaited<ReturnType<typeof runRecoveryReview>> | null> {
-  if (!payload.sourceProfileId) {
-    return null;
-  }
-
-  const profile = getProfile(payload.sourceProfileId);
+  const profile = payload.sourceProfile;
   if (!profile) {
     return null;
   }

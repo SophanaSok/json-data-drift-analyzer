@@ -12,7 +12,7 @@ import { RecordInspector } from "./RecordInspector";
 import { DecisionQueue } from "./DecisionQueue";
 import { buildExportBundle, downloadArtifact, type ExportArtifact } from "../../engine/export";
 import { applyOverridesToRecovery, type OverrideApplication } from "../../engine/recovery";
-import { getProfile } from "../../profiles";
+import { useEffectiveProfile } from "../profiles/use-effective-profile";
 import { useUiStore } from "../../stores/ui-store";
 import {
   backfilledCellIds,
@@ -36,15 +36,25 @@ export function RecoveryReviewPage() {
   const showToast = useToastStore((state) => state.showToast);
   const [openRecordKey, setOpenRecordKey] = useState<string | null>(null);
   const { log: decisionLog, record: onRecordDecisions } = useDecisionLog(review);
+  // The effective profile: repo policy plus any local override, policy-stamped.
+  // The review carries only the identity of the policy it ran under. Until the
+  // override read settles this holds the repo-only resolution; the memo below
+  // recomputes when it refines, so the staleness verdict is momentarily
+  // conservative rather than the page being blank.
+  const { profile: effectiveProfile } = useEffectiveProfile(review?.profileId ?? null);
 
   const model = useMemo(() => {
     if (!review) return null;
 
-    // The registry holds the real profile; the review carries only its identity.
-    // A version mismatch means this review was produced under a different policy —
-    // surfaced rather than papered over, because the export gate reads the profile.
-    const profile = getProfile(review.profileId);
-    const staleUnderProfile = profile !== null && profile.version !== review.profileVersion;
+    // A version OR resolved-policy mismatch means this review was produced
+    // under a different policy — surfaced rather than papered over, because
+    // the export gate reads the profile. The hash catches what the version
+    // cannot: a local override applied or removed since the run.
+    const profile = effectiveProfile;
+    const staleUnderProfile =
+      profile !== null &&
+      (profile.version !== review.profileVersion ||
+        (review.policyHash !== null && profile.policyHash !== review.policyHash));
 
     // Decisions in force are applied to the recovery result the exports are built
     // from, so the artifact and the decision log cannot silently disagree. A stale
@@ -93,7 +103,7 @@ export function RecoveryReviewPage() {
           })
         : null
     };
-  }, [review, decisionLog]);
+  }, [review, decisionLog, effectiveProfile]);
 
   if (!review || !model) {
     return (
@@ -126,8 +136,16 @@ export function RecoveryReviewPage() {
         </p>
         <p className="text-xs text-slate-500">
           Profile <code className="rounded bg-slate-100 px-1">{review.profileId}</code> v
-          {review.profileVersion} · candidate {review.sourceRun ?? "(unnamed)"} · reference{" "}
-          {review.referenceRun ?? "(unnamed)"} · generated {review.generatedAt}
+          {review.profileVersion}
+          {review.overrideRevision > 0 ? (
+            <span className="text-amber-700" data-testid="review-override-marker">
+              {" "}
+              + local override rev {review.overrideRevision}
+            </span>
+          ) : null}
+          {review.policyHash ? <> · policy {review.policyHash.slice(0, 8)}…</> : null} · candidate{" "}
+          {review.sourceRun ?? "(unnamed)"} · reference {review.referenceRun ?? "(unnamed)"} · generated{" "}
+          {review.generatedAt}
         </p>
       </header>
 
@@ -182,8 +200,10 @@ export function RecoveryReviewPage() {
 
       {model.staleUnderProfile ? (
         <p className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" data-testid="stale-review">
-          This review was produced under profile v{review.profileVersion}, but the profile is now v
-          {model.profile?.version}. Re-run the analysis so the review reflects the current policy.
+          {model.profile?.version !== review.profileVersion
+            ? `This review was produced under profile v${review.profileVersion}, but the profile is now v${model.profile?.version}.`
+            : "This review was produced under a different resolved policy than the current one — a local profile override was applied or removed since the run."}{" "}
+          Re-run the analysis so the review reflects the current policy.
         </p>
       ) : null}
 
