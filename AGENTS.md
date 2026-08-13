@@ -90,15 +90,22 @@ them rather than trusting this section.
   do **not** appear in current fixtures. `ContractValue` (rule 6) is modeled in
   the Bellingham source profile as review-only; it is empty in 100% of records
   in both observed runs, so there is nothing to recover from it yet.
-- Two profile concepts coexist. `defaultProfile` in `src/engine/profile.ts`
-  (`QualityProfile`, `id: "default-government-bids"`, `version: 1`) drives
-  quality/drift analysis. The per-source **profile registry** for recovery lives
-  in `src/profiles/` (`PROFILES` / `getProfile` in `src/profiles/index.ts`);
-  `src/profiles/*.json` is the single source of truth for what each source
-  permits, including the rule 4 and rule 6 approvals. The one registered profile
-  is `BELLINGHAM_PROCUREWARE` (`id: "bellingham-procureware"`, `version: 4` —
-  bump the version on any change; its embedded notes record the approval
-  history).
+- Profiles resolve as **base + delta (+ optional local override)**.
+  `src/profiles/base.json` holds shared policy — including the `quality`
+  section that drives quality/drift analysis — and `src/profiles/sources/<id>.json`
+  holds one delta per source, auto-registered by `src/profiles/index.ts`
+  (`PROFILES` / `getProfile` / `listProfiles`; malformed files land in
+  `PROFILE_DIAGNOSTICS`). A delta must state `id`, `sourceUrl`, `version`, and
+  `safeBackfillFields` explicitly — the rule 4 and rule 6 approvals never
+  inherit. In-app overrides live in the `profileOverrides` Dexie table and are
+  applied by `resolveEffectiveProfile` (`src/profiles/resolve.ts`), which
+  stamps the `policyHash` provenance compares. `defaultProfile` in
+  `src/engine/profile.ts` is a deprecated engine-test fallback pinned equal to
+  the base's quality section. The one registered source is
+  `bellingham-procureware` (version 6 — bump the version on any policy change;
+  the delta's notes record the approval history, and
+  `src/profiles/policy-manifest.json` must be regenerated via
+  `npm run profiles:manifest`, which refuses a content change without a bump).
 - Emptiness is defined by `isEmpty` in `src/engine/empty.ts` (null/undefined,
   whitespace-only strings, configured placeholders, empty arrays unless allowed).
   Reuse it; do not re-implement emptiness checks.

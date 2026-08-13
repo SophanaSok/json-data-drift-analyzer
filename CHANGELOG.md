@@ -16,6 +16,51 @@ recovery policy model.
 Each release is tagged `vX.Y.Z` on `main`. The deployed footer shows the version
 and the exact build commit; exported artifacts carry both in their metadata.
 
+## [Unreleased]
+
+### Added
+
+- **Profiles at fleet scale.** The single hand-registered source profile
+  becomes a layered model built for hundreds of sources sharing one schema:
+  a shared `base.json` plus one small auto-registered delta per source
+  (`src/profiles/sources/<id>.json`), validated structurally (unknown keys
+  rejected) and quarantined into a diagnostics list instead of crashing the
+  app when malformed. Backfill approvals never inherit: every delta must state
+  `safeBackfillFields` explicitly, even when empty.
+- **Local profile overrides** on the new *Profiles* page: amend a source's
+  policy in this browser without a release — edit field lists or import a
+  delta JSON, with a required reason, a computed diff of what the override
+  changes, JSON export for upstreaming, and reset. Saves are refused when the
+  merged result contradicts itself, and an override written against an older
+  repo version is flagged stale and not applied.
+- **Searchable profile picker** with keyboard navigation, virtualized for
+  hundreds of sources; the last-used profile persists across sessions. The
+  collection path and identity fields derive from the selected profile, with
+  an explicit "edited — differs from profile" escape hatch.
+- **Source auto-detection**: uploaded files are matched to a profile by the
+  URL values inside their own records (per-profile data, defaulting from
+  `sourceUrl` — zero extra configuration for most sources). A manual selection
+  is never silently replaced; ambiguity and cross-source file pairs warn.
+- **Policy identity**: every finding, provenance entry, decision, export, and
+  Trello fingerprint now records `policyHash` (a hash of the full resolved
+  policy) and the override revision alongside the profile version, and
+  staleness checks refuse a same-version run whose resolved policy differs.
+  `policy-manifest.json` pins every profile's identity in CI;
+  `npm run profiles:manifest` refuses a policy change without a version bump.
+- **Onboarding tooling**: `npm run new-profile -- --id <id> --source-url <url>`
+  scaffolds an explicitly-unapproved delta with its keys stated visibly.
+
+### Changed
+
+- The Bellingham profile is restructured to v6 (base + delta; the hardcoded
+  quality-analysis `defaultProfile` is absorbed into the profile as its
+  `quality` section). No policy value changed, but decisions and cached
+  analyses recorded under v5 correctly read as stale under the new policy
+  identity, per the existing version discipline.
+- The analysis worker now receives the fully resolved profile in the request
+  instead of resolving policy by id itself; profile JSON left the worker
+  bundle.
+
 ## [1.4.0] — 2026-08-12
 
 ### Added

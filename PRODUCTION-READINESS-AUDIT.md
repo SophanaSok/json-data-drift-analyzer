@@ -11,6 +11,16 @@
 
 ## Session handoff — start here
 
+*Update 2026-08-12 (later session): the profile model was restructured for
+400+ sources on `feature/source-profile-scaling` — base + per-source deltas
+(`src/profiles/base.json` + `sources/*.json`, auto-registered), the quality
+`defaultProfile` absorbed into the profile as its `quality` section
+(Bellingham → v6), a `policyHash` identity stamped through every audit
+surface, local overrides in Dexie v6 with a `/profiles` management page,
+a searchable picker with URL-based auto-detection, and a policy-manifest CI
+gate (`npm run profiles:manifest`) plus `npm run new-profile` scaffolding.
+See the CHANGELOG's Unreleased section for the user-facing summary.*
+
 *Rewritten 2026-08-12 at the end of the Phase 4 session. All four planned
 remediation phases have landed; what follows is the state a fresh contributor
 (human or agent) actually needs.*
