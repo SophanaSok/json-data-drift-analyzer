@@ -11,7 +11,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "new-profile": "node tools/new-profile.ts",
+    "profiles:manifest": "node tools/profiles-manifest.ts"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.14.9",

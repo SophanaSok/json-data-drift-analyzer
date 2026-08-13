@@ -28,9 +28,7 @@ const TOP_LEVEL_CHECKS: Record<string, (v: unknown, problems: Problems, keyName?
       problems.push(`sourceUrl must be a non-empty string.`);
       return;
     }
-    try {
-      new URL(v);
-    } catch {
+    if (!URL.canParse(v)) {
       problems.push(`sourceUrl "${v}" does not parse as a URL.`);
     }
   },
