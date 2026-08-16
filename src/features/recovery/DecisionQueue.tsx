@@ -235,7 +235,7 @@ export function DecisionQueue({
           Nothing awaiting a decision for this filter.
         </p>
       ) : (
-        <div ref={scrollRef} className="mt-3 max-h-[26rem] overflow-auto rounded border">
+        <div ref={scrollRef} tabIndex={0} aria-label="Decision queue cells" className="mt-3 max-h-[26rem] overflow-auto rounded border">
           <div style={{ height: virtualizer.getTotalSize(), position: "relative", width: "100%" }}>
             {virtualizer.getVirtualItems().map((row) => {
               const cell = reviewCells[row.index]!;

@@ -229,7 +229,7 @@ export function ContractorTicketPage() {
               </div>
             </div>
             <pre
-              className="mt-3 max-h-[28rem] overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-3 text-xs"
+              tabIndex={0} aria-label="Ticket Markdown preview" className="mt-3 max-h-[28rem] overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-3 text-xs"
               data-testid="draft-markdown"
             >
               {result.draft.markdownDescription}

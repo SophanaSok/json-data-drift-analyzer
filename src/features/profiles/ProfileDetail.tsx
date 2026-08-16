@@ -90,7 +90,7 @@ export function ProfileDetail({ profileId }: { profileId: string }) {
     <div className="space-y-4 p-4" data-testid="profile-detail">
       <header>
         <h3 className="text-lg font-semibold">{profile.displayName ?? profile.id}</h3>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-600">
           <code className="rounded bg-slate-100 px-1">{profile.id}</code> · {profile.sourceUrl}
           {profile.agency ? ` · ${profile.agency}` : ""}
         </p>

@@ -143,13 +143,13 @@ export function RecordsPage() {
           <button key={value} className={`rounded border px-3 py-1 ${status === value ? "bg-sky-100" : "bg-white"}`} onClick={() => updateParam("status", value)}>{value}</button>
         ))}
         <input className="rounded border px-2 py-1" placeholder="Search" value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} />
-        <select className="rounded border px-2 py-1" value={field ?? ""} onChange={(event) => updateParam("field", event.target.value)}>
+        <select aria-label="Filter by changed field" className="rounded border px-2 py-1" value={field ?? ""} onChange={(event) => updateParam("field", event.target.value)}>
           <option value="">All fields</option>
           {Object.keys(analysis.indexes.byField).sort().map((name) => (
             <option key={name} value={name}>{name}</option>
           ))}
         </select>
-        <select className="rounded border px-2 py-1" value={kind} onChange={(event) => updateParam("kind", event.target.value)}>
+        <select aria-label="Filter by change kind" className="rounded border px-2 py-1" value={kind} onChange={(event) => updateParam("kind", event.target.value)}>
           <option value="all">All change kinds</option>
           <option value="added">added</option><option value="removed">removed</option><option value="modified">modified</option><option value="emptied">emptied</option><option value="restored">restored</option>
         </select>

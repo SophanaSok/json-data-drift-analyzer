@@ -43,6 +43,32 @@ and the exact build commit; exported artifacts carry both in their metadata.
 - **Suggested QC routine documented** in the README: automated `npm run
   analyze` per export drop with archived artifacts as the durable audit
   record; the browser UI for the decide-and-recover work.
+- **Decision-log export/import.** The Recovery tab exports the decision log
+  as JSON and imports a colleague's file — accepted only when it verifiably
+  describes the same review (profile, version, policy hash, and input files
+  by SHA-256), with imported rows keeping their provenance and appending
+  after the local log so re-import is idempotent.
+- **No-known-source notice.** The upload page now says when detection matches
+  no profile, naming the policy that will apply instead of staying silent.
+- **Multi-profile detection coverage.** All four detection notices are
+  component-tested against a synthetic registry, and a temporary e2e fixture
+  profile exercises the ambiguous and cross-source paths end to end.
+- **Automated accessibility scan.** An axe pass over every main screen runs
+  in e2e (zero critical/serious violations); it surfaced and fixed ten real
+  issues — low-contrast text in seven places, two unlabeled filter selects,
+  and four keyboard-unreachable scroll regions.
+- **Bundle-size budget in CI** (300 kB gzip; currently ~229 kB), `.nvmrc` /
+  `engines` node pin, and a real page title + meta description.
+- **Overview tiles are links** (middle-click and copy work; the quality-gate
+  tile links to Recovery where the gate is explained), and the
+  high-cardinality value panel counts populated records correctly past the
+  distinct-tracking cap.
+
+### Removed
+
+- The dormant field-state classification cluster (`classifyFieldValue`,
+  `analyzeBlankValue`, `FieldValueState`, `FieldState`): zero production
+  callers, and the real format validation lives in the QA engine.
 
 ### Fixed
 

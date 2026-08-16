@@ -37,7 +37,7 @@ function ValueCell({ value, cellKey, expanded, onToggle }: { value: unknown; cel
   }
   return (
     <>
-      {expanded ? <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all bg-slate-50 p-1 text-xs">{full}</pre> : shortValue(value)}
+      {expanded ? <pre tabIndex={0} aria-label="Full value" className="max-h-64 overflow-auto whitespace-pre-wrap break-all bg-slate-50 p-1 text-xs">{full}</pre> : shortValue(value)}
       <button
         type="button"
         className="mt-0.5 block text-xs text-sky-700 underline"
