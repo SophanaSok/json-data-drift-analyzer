@@ -27,7 +27,9 @@ export type ExportArtifactKind =
   | "quality-report"
   | "recovery-audit"
   | "findings"
-  | "contractor-ticket";
+  | "contractor-ticket"
+  /** Decision-log transfer file (see decisions-transfer.ts); not part of the bundle. */
+  | "decisions";
 
 export type ExportArtifact = {
   kind: ExportArtifactKind;
@@ -137,7 +139,8 @@ const EXTENSIONS: Record<ExportArtifactKind, string> = {
   "quality-report": "json",
   "recovery-audit": "json",
   findings: "csv",
-  "contractor-ticket": "md"
+  "contractor-ticket": "md",
+  decisions: "json"
 };
 
 /** Filenames carry the profile id and run timestamp so downloads never collide. */

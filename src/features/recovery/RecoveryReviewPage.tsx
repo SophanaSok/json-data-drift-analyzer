@@ -23,6 +23,7 @@ import {
 } from "../../engine/decisions";
 import { useToastStore } from "../../stores/toast-store";
 import { useDecisionLog } from "./use-decision-log";
+import { DecisionTransferControls } from "./DecisionTransferControls";
 
 const TONE_CLASS = {
   neutral: "text-slate-900",
@@ -232,6 +233,8 @@ export function RecoveryReviewPage() {
           now={() => new Date().toISOString()}
         />
       ) : null}
+
+      <DecisionTransferControls review={review} log={decisionLog} onRecord={onRecordDecisions} />
 
       <FindingsExplorer findings={review.qa.findings} />
 
