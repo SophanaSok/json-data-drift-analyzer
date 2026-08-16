@@ -16,7 +16,7 @@ recovery policy model.
 Each release is tagged `vX.Y.Z` on `main`. The deployed footer shows the version
 and the exact build commit; exported artifacts carry both in their metadata.
 
-## [Unreleased]
+## [1.6.0] — 2026-08-16
 
 ### Added
 
