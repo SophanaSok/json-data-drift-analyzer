@@ -340,6 +340,68 @@ describe("qa: schema field disappearance", () => {
   });
 });
 
+describe("qa: schema field appearance", () => {
+  it("flags a field present in the candidate schema and absent from every reference record", () => {
+    const report = run([rec()], [rec({ Fresh: "value" })]);
+    const finding = of(report, "schema_field_added")[0]!;
+
+    expect(finding.severity).toBe("medium");
+    expect(finding.fieldPath).toBe("Fresh");
+    expect(finding.recordKey).toBeNull();
+    expect(finding.evidence.candidateRecordsWithField).toBe(1);
+  });
+
+  it("does not flag a field the reference schema already has", () => {
+    const report = run([rec({ Known: "v" })], [rec({ Known: "w" })]);
+    expect(of(report, "schema_field_added")).toHaveLength(0);
+  });
+
+  it("downgrades an excluded field to informational", () => {
+    const profile: SourceProfile = { ...genericProfile, excludedFields: ["Fresh"] };
+    const report = run([rec()], [rec({ Fresh: "v" })], profile);
+    expect(of(report, "schema_field_added")[0]!.severity).toBe("info");
+  });
+});
+
+describe("qa: field type change", () => {
+  it("flags a field whose dominant non-empty type changed between the runs", () => {
+    const report = run([rec({ Amount: "48250.00" })], [rec({ Amount: 48250 })]);
+    const finding = of(report, "field_type_change")[0]!;
+
+    expect(finding.severity).toBe("medium");
+    expect(finding.fieldPath).toBe("Amount");
+    expect(finding.referenceValue).toBe("string");
+    expect(finding.candidateValue).toBe("number");
+    expect(finding.evidence.referenceTypeCounts).toEqual({ string: 1 });
+    expect(finding.evidence.candidateTypeCounts).toEqual({ number: 1 });
+  });
+
+  it("escalates to high for a hard-required field", () => {
+    const profile: SourceProfile = { ...genericProfile, hardRequiredFields: ["Id"] };
+    const report = run([rec({ Id: "a" })], [rec({ Id: 7 })], profile);
+    expect(of(report, "field_type_change")[0]!.severity).toBe("high");
+  });
+
+  it("never mistakes a wiped field for a type change", () => {
+    // The Bellingham regression shape: populated in the reference, empty
+    // strings in the candidate. Emptiness is not a type.
+    const report = run([rec({ Title: "Water Main" })], [rec({ Title: "" })]);
+    expect(of(report, "field_type_change")).toHaveLength(0);
+  });
+
+  it("counts arrays as their own type, not object", () => {
+    const report = run([rec({ Docs: { a: 1 } })], [rec({ Docs: [1, 2] })]);
+    const finding = of(report, "field_type_change")[0]!;
+    expect(finding.referenceValue).toBe("object");
+    expect(finding.candidateValue).toBe("array");
+  });
+
+  it("stays quiet when types agree", () => {
+    const report = run([rec({ Title: "a" })], [rec({ Title: "b" })]);
+    expect(of(report, "field_type_change")).toHaveLength(0);
+  });
+});
+
 describe("qa: duplicate identity and dedupe keys", () => {
   it("flags duplicates on the candidate side", () => {
     const report = run([], [rec(), rec()]);

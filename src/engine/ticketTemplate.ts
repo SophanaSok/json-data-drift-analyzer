@@ -202,7 +202,9 @@ const CATEGORY_LABEL: Partial<Record<FindingCategory, string>> = {
   record_count_anomaly: "record-count",
   record_missing_from_candidate: "missing-records",
   identity_match_issue: "identity-matching",
-  field_validation_failure: "validation"
+  field_validation_failure: "validation",
+  schema_field_added: "schema-change",
+  field_type_change: "schema-change"
 };
 
 export function deriveLabels(input: TicketInput, severity: FindingSeverity): string[] {

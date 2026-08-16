@@ -156,6 +156,29 @@ function fieldUnion(records: Array<Record<string, unknown>>): string[] {
   return [...fields].sort();
 }
 
+/**
+ * Census of a field's non-empty value types (emptiness per isEmpty, the one
+ * definition — AGENTS.md), with arrays counted as "array" rather than "object".
+ * Returns null when the field holds no non-empty value on this side, so a
+ * wiped field can never masquerade as a type change.
+ */
+function dominantValueType(
+  records: Array<Record<string, unknown>>,
+  field: string
+): { type: string; counts: Record<string, number> } | null {
+  const counts: Record<string, number> = {};
+  for (const record of records) {
+    const value = record[field];
+    if (isEmpty(value)) continue;
+    const type = Array.isArray(value) ? "array" : typeof value;
+    counts[type] = (counts[type] ?? 0) + 1;
+  }
+  const ranked = Object.entries(counts).sort((left, right) =>
+    right[1] !== left[1] ? right[1] - left[1] : left[0].localeCompare(right[0])
+  );
+  return ranked.length === 0 ? null : { type: ranked[0]![0], counts };
+}
+
 function keyOf(record: Record<string, unknown> | undefined, fields: string[]): string | null {
   return record ? buildIdentityKey(record, fields).key : null;
 }
@@ -283,6 +306,59 @@ export function runQa(
         evidence: {
           referenceRecordsWithField: referenceRecords.filter((record) => field in record).length,
           referenceRecordCount: referenceRecords.length
+        },
+        recommendedAction: resolveRecommendedAction(profile, field)
+      })
+    );
+  }
+
+  // ---- Schema level: fields present in candidate, absent from reference -------
+  // The inverse check: a field appearing out of nowhere is shape drift worth a
+  // headline too — it usually means the source changed its export layout.
+  const referenceFieldSet = new Set(referenceFields);
+  for (const field of candidateFields) {
+    if (referenceFieldSet.has(field)) continue;
+    findings.push(
+      createFinding({
+        severity: excluded.has(field) ? "info" : "medium",
+        category: "schema_field_added",
+        fieldPath: field,
+        recordKey: null,
+        candidateValue: null,
+        referenceValue: null,
+        message: `Field "${field}" appears in the candidate schema but in no reference record.`,
+        evidence: {
+          candidateRecordsWithField: candidateRecords.filter((record) => field in record).length,
+          candidateRecordCount: candidateRecords.length
+        },
+        recommendedAction: resolveRecommendedAction(profile, field)
+      })
+    );
+  }
+
+  // ---- Schema level: a field's dominant value type changed ---------------------
+  // Fill-rate analysis cannot see a field that stays populated but changes shape
+  // (string to number, string to array). Dominant type of non-empty values per
+  // side; a finding only when both sides have data and the types disagree.
+  for (const field of referenceFields) {
+    if (!candidateFields.has(field)) continue;
+    const referenceType = dominantValueType(referenceRecords, field);
+    const candidateType = dominantValueType(candidateRecords, field);
+    if (!referenceType || !candidateType || referenceType.type === candidateType.type) continue;
+    findings.push(
+      createFinding({
+        severity: excluded.has(field) ? "info" : profile.hardRequiredFields.includes(field) ? "high" : "medium",
+        category: "field_type_change",
+        fieldPath: field,
+        recordKey: null,
+        candidateValue: candidateType.type,
+        referenceValue: referenceType.type,
+        message:
+          `Field "${field}" changed dominant type: ${referenceType.type} in the reference, ` +
+          `${candidateType.type} in the candidate.`,
+        evidence: {
+          referenceTypeCounts: referenceType.counts,
+          candidateTypeCounts: candidateType.counts
         },
         recommendedAction: resolveRecommendedAction(profile, field)
       })

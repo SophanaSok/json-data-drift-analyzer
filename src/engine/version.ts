@@ -15,5 +15,8 @@
  *
  * Version 3: the search index now covers baseline values as well as latest ones,
  * so records stay findable by text that the candidate export wiped.
+ *
+ * Version 4: QA emits schema_field_added and field_type_change findings, so a
+ * cached review no longer reflects the full finding set.
  */
-export const ENGINE_SEMANTICS_VERSION = 3;
+export const ENGINE_SEMANTICS_VERSION = 4;

@@ -72,13 +72,36 @@ describe("profile contradiction checks", () => {
 describe("Bellingham profile: the approved policy", () => {
   const profile = BELLINGHAM_PROCUREWARE;
 
-  it("is at v6 with exactly the four approved fields", () => {
+  it("is at v7 with exactly the four approved fields", () => {
     // Deliberately literal: a policy change must fail this test and be re-confirmed
     // by a person, not quietly absorbed by deriving from the profile itself.
-    // v6 = the base+delta restructure that absorbed the quality section; no
-    // policy value changed from v5.
-    expect(profile.version).toBe(6);
+    // v7 = format validation activated (report-only); v6 = the base+delta
+    // restructure that absorbed the quality section.
+    expect(profile.version).toBe(7);
     expect(profile.safeBackfillFields).toEqual(["ContactPhone", "ContactEmail", "BidType", "Title"]);
+  });
+
+  it("validates only evidence-backed fields, and validation stays report-only", () => {
+    // 13 fields verified against both shipped fixtures with zero failures (see
+    // the v6 -> v7 note). Validation reports findings; it must never grow into
+    // a backfill path, so no validated rule 6 field may be backfillable.
+    expect(profile.validation).toEqual({
+      urlFields: ["BidURL", "ResourceURL"],
+      jsonFields: [
+        "BidDocuments",
+        "BidDocumentHashes",
+        "AddendumDocuments",
+        "AddendumDocumentHashes",
+        "AwardDocuments",
+        "AwardDocumentHashes"
+      ],
+      emailFields: ["ContactEmail"],
+      phoneFields: ["ContactPhone"],
+      dateFields: ["DueDate", "PublishedDate", "AwardDate"]
+    });
+    for (const field of profile.validation?.dateFields ?? []) {
+      expect(profile.safeBackfillFields, `${field} must not be backfillable`).not.toContain(field);
+    }
   });
 
   it("declares the five rule 6 date-sensitive fields", () => {
