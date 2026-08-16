@@ -281,43 +281,6 @@ export type NormalizedBidRecord = {
 };
 
 // ============================================================================
-// Field Value State Types
-// ============================================================================
-
-/**
- * Classification of a field's value state in a record.
- *
- * - present: Field has a non-empty, non-null value
- * - missing: Field key does not exist in the record
- * - blank: Field exists but is null, empty string, or whitespace-only
- * - invalid: Field exists but fails format validation (e.g., malformed date)
- */
-export type FieldValueState = "present" | "missing" | "blank" | "invalid";
-
-/**
- * Detailed field state assessment.
- */
-export type FieldState = {
-  /** The field name */
-  field: string;
-
-  /** The state classification */
-  state: FieldValueState;
-
-  /** The raw value (for audit purposes) */
-  rawValue: unknown;
-
-  /** Normalized value (string | null) */
-  normalizedValue: string | null;
-
-  /** If invalid, the validation rule that failed */
-  validationRule?: string;
-
-  /** If invalid, the reason for failure */
-  validationReason?: string;
-};
-
-// ============================================================================
 // Findings
 // ============================================================================
 //
