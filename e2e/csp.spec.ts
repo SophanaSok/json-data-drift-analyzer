@@ -38,6 +38,18 @@ test("the built page carries the policy", async ({ page }) => {
   expect(csp).toContain("connect-src 'self' https://api.trello.com");
 });
 
+test("the build ships 404.html as an app-shell copy for GitHub Pages deep links", async ({ page }) => {
+  // Pages has no rewrite rules; it serves 404.html for unknown paths. A hard
+  // refresh on /results or /profiles only boots the router (and the
+  // restore-from-cache flow) if that file is the app shell itself.
+  const response = await page.request.get("404.html");
+  expect(response.status()).toBe(200);
+  const body = await response.text();
+  expect(body).toContain('<div id="root">');
+  // The CSP meta tag must ride along: the fallback page runs the same app.
+  expect(body).toContain('http-equiv="Content-Security-Policy"');
+});
+
 test("the violation listener itself works, so empty results below mean something", async ({ page }) => {
   // A detection mechanism that cannot fire proves nothing. Trigger one deliberate
   // violation (an image from a host connect-src/img-src does not allow) and require
