@@ -33,6 +33,14 @@ export type FindingCategory =
   | "field_conflict"
   /** A field present in the reference schema is absent from the candidate schema. */
   | "schema_field_missing"
+  /** A field present in the candidate schema is absent from the reference schema. */
+  | "schema_field_added"
+  /**
+   * The dominant JS type of a field's non-empty values differs between the
+   * reference and candidate populations — shape drift that fill-rate analysis
+   * cannot see (a field that stays populated but turns from string to number).
+   */
+  | "field_type_change"
   /** Two or more records share a configured identity or dedupe key. */
   | "duplicate_identity_key"
   /** Candidate record population differs from the reference. */
@@ -166,6 +174,8 @@ const ZERO_CATEGORY: Record<FindingCategory, number> = {
   systemic_field_regression: 0,
   field_conflict: 0,
   schema_field_missing: 0,
+  schema_field_added: 0,
+  field_type_change: 0,
   duplicate_identity_key: 0,
   record_count_anomaly: 0,
   record_missing_from_candidate: 0,

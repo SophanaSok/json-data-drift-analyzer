@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "typecheck": "tsc -b",
+    "analyze": "node --import ./tools/ts-resolve.ts tools/analyze.ts",
     "new-profile": "node tools/new-profile.ts",
     "profiles:manifest": "node tools/profiles-manifest.ts"
   },

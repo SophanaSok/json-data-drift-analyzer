@@ -16,6 +16,56 @@ recovery policy model.
 Each release is tagged `vX.Y.Z` on `main`. The deployed footer shows the version
 and the exact build commit; exported artifacts carry both in their metadata.
 
+## [Unreleased]
+
+### Added
+
+- **Headless analysis (`npm run analyze`).** The exact worker pipeline — parse,
+  drift analysis, recovery review, export bundle with no decisions applied —
+  runnable from the command line. Auto-detects the source profile from file
+  contents (`--profile` to pin), writes every artifact to `--out` on every run,
+  and exits non-zero on a quality failure so a scheduler or CI job can run
+  checks per export drop and page a human only when something is wrong.
+  Browser-local profile overrides are deliberately not applied. Core in
+  `src/headless/run.ts` (tested); shell in `tools/analyze.ts`.
+- **Format validation is live for Bellingham (profile v7).** The QA engine's
+  configured validation (`field_validation_failure` findings) now has an
+  evidence-backed `validation` block in the Bellingham delta: URL, JSON,
+  email, phone, and date formats across 13 fields, verified against both
+  shipped fixtures with zero false positives. Report-only — validation never
+  backfills and rule 6 is untouched.
+- **Schema-drift findings.** Two new QA categories complete the shape-drift
+  story: `schema_field_added` (a field appears in the candidate schema that no
+  reference record has) and `field_type_change` (a field's dominant non-empty
+  value type differs between runs — drift that fill-rate analysis cannot see).
+  Both flow into the findings CSV, ticket labels, and UI filters like any
+  other category.
+- **Suggested QC routine documented** in the README: automated `npm run
+  analyze` per export drop with archived artifacts as the durable audit
+  record; the browser UI for the decide-and-recover work.
+
+### Fixed
+
+(From PR #75, merged 2026-08-15.)
+
+- Search indexes both sides of a changed field, so a record whose text the
+  candidate wiped stays findable by what it used to say.
+- The contractor ticket counts each affected field once (systemic + per-record
+  finding groups no longer double the title count and field list).
+- Enter commits a typed custom value in the decision form, completing the
+  keyboard-only flow.
+- GitHub Pages deep links and hard refreshes boot the app (`404.html`
+  app-shell fallback); unknown routes show a not-found page instead of the
+  error boundary; the results tabs gained a `<main>` landmark; the
+  invalid-JSON upload error names the offending file.
+
+### Changed
+
+- `ENGINE_SEMANTICS_VERSION` bumped twice (2 → 4): the search-index fix and
+  the new finding categories both change stored results, so cached analyses
+  rebuild.
+- `npm run typecheck` now covers `tools/`.
+
 ## [1.5.0] — 2026-08-12
 
 ### Added

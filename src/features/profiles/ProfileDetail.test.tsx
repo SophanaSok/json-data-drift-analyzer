@@ -32,7 +32,7 @@ vi.mock("../../db", () => ({
 const savedOverride: SavedProfileOverride = {
   profileId: "bellingham-procureware",
   revision: 1,
-  baseVersion: 6,
+  baseVersion: 7,
   delta: { safeBackfillFields: ["ContactPhone", "ContactEmail", "BidType"] },
   reason: "Title backfill suspended pending re-review.",
   updatedAt: "2026-08-12T00:00:00.000Z"
@@ -50,7 +50,7 @@ afterEach(cleanup);
 describe("ProfileDetail", () => {
   it("shows the resolved policy of the repo profile", async () => {
     render(<ProfileDetail profileId="bellingham-procureware" />);
-    await waitFor(() => expect((screen.getByTestId("profile-effective-version")).textContent).toContain("Repo v6"));
+    await waitFor(() => expect((screen.getByTestId("profile-effective-version")).textContent).toContain("Repo v7"));
     expect((screen.getByTestId("profile-detail")).textContent).toContain("Bellingham ProcureWare");
     expect((screen.getByTestId("profile-detail")).textContent).toContain("ContactPhone, ContactEmail, BidType, Title");
     expect((screen.getByTestId("profile-detail")).textContent).toContain("AgentID + BidURL");
@@ -114,7 +114,7 @@ describe("ProfileDetail", () => {
     await waitFor(() => expect(mockDb.puts).toHaveLength(1));
     const saved = mockDb.puts[0];
     expect(saved?.revision).toBe(1);
-    expect(saved?.baseVersion).toBe(6);
+    expect(saved?.baseVersion).toBe(7);
     // Minimal: only the field that differs from the repo profile.
     expect(Object.keys(saved?.delta ?? {})).toEqual(["safeBackfillFields"]);
   });
