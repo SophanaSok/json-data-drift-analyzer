@@ -131,6 +131,28 @@ export function ProfileDetail({ profileId }: { profileId: string }) {
         <FieldList label="Rule 6 date-sensitive:" fields={profile.dateSensitiveFields} />
       </section>
 
+      <section className="space-y-1 rounded border bg-white p-3" data-testid="profile-validation">
+        <h4 className="text-sm font-semibold">Format validation (effective)</h4>
+        <p className="text-xs text-slate-500">
+          Report-only: a failing value becomes a finding, never a backfill. Email and phone are heuristic kinds and
+          report at low severity.
+        </p>
+        {profile.validation && Object.values(profile.validation).some((fields) => fields && fields.length > 0) ? (
+          <>
+            <FieldList label="URLs:" fields={profile.validation.urlFields} />
+            <FieldList label="JSON-encoded:" fields={profile.validation.jsonFields} />
+            <FieldList label="Dates:" fields={profile.validation.dateFields} />
+            <FieldList label="Email (heuristic):" fields={profile.validation.emailFields} />
+            <FieldList label="Phone (heuristic):" fields={profile.validation.phoneFields} />
+          </>
+        ) : (
+          <p className="text-sm text-slate-600">
+            None configured — the QA engine validates only what a profile names, never inferring formats from field
+            names.
+          </p>
+        )}
+      </section>
+
       <section className="space-y-1 rounded border bg-white p-3">
         <h4 className="text-sm font-semibold">Quality analysis (effective)</h4>
         <FieldList label="Required fields:" fields={profile.quality.requiredFields} />

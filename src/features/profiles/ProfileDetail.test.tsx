@@ -59,6 +59,35 @@ describe("ProfileDetail", () => {
     expect(screen.queryByTestId("export-override")).toBeNull();
   });
 
+  it("lists the configured format-validation fields as report-only", async () => {
+    render(<ProfileDetail profileId="bellingham-procureware" />);
+    await waitFor(() => expect((screen.getByTestId("profile-effective-version")).textContent).toContain("Repo v7"));
+
+    const section = screen.getByTestId("profile-validation");
+    expect(section.textContent).toContain("Report-only");
+    expect(section.textContent).toContain("URLs: BidURL, ResourceURL");
+    expect(section.textContent).toContain("Dates: DueDate, PublishedDate, AwardDate");
+    expect(section.textContent).toContain("JSON-encoded: BidDocuments");
+    expect(section.textContent).toContain("Email (heuristic): ContactEmail");
+    expect(section.textContent).toContain("Phone (heuristic): ContactPhone");
+    expect(section.textContent).not.toContain("None configured");
+  });
+
+  it("says so when an override leaves no validation configured", async () => {
+    // An override's validation replaces the repo block wholesale, so an empty
+    // object turns validation off — the section must say that rather than
+    // render five empty lists.
+    mockDb.row = {
+      ...savedOverride,
+      delta: { validation: {} },
+      reason: "Suspend format validation pending format review."
+    };
+    render(<ProfileDetail profileId="bellingham-procureware" />);
+    await waitFor(() => expect((screen.getByTestId("profile-effective-version")).textContent).toContain("local override rev 1"));
+
+    expect((screen.getByTestId("profile-validation")).textContent).toContain("None configured");
+  });
+
   it("says so for an unknown profile id", () => {
     render(<ProfileDetail profileId="no-such-profile" />);
     expect(screen.getByText("Unknown profile.")).toBeTruthy();
