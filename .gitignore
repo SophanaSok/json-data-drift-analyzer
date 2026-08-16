@@ -31,6 +31,11 @@ playwright-report
 *.sw?
 coverage/
 
+# Temporary e2e fixture profile (written/removed by e2e/detection.spec.ts; a
+# stray copy after a crashed run makes the policy-manifest unit test fail —
+# delete the file if that happens)
+src/profiles/sources/zz-e2e-*.json
+
 # Local measurement scripts
 .probe.mjs
 .fold-check.mjs
