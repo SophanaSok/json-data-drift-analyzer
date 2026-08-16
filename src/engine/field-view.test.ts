@@ -147,6 +147,19 @@ describe("buildFieldDetail on the real Bellingham pair", () => {
     expect(detail.distribution.distinctCount).toBeGreaterThan(GROUPABLE_DISTINCT_LIMIT);
   });
 
+  it("counts every populated record even past the distinct-tracking cap", () => {
+    // The old tally only counted records among the first 64 distinct values,
+    // producing absurdities like "more than 64 distinct across 66 populated".
+    const detail = buildFieldDetail(analysis, "DueDate", review, profile);
+    const trulyPopulated = detail.cells.filter((cell) => {
+      const value = cell.referenceValue;
+      return value !== undefined && value !== null && String(value).trim() !== "";
+    }).length;
+
+    expect(detail.distribution.populatedReferenceCount).toBe(trulyPopulated);
+    expect(detail.distribution.populatedReferenceCount).toBeGreaterThan(detail.distribution.distinctCount);
+  });
+
   it("agrees with classifyCells on the lane of every cell both produce", () => {
     const findingCells = new Map(
       classifyCells(review, profile).map((cell) => [cellId(cell.recordKey, cell.field), cell])

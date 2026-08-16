@@ -462,6 +462,16 @@ export function UploadPage() {
               overlap. Pick the right one manually.
             </span>
           ) : null}
+          {detection?.baseline.status === "none" && detection.latest.status !== "match" ? (
+            <span
+              data-testid="profile-detection-none"
+              className="mt-1 block rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800"
+            >
+              No known source matched these files. The analysis will run under the{" "}
+              <strong>{sourceProfile.displayName ?? sourceProfile.id}</strong> policy — its backfill approvals and
+              match-rate floor included. Pick a different profile above if that's wrong.
+            </span>
+          ) : null}
           {detection?.baseline.status === "match" &&
           detection.latest.status === "match" &&
           detection.baseline.match.profileId !== detection.latest.match.profileId ? (
