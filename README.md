@@ -35,7 +35,7 @@ Latest JSON  ──┘        quality issues, search index, narrative)
         IndexedDB cache ◄────────┤ (keyed by file hashes + config + profile
                                  │  + schema version)
                                  ▼
-   Results UI: Overview · Records · Field Changes · Data Health · Recovery · Ticket
+   Results UI: Overview · Records · Field Changes · Explore · Data Health · Recovery · Ticket
 ```
 
 - **Matching** is exact and deterministic: primary key first, then fallback keys over the remainder. Ambiguity is judged against the whole reference population, so a fallback key can never silently pick the wrong record.
@@ -72,7 +72,7 @@ Requires **Node.js ≥ 20.19** (CI runs Node 20).
 
 ```bash
 npm install
-npm run dev        # http://localhost:4173/json-data-drift-analyzer/
+npm run dev        # http://localhost:5173/json-data-drift-analyzer/
 ```
 
 Note the base path — the app serves under `/json-data-drift-analyzer/`, matching its GitHub Pages URL.
