@@ -12,5 +12,8 @@
  * implied semantics of every entry cached before this constant existed, and the
  * Phase 1 correctness fixes (document decoding, identity-keyed field stats, the
  * collision-proof record key) changed results without changing shape.
+ *
+ * Version 3: the search index now covers baseline values as well as latest ones,
+ * so records stay findable by text that the candidate export wiped.
  */
-export const ENGINE_SEMANTICS_VERSION = 2;
+export const ENGINE_SEMANTICS_VERSION = 3;

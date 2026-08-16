@@ -106,6 +106,22 @@ export function searchRecordIds(
     .map((result) => String(result.id));
 }
 
+/**
+ * Both sides of a field are indexed, not just the surviving value. An emptied
+ * field is this tool's central scenario: the latest value is blank precisely
+ * when an analyst needs to find the record by what it used to say.
+ */
+function indexedFieldText(record: DiffRecord, field: string): string {
+  const surviving = String((record.latest ?? record.baseline)?.[field] ?? "");
+  // record.baseline is only stored for removed records; for changed records the
+  // wiped value lives in the field's changedFields entry (same approach as
+  // field-view's referenceValueOf, which cannot be imported without a cycle).
+  const change = record.changedFields.find((entry) => entry.path === field);
+  const wiped = change ? String(change.baselineValue ?? "") : "";
+  if (wiped === "" || wiped === surviving) return surviving;
+  return `${surviving} ${wiped}`;
+}
+
 export function buildSearchIndex(
   records: Record<string, DiffRecord>,
   issues: QualityIssue[],
@@ -125,10 +141,10 @@ export function buildSearchIndex(
     miniSearch.add({
       id: record.id,
       recordKey: record.recordKey,
-      title: String((record.latest ?? record.baseline)?.[sourceFields.title] ?? ""),
-      bidStatus: String((record.latest ?? record.baseline)?.[sourceFields.status] ?? ""),
-      bidType: String((record.latest ?? record.baseline)?.[sourceFields.type] ?? ""),
-      bidUrl: String((record.latest ?? record.baseline)?.[sourceFields.url] ?? ""),
+      title: indexedFieldText(record, sourceFields.title),
+      bidStatus: indexedFieldText(record, sourceFields.status),
+      bidType: indexedFieldText(record, sourceFields.type),
+      bidUrl: indexedFieldText(record, sourceFields.url),
       changedFields: record.changedFields.map((change) => change.path).join(" "),
       qualityText,
       documentText

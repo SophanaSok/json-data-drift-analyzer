@@ -215,12 +215,48 @@ export function deriveLabels(input: TicketInput, severity: FindingSeverity): str
   return [...labels].sort();
 }
 
-/** Field-level groups, largest first, then by field name so ties are stable. */
-function fieldGroups(groups: TicketFindingGroup[]): TicketFindingGroup[] {
-  return groups
-    .filter((group) => group.field !== null)
+/** One table row / title entry per field, with every category that reported it. */
+type AffectedField = {
+  field: string;
+  count: number;
+  outOf: number;
+  /** Primary category (the largest-count group) first, the rest sorted. */
+  categories: FindingCategory[];
+};
+
+/**
+ * Field-level groups collapsed to one entry per field, largest first, then by
+ * field name so ties are stable. A systemically wiped field arrives as two
+ * groups — `field_regression` per record and `systemic_field_regression` as a
+ * dataset-level finding — and counting both would double every field in the
+ * title, the summary table, and the affected-fields list.
+ */
+function fieldGroups(groups: TicketFindingGroup[]): AffectedField[] {
+  const byField = new Map<string, { primary: TicketFindingGroup; extraCategories: Set<FindingCategory> }>();
+  for (const group of groups) {
+    if (group.field === null) continue;
+    const entry = byField.get(group.field);
+    if (!entry) {
+      byField.set(group.field, { primary: group, extraCategories: new Set() });
+      continue;
+    }
+    if (group.count > entry.primary.count) {
+      entry.extraCategories.add(entry.primary.category);
+      entry.primary = group;
+    } else {
+      entry.extraCategories.add(group.category);
+    }
+    entry.extraCategories.delete(entry.primary.category);
+  }
+  return [...byField.values()]
+    .map(({ primary, extraCategories }) => ({
+      field: primary.field!,
+      count: primary.count,
+      outOf: primary.outOf,
+      categories: [primary.category, ...[...extraCategories].sort()]
+    }))
     .sort((left, right) =>
-      right.count !== left.count ? right.count - left.count : (left.field ?? "").localeCompare(right.field ?? "")
+      right.count !== left.count ? right.count - left.count : left.field.localeCompare(right.field)
     );
 }
 
@@ -301,9 +337,8 @@ export function buildTicketDraft(input: TicketInput): TicketDraft {
     lines.push("| Field | Records affected | Share of matched records | Issue |");
     lines.push("| --- | ---: | ---: | --- |");
     for (const group of affected) {
-      lines.push(
-        `| \`${group.field}\` | ${group.count} | ${formatPercent(group.count, group.outOf)} | ${group.category.replace(/_/g, " ")} |`
-      );
+      const issue = group.categories.map((category) => category.replace(/_/g, " ")).join(" + ");
+      lines.push(`| \`${group.field}\` | ${group.count} | ${formatPercent(group.count, group.outOf)} | ${issue} |`);
     }
     lines.push("");
     lines.push("### Affected JSON fields");

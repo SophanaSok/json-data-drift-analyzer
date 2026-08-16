@@ -68,6 +68,23 @@ describe("search ranking", () => {
     expect(reloadedOrder[0]).toBe(idOf("92C-2023"));
   });
 
+  it("finds a record by a baseline value the candidate export wiped", () => {
+    // 91B-2023's Title is "Water Main Upgrades" in the baseline and blank in the
+    // latest export — the exact situation the analyzer exists for. The record
+    // must stay findable by what it used to say.
+    const analysis = getAnalysis();
+    const searchIndex = loadSearchIndex(String(analysis.searchIndexJson));
+
+    expect(searchRecordIds(searchIndex, "Water Main", analysis.recordsById)).toContain(idOf("91B-2023"));
+  });
+
+  it("still finds a record by a value present only in the latest export", () => {
+    const analysis = getAnalysis();
+    const searchIndex = loadSearchIndex(String(analysis.searchIndexJson));
+
+    expect(searchRecordIds(searchIndex, "Added project", analysis.recordsById)).toContain(idOf("NEW-100"));
+  });
+
   it("prefers exact record key matches over higher text scores", () => {
     const analysis = getAnalysis();
 

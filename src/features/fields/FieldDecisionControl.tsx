@@ -138,6 +138,14 @@ export function FieldDecisionControl({ cell, resolved, log, makeContext, onRecor
             data-testid="decision-custom"
             value={customValue}
             onChange={(event) => updateDraft(draftId, { customValue: event.target.value })}
+            onKeyDown={(event) => {
+              // The keyboard flow dead-ends here otherwise: `e` opens the form
+              // and seeds this box, so Enter must be able to finish the job
+              // without reaching for the "Use custom" button.
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              record("use_custom");
+            }}
           />
           <div className="flex flex-wrap gap-1">
             {!canAcceptReference ? null : classification.lane === "auto" ? (
