@@ -32,6 +32,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run test -- --coverage
       - run: npm run build
+      - name: Check bundle budget
+        run: node tools/bundle-budget.mjs
 
       # Cache the browser binary rather than downloading ~115 MB on every run.
       # Keyed on the Playwright version so an upgrade fetches a matching browser.
