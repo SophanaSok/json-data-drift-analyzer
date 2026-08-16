@@ -497,6 +497,22 @@ describe("FieldsPage: manual value entry", () => {
     expect(screen.getByTestId("record-output-ContractValue").textContent).toContain("48250.00");
   });
 
+  it("records the typed value on Enter, so the keyboard flow never needs the mouse", async () => {
+    const user = userEvent.setup();
+    renderPage("/results?tab=explore&mode=record&record=1B-2020");
+
+    await user.click(screen.getByTestId("toggle-unchanged"));
+    const row = screen.getByTestId("record-cell-ContractValue");
+    await user.click(within(row).getByTestId("decide-1B-2020-ContractValue"));
+    await user.type(within(row).getByTestId("decision-reason"), "from the award letter");
+    await user.type(within(row).getByTestId("decision-custom"), "48250.00{Enter}");
+
+    expect(mockDb.persisted).toHaveLength(1);
+    const saved = mockDb.persisted[0] as { action: string; outputValue: string };
+    expect(saved.action).toBe("use_custom");
+    expect(saved.outputValue).toBe("48250.00");
+  });
+
   it("locks profile-excluded fields", async () => {
     const user = userEvent.setup();
     renderPage("/results?tab=explore&mode=record&record=1B-2020");

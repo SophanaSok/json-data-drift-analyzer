@@ -1,6 +1,8 @@
+import { copyFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
-import { version } from "./package.json";
+import { version } from "./package.json" with { type: "json" };
 
 /**
  * The policy applied to the deployed build.
@@ -51,8 +53,25 @@ function contentSecurityPolicy(): Plugin {
   };
 }
 
+/**
+ * GitHub Pages has no rewrite rules, so a hard refresh or shared deep link to
+ * `/results` or `/profiles` would get GitHub's own 404 page and the router —
+ * including the restore-from-cache flow on the results routes — would never
+ * load. Pages serves `404.html` for unknown paths, so shipping the app shell
+ * under that name turns every deep link into a normal boot of the SPA.
+ */
+function spaFallback(): Plugin {
+  return {
+    name: "emit-spa-404-fallback",
+    apply: "build",
+    async closeBundle() {
+      await copyFile(resolve(import.meta.dirname, "dist/index.html"), resolve(import.meta.dirname, "dist/404.html"));
+    }
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), contentSecurityPolicy()],
+  plugins: [react(), contentSecurityPolicy(), spaFallback()],
   base: "/json-data-drift-analyzer/",
   build: {
     // The repo is public and there is deliberately no telemetry, so a field

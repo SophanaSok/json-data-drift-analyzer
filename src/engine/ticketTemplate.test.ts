@@ -118,6 +118,29 @@ describe("ticket template: shape", () => {
     expect(draft.title).toMatch(/BidStatus and \d+ other fields unpopulated in 499 of 499 records \(100\.0%\)/);
   });
 
+  it("counts each field once even when several categories report it", () => {
+    // A systemically wiped field arrives as a per-record field_regression group
+    // AND a dataset-level systemic_field_regression group; the title, table,
+    // and affected-fields list must not double-count it.
+    const input = {
+      ...baseInput,
+      findingGroups: [
+        { category: "field_regression" as const, severity: "high" as const, field: "DueDate", count: 499, outOf: 499 },
+        { category: "systemic_field_regression" as const, severity: "high" as const, field: "DueDate", count: 1, outOf: 499 },
+        { category: "field_regression" as const, severity: "high" as const, field: "Title", count: 499, outOf: 499 },
+        { category: "systemic_field_regression" as const, severity: "high" as const, field: "Title", count: 1, outOf: 499 }
+      ]
+    };
+    const title = deriveTitle(input);
+    expect(title).toContain("DueDate and 1 other field ");
+
+    const description = buildTicketDraft(input).markdownDescription;
+    expect(description).toContain("| `DueDate` | 499 | 100.0% | field regression + systemic field regression |");
+    expect(description.match(/\| `DueDate` \|/g)).toHaveLength(1);
+    expect(description).toContain("`DueDate`, `Title`");
+    expect(description).not.toContain("`DueDate`, `Title`, `DueDate`");
+  });
+
   it("breaks a count tie by field name, so the title never varies between runs", () => {
     const tied = deriveTitle({
       ...baseInput,

@@ -142,8 +142,15 @@ export function UploadPage() {
         // Each file is parsed ONCE here and the parsed value feeds both the
         // file-order assessment and profile detection — strictly cheaper than
         // the previous parse-inside-assess, which detection would have doubled.
-        const baselineParsed = parseExport(baselineText);
-        const latestParsed = parseExport(latestText);
+        const parseNamed = (text: string, name: string) => {
+          try {
+            return parseExport(text);
+          } catch {
+            throw new Error(`“${name}” is not valid JSON.`);
+          }
+        };
+        const baselineParsed = parseNamed(baselineText, baselineFile.name);
+        const latestParsed = parseNamed(latestText, latestFile.name);
         setFileOrderAssessment(
           assessFileOrder(baselineParsed, latestParsed, baselineFile.name, latestFile.name, collectionPath)
         );
@@ -161,10 +168,16 @@ export function UploadPage() {
           applyProfileSelection(baselineDetection.match.profileId, "detected");
         }
       })
-      .catch(() => {
+      .catch((problem: unknown) => {
         if (!cancelled) {
           setFileOrderAssessment(null);
-          setError("Could not read export dates because one of the selected files is not valid JSON.");
+          // parseNamed names the offending file; anything else (an unreadable
+          // File, say) falls back to the generic phrasing.
+          setError(
+            problem instanceof Error && problem.message.includes("not valid JSON")
+              ? problem.message
+              : "Could not read export dates because one of the selected files is not valid JSON."
+          );
         }
       });
 

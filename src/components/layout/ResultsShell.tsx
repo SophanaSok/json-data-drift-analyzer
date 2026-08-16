@@ -102,25 +102,29 @@ export function ResultsShell() {
           Start new analysis
         </Link>
       </nav>
-      {tab === "overview" ? <OverviewPage /> : null}
-      {tab === "records" ? <RecordsPage /> : null}
-      {tab === "field-changes" ? <FieldChangesPage /> : null}
-      {tab === "explore" ? (
-        <Suspense fallback={<p className="p-6 text-sm text-slate-600">Loading field explorer…</p>}>
-          <FieldsPage />
-        </Suspense>
-      ) : null}
-      {tab === "data-health" ? <DataHealthPage /> : null}
-      {tab === "recovery" ? (
-        <Suspense fallback={<p className="p-6 text-sm text-slate-600">Loading recovery review…</p>}>
-          <RecoveryReviewPage />
-        </Suspense>
-      ) : null}
-      {tab === "ticket" ? (
-        <Suspense fallback={<p className="p-6 text-sm text-slate-600">Loading ticket draft…</p>}>
-          <ContractorTicketPage />
-        </Suspense>
-      ) : null}
+      {/* The other routes render their page as a <main> landmark; the tab
+          panels are this route's main content, so they get the same. */}
+      <main>
+        {tab === "overview" ? <OverviewPage /> : null}
+        {tab === "records" ? <RecordsPage /> : null}
+        {tab === "field-changes" ? <FieldChangesPage /> : null}
+        {tab === "explore" ? (
+          <Suspense fallback={<p className="p-6 text-sm text-slate-600">Loading field explorer…</p>}>
+            <FieldsPage />
+          </Suspense>
+        ) : null}
+        {tab === "data-health" ? <DataHealthPage /> : null}
+        {tab === "recovery" ? (
+          <Suspense fallback={<p className="p-6 text-sm text-slate-600">Loading recovery review…</p>}>
+            <RecoveryReviewPage />
+          </Suspense>
+        ) : null}
+        {tab === "ticket" ? (
+          <Suspense fallback={<p className="p-6 text-sm text-slate-600">Loading ticket draft…</p>}>
+            <ContractorTicketPage />
+          </Suspense>
+        ) : null}
+      </main>
     </div>
   );
 }
