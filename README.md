@@ -87,6 +87,36 @@ Note the base path — the app serves under `/json-data-drift-analyzer/`, matchi
 | `npm run test:e2e` | Playwright end-to-end tests |
 | `npm run typecheck` | `tsc -b` |
 | `npm run lint` | oxlint |
+| `npm run analyze` | Headless analysis: full pipeline + artifacts from the command line (below) |
+
+### Headless analysis and the suggested QC routine
+
+Detection does not need the browser. `npm run analyze` runs the exact worker
+pipeline (parse → drift analysis → recovery review → export bundle, with no
+decisions applied) and exits non-zero when quality fails, so it can run per
+export drop from a scheduler or CI job and page a human only when something is
+wrong:
+
+```bash
+npm run analyze -- --baseline reference.json --latest new-export.json --out runs/2026-08-15
+# exit 0: clean · exit 1: quality gate failed (details printed) · exit 2: usage error
+```
+
+The source profile is auto-detected from the file contents (pass `--profile
+<id>` to pin it); browser-local profile overrides are not applied — a headless
+run always uses the committed repo policy. Every artifact (recovered JSON,
+quality report, recovery audit, findings CSV, contractor ticket) is written to
+`--out` on every run.
+
+The routine this enables — detection in the pipeline, review in the UI:
+
+1. **Every new export**: run `npm run analyze` against the last known-good
+   reference, writing artifacts into a dated folder you keep (a repo, a share —
+   the artifacts are the durable audit record, not the browser's local state).
+2. **On a non-zero exit**: open the browser UI, upload the same pair, and work
+   the review — Explore/Recovery record decisions with reasons.
+3. **After deciding**: export the artifacts again from the Recovery tab (now
+   with decisions applied) and archive them next to the automated run's set.
 
 ### Testing
 
