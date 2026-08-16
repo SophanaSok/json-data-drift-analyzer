@@ -11,6 +11,20 @@ const root = process.cwd();
  * disambiguation, which unit tests cover with synthetic registries.
  */
 test.describe("profile picker", () => {
+  test("warns when no known source matches the uploaded files", async ({ page }) => {
+    // The tiny fixture pair uses example.gov URLs, which no profile claims —
+    // the page must say the selected policy will apply rather than staying
+    // silent while a source-specific profile governs unrelated data.
+    await page.goto("");
+    await page.getByTestId("baseline-input").setInputFiles(path.join(root, "src/test/fixtures/baseline.json"));
+    await page.getByTestId("latest-input").setInputFiles(path.join(root, "src/test/fixtures/latest.json"));
+
+    const notice = page.getByTestId("profile-detection-none");
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText("No known source matched these files");
+    await expect(notice).toContainText("Bellingham ProcureWare");
+  });
+
   test("shows the selection closed and filters when typing", async ({ page }) => {
     await page.goto("");
     const picker = page.getByTestId("source-profile-select");

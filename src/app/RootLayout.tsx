@@ -25,7 +25,7 @@ export function RootLayout() {
       <FileOrderNotice />
       <Outlet />
       {/* The identifiers a "wrong numbers" report can cite. */}
-      <footer className="border-t px-6 py-2 text-xs text-slate-400">
+      <footer className="border-t px-6 py-2 text-xs text-slate-500">
         <span data-testid="app-version">v{APP_VERSION}</span> · Build{" "}
         <code data-testid="build-commit">{BUILD_COMMIT_SHORT}</code>
       </footer>

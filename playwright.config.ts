@@ -17,8 +17,18 @@ export default defineConfig({
   projects: [
     {
       name: "dev",
-      testIgnore: /csp\.spec\.ts/,
+      testIgnore: /csp\.spec\.ts|detection\.spec\.ts/,
       use: { baseURL: DEV_URL }
+    },
+    {
+      // Writes a temporary second profile into src/profiles/sources/ (see the
+      // spec), which makes the dev server hot-reload every connected page —
+      // so it must run AFTER the dev project's tests, never alongside them.
+      // The built project is immune: preview serves static output.
+      name: "detection",
+      testMatch: /detection\.spec\.ts/,
+      use: { baseURL: DEV_URL },
+      dependencies: ["dev"]
     },
     {
       // The Content-Security-Policy is injected at build time only, so it can only

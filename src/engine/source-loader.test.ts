@@ -11,8 +11,6 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  analyzeBlankValue,
-  classifyFieldValue,
   inspectRecordsPath,
   isBackfillEligibleField,
   isBackfillEligibleValue,
@@ -286,36 +284,6 @@ describe("source-loader: identity fields", () => {
   });
 });
 
-describe("source-loader: blankness policies diverge as documented", () => {
-  const placeholderRecord = { Title: "N/A" };
-  const emptyArrayRecord = { Documents: [] };
-
-  it("classifies a placeholder as blank under with-placeholders, present under strict", () => {
-    expect(classifyFieldValue(placeholderRecord, "Title")).toBe("blank");
-    expect(classifyFieldValue(placeholderRecord, "Title", { policy: "with-placeholders" })).toBe("blank");
-    expect(classifyFieldValue(placeholderRecord, "Title", { policy: "strict" })).toBe("present");
-  });
-
-  it("classifies an empty array as blank under with-placeholders, present under strict", () => {
-    expect(classifyFieldValue(emptyArrayRecord, "Documents")).toBe("blank");
-    expect(classifyFieldValue(emptyArrayRecord, "Documents", { policy: "strict" })).toBe("present");
-  });
-
-  it("honours field-level empty rules under with-placeholders", () => {
-    expect(classifyFieldValue(emptyArrayRecord, "Documents", { rule: { allowEmptyArray: true } })).toBe("present");
-  });
-
-  it("agrees on null, empty string, and whitespace-only under both policies", () => {
-    for (const policy of ["strict", "with-placeholders"] as const) {
-      expect(classifyFieldValue({ Title: null }, "Title", { policy })).toBe("blank");
-      expect(classifyFieldValue({ Title: "" }, "Title", { policy })).toBe("blank");
-      expect(classifyFieldValue({ Title: "   " }, "Title", { policy })).toBe("blank");
-      expect(classifyFieldValue({ Title: "Real" }, "Title", { policy })).toBe("present");
-      expect(classifyFieldValue({ Title: "Real" }, "Missing", { policy })).toBe("missing");
-    }
-  });
-});
-
 describe("source-loader: rule 4 backfill eligibility gate", () => {
   it("treats null, undefined, empty, and whitespace-only as eligible", () => {
     expect(isBackfillEligibleValue(null)).toBe(true);
@@ -351,9 +319,8 @@ describe("source-loader: rule 4 backfill eligibility gate", () => {
   });
 
   it("disagrees with the reporting policy exactly where documented", () => {
-    const record = { Title: "N/A" };
-    expect(classifyFieldValue(record, "Title")).toBe("blank");
-    expect(isBackfillEligibleField(record, "Title")).toBe(false);
+    // "N/A" is a published value: reporting may call it blank, but rule 4 must not.
+    expect(isBackfillEligibleField({ Title: "N/A" }, "Title")).toBe(false);
   });
 
   it("marks all 500 candidate records eligible for each of the eight regressed fields", () => {
@@ -378,141 +345,6 @@ describe("source-loader: rule 4 backfill eligibility gate", () => {
     for (const field of ["AgentID", "BidURL", "ProjectCode", "BidDocuments", "BidDocumentHashes"]) {
       const eligible = candidateRecords.filter((r) => isBackfillEligibleField(r, field));
       expect(eligible, `${field} should never be backfill-eligible`).toHaveLength(0);
-    }
-  });
-});
-
-describe("source-loader: field value state classification", () => {
-  it("classifies present values correctly", () => {
-    const record = { Title: "Test Project", BidStatus: "Open" };
-
-    expect(classifyFieldValue(record, "Title")).toBe("present");
-    expect(classifyFieldValue(record, "BidStatus")).toBe("present");
-    expect(classifyFieldValue(record, "NonExistent")).toBe("missing");
-  });
-
-  it("classifies missing fields", () => {
-    const record = { Title: "Test" };
-    expect(classifyFieldValue(record, "NonExistent")).toBe("missing");
-  });
-
-  it("classifies null as blank", () => {
-    const record = { Title: null };
-    expect(classifyFieldValue(record, "Title")).toBe("blank");
-  });
-
-  it("classifies empty string as blank", () => {
-    const record = { Title: "" };
-    expect(classifyFieldValue(record, "Title")).toBe("blank");
-  });
-
-  it("classifies whitespace-only string as blank", () => {
-    const record = { Title: "   ", Description: "\t\n" };
-    expect(classifyFieldValue(record, "Title")).toBe("blank");
-    expect(classifyFieldValue(record, "Description")).toBe("blank");
-  });
-
-  it("classifies placeholder values as blank", () => {
-    const record = {
-      Title: "n/a",
-      Description: "N/A",
-      Status: "none",
-      Notes: "unknown",
-      Code: "-"
-    };
-
-    expect(classifyFieldValue(record, "Title")).toBe("blank");
-    expect(classifyFieldValue(record, "Description")).toBe("blank");
-    expect(classifyFieldValue(record, "Status")).toBe("blank");
-    expect(classifyFieldValue(record, "Notes")).toBe("blank");
-    expect(classifyFieldValue(record, "Code")).toBe("blank");
-  });
-
-  it("classifies empty array as blank", () => {
-    const record = { Documents: [] };
-    expect(classifyFieldValue(record, "Documents")).toBe("blank");
-  });
-
-  it("classifies non-empty array as present", () => {
-    const record = { Documents: [{ title: "Spec.pdf" }] };
-    expect(classifyFieldValue(record, "Documents")).toBe("present");
-  });
-});
-
-describe("source-loader: blank value subtype analysis", () => {
-  it("distinguishes null from undefined", () => {
-    expect(analyzeBlankValue(null)).toEqual({ isBlank: true, subtype: "null" });
-    expect(analyzeBlankValue(undefined)).toEqual({ isBlank: true, subtype: "undefined" });
-  });
-
-  it("distinguishes empty string from whitespace-only", () => {
-    expect(analyzeBlankValue("")).toEqual({ isBlank: true, subtype: "empty-string" });
-    expect(analyzeBlankValue("   ")).toEqual({ isBlank: true, subtype: "whitespace-only" });
-    expect(analyzeBlankValue("\t\n")).toEqual({ isBlank: true, subtype: "whitespace-only" });
-  });
-
-  it("detects placeholder values", () => {
-    expect(analyzeBlankValue("n/a")).toEqual({ isBlank: true, subtype: "placeholder" });
-    expect(analyzeBlankValue("N/A")).toEqual({ isBlank: true, subtype: "placeholder" });
-    expect(analyzeBlankValue("none")).toEqual({ isBlank: true, subtype: "placeholder" });
-    expect(analyzeBlankValue("unknown")).toEqual({ isBlank: true, subtype: "placeholder" });
-    expect(analyzeBlankValue("-")).toEqual({ isBlank: true, subtype: "placeholder" });
-  });
-
-  it("detects empty arrays", () => {
-    expect(analyzeBlankValue([])).toEqual({ isBlank: true, subtype: "empty-array" });
-  });
-
-  it("returns non-blank for valid values", () => {
-    expect(analyzeBlankValue("Valid Title")).toEqual({ isBlank: false, subtype: null });
-    expect(analyzeBlankValue(123)).toEqual({ isBlank: false, subtype: null });
-    expect(analyzeBlankValue([{ title: "Doc" }])).toEqual({ isBlank: false, subtype: null });
-  });
-});
-
-describe("source-loader: Bellingham fixture field states", () => {
-  it("confirms Title is blank in all candidate records (regression evidence)", () => {
-    const blankTitles = candidateRecords.filter((r) => classifyFieldValue(r, "Title") === "blank");
-    expect(blankTitles).toHaveLength(500);
-  });
-
-  it("confirms BidStatus is blank in all candidate records (regression evidence)", () => {
-    const blankStatuses = candidateRecords.filter((r) => classifyFieldValue(r, "BidStatus") === "blank");
-    expect(blankStatuses).toHaveLength(500);
-  });
-
-  it("confirms Title is present in all reference records", () => {
-    const presentTitles = referenceRecords.filter((r) => classifyFieldValue(r, "Title") === "present");
-    expect(presentTitles).toHaveLength(500);
-  });
-
-  it("confirms AgentID and BidURL are never blank in either fixture", () => {
-    const refIdentityBlank = referenceRecords.filter(
-      (r) => classifyFieldValue(r, "AgentID") === "blank" || classifyFieldValue(r, "BidURL") === "blank"
-    );
-    const candIdentityBlank = candidateRecords.filter(
-      (r) => classifyFieldValue(r, "AgentID") === "blank" || classifyFieldValue(r, "BidURL") === "blank"
-    );
-
-    expect(refIdentityBlank).toHaveLength(0);
-    expect(candIdentityBlank).toHaveLength(0);
-  });
-
-  it("confirms the eight regressed fields are blank in all 500 candidate records", () => {
-    const regressed = [
-      "Title",
-      "BidStatus",
-      "BidType",
-      "PublishedDate",
-      "DueDate",
-      "AwardDate",
-      "ContactEmail",
-      "ContactPhone"
-    ];
-
-    for (const field of regressed) {
-      const blank = candidateRecords.filter((r) => classifyFieldValue(r, field, { policy: "strict" }) === "blank");
-      expect(blank, `${field} should be blank in all candidate records`).toHaveLength(500);
     }
   });
 });

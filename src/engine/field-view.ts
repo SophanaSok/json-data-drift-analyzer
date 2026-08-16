@@ -499,6 +499,7 @@ export function buildFieldDetail(
   const cells: FieldCell[] = [];
   const valueCounts = new Map<string, number>();
   let distinctOverflow = false;
+  let populatedReferenceCount = 0;
   let eligibleCount = 0;
   let conflictCount = 0;
   let comparablePairCount = 0;
@@ -514,6 +515,11 @@ export function buildFieldDetail(
     if (!isBlankStrict(candidate) && !isBlankStrict(reference)) comparablePairCount += 1;
 
     if (!isBlankStrict(reference)) {
+      // Counted for every populated record, independent of the distinct-value
+      // cap below — otherwise records whose value is a 65th-or-later distinct
+      // value are counted nowhere and the "across N populated records" copy
+      // undercounts (the old bug read "more than 64 distinct across 66").
+      populatedReferenceCount += 1;
       const display = formatCellValue(reference);
       if (valueCounts.has(display)) {
         valueCounts.set(display, valueCounts.get(display)! + 1);
@@ -529,7 +535,6 @@ export function buildFieldDetail(
   const groups = [...valueCounts.entries()]
     .map(([value, count]) => ({ value, count }))
     .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
-  const populatedReferenceCount = groups.reduce((total, group) => total + group.count, 0);
 
   const stat = analysis.fieldStats.find((entry) => entry.field === field);
 

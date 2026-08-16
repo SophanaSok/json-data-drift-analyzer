@@ -104,7 +104,9 @@ npm run analyze -- --baseline reference.json --latest new-export.json --out runs
 
 The source profile is auto-detected from the file contents (pass `--profile
 <id>` to pin it); browser-local profile overrides are not applied — a headless
-run always uses the committed repo policy. Every artifact (recovered JSON,
+run always uses the committed repo policy. Note the TypeScript CLI tools
+(`analyze`, `new-profile`, `profiles:manifest`) need **Node ≥ 22.18** (built-in
+type stripping); the app's build/test toolchain itself runs on Node 20. Every artifact (recovered JSON,
 quality report, recovery audit, findings CSV, contractor ticket) is written to
 `--out` on every run.
 

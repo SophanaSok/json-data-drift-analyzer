@@ -10,36 +10,9 @@
  * safe to import from browser code as well as tests.
  */
 
-import { DEFAULT_PLACEHOLDERS, isBlankStrict, isEmpty } from "./empty";
+import { isBlankStrict } from "./empty";
 import { getCollection } from "./normalize";
-import type { EmptyRule } from "./types";
-import type { FieldValueState, InspectResult, LoadResult, RawSourceDataset, SourceProfile } from "./adapter-types";
-
-/**
- * Which definition of "blank" a caller wants.
- *
- * - `strict` — AGENTS.md rule 4: null, absent, empty, or whitespace-only. Placeholder
- *   strings ("N/A", "none", "-") are NOT blank; they are published values that rule 3
- *   protects from automatic overwrite. **Use this to gate backfill eligibility.**
- * - `with-placeholders` — additionally treats configured placeholder strings and empty
- *   arrays as blank (see `isEmpty`). **Use this for data-quality reporting**, where a
- *   field holding "N/A" is meaningfully unpopulated.
- *
- * The two definitions disagree, deliberately. Call sites must state which question
- * they are asking rather than inheriting a default silently.
- */
-export type BlankPolicy = "strict" | "with-placeholders";
-
-export type BlankOptions = {
-  /** Defaults to `with-placeholders` (data-quality reporting semantics). */
-  policy?: BlankPolicy;
-  /** Field-specific empty rules; only consulted under `with-placeholders`. */
-  rule?: EmptyRule;
-};
-
-function isBlank(value: unknown, options?: BlankOptions): boolean {
-  return options?.policy === "strict" ? isBlankStrict(value) : isEmpty(value, options?.rule);
-}
+import type { InspectResult, LoadResult, RawSourceDataset, SourceProfile } from "./adapter-types";
 
 /**
  * The AGENTS.md rule 4 emptiness gate: is this candidate value blank enough that
@@ -168,7 +141,8 @@ export function inspectRecordsPath(dataset: RawSourceDataset, profile: SourcePro
  * Validate that a record has all identity fields defined in the profile's primary key.
  *
  * Uses STRICT blankness: a placeholder value such as "-" counts as present here. That
- * is a deliberate choice, not an oversight — see `BlankPolicy`. If placeholder identity
+ * is a deliberate choice, not an oversight — strict (`isBlankStrict`) versus
+ * placeholder-aware (`isEmpty`) blankness deliberately disagree; see `src/engine/empty.ts`. If placeholder identity
  * values should invalidate a record, that is a profile-level policy decision and needs
  * an explicit rule rather than a silent default.
  *
@@ -247,66 +221,3 @@ export function verifyIdentityFieldsExist(
   return { allPresent, fieldPresence };
 }
 
-/**
- * Classify a field's value state.
- *
- * Defaults to `with-placeholders` (data-quality reporting). Pass
- * `{ policy: "strict" }` when the answer gates a backfill decision.
- *
- * Never returns "invalid": format validation is not implemented, so
- * `FieldValidationRules` is currently unused.
- *
- * @param record - The record containing the field
- * @param fieldName - The field to classify
- * @param options - Blankness policy and optional field rule
- */
-export function classifyFieldValue(
-  record: Record<string, unknown>,
-  fieldName: string,
-  options?: BlankOptions
-): FieldValueState {
-  if (!(fieldName in record)) {
-    return "missing";
-  }
-  return isBlank(record[fieldName], options) ? "blank" : "present";
-}
-
-/**
- * Distinguish between blank subtypes: null, empty string, whitespace-only, placeholder,
- * empty array. Reports the subtype regardless of policy so callers can apply their own
- * rule — a `placeholder` result is blank under `with-placeholders` but present under
- * `strict`.
- *
- * @param value - The field value to analyze
- * @returns Detailed blank classification
- */
-export function analyzeBlankValue(value: unknown): {
-  isBlank: boolean;
-  subtype: "null" | "undefined" | "empty-string" | "whitespace-only" | "placeholder" | "empty-array" | null;
-} {
-  if (value === null) {
-    return { isBlank: true, subtype: "null" };
-  }
-
-  if (value === undefined) {
-    return { isBlank: true, subtype: "undefined" };
-  }
-
-  if (typeof value === "string") {
-    if (value === "") {
-      return { isBlank: true, subtype: "empty-string" };
-    }
-    if (value.trim() === "") {
-      return { isBlank: true, subtype: "whitespace-only" };
-    }
-    if (DEFAULT_PLACEHOLDERS.has(value.trim().toLowerCase())) {
-      return { isBlank: true, subtype: "placeholder" };
-    }
-  }
-
-  if (Array.isArray(value) && value.length === 0) {
-    return { isBlank: true, subtype: "empty-array" };
-  }
-
-  return { isBlank: false, subtype: null };
-}

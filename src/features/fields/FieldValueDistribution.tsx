@@ -38,7 +38,7 @@ export function FieldValueDistribution({ distribution, selectedValue, onSelectVa
         <ul className="mt-1 flex flex-wrap gap-2 text-xs text-slate-700">
           {top.map((group) => (
             <li key={group.value} className="rounded bg-slate-100 px-2 py-0.5">
-              {group.value} <span className="text-slate-500">×{group.count}</span>
+              {group.value} <span className="text-slate-600">×{group.count}</span>
             </li>
           ))}
         </ul>

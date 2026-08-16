@@ -462,6 +462,16 @@ export function UploadPage() {
               overlap. Pick the right one manually.
             </span>
           ) : null}
+          {detection?.baseline.status === "none" && detection.latest.status !== "match" ? (
+            <span
+              data-testid="profile-detection-none"
+              className="mt-1 block rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800"
+            >
+              No known source matched these files. The analysis will run under the{" "}
+              <strong>{sourceProfile.displayName ?? sourceProfile.id}</strong> policy — its backfill approvals and
+              match-rate floor included. Pick a different profile above if that's wrong.
+            </span>
+          ) : null}
           {detection?.baseline.status === "match" &&
           detection.latest.status === "match" &&
           detection.baseline.match.profileId !== detection.latest.match.profileId ? (
@@ -507,7 +517,7 @@ export function UploadPage() {
         </label>
       </section>
       <div className="flex items-center gap-4">
-        <button data-testid="analyze-button" className="rounded bg-sky-600 px-4 py-2 text-white disabled:bg-slate-400" disabled={disabled} onClick={onAnalyze}>
+        <button data-testid="analyze-button" className="rounded bg-sky-700 px-4 py-2 text-white disabled:bg-slate-400" disabled={disabled} onClick={onAnalyze}>
           Analyze
         </button>
         <div className="text-sm text-slate-600" aria-live="polite">{step ? `Progress: ${step}` : ""}</div>

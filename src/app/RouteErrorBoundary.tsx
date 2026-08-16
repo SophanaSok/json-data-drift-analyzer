@@ -31,7 +31,7 @@ function ErrorPanel({ error }: { error: unknown }) {
       </p>
       <div className="flex gap-3">
         <button
-          className="rounded bg-sky-600 px-4 py-2 text-sm text-white"
+          className="rounded bg-sky-700 px-4 py-2 text-sm text-white"
           onClick={() => {
             window.location.reload();
           }}

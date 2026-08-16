@@ -255,7 +255,7 @@ export function RecordModePanel({
 
       <div className="rounded border bg-white">
         <table className="w-full text-sm" data-testid="record-cells">
-          <thead className="bg-slate-100 text-left text-xs uppercase text-slate-500">
+          <thead className="bg-slate-100 text-left text-xs uppercase text-slate-600">
             <tr>
               <th className="w-8 p-2" />
               <th className="p-2">Field</th>

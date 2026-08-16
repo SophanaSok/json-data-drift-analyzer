@@ -128,7 +128,7 @@ export function FieldList({ summaries, selectedField, sort, onSort, onSelectFiel
                     </span>
                     {policyBadge(summary)}
                   </span>
-                  <span className="text-xs text-slate-500">{formatFillTransition(summary)}</span>
+                  <span className="text-xs text-slate-600">{formatFillTransition(summary)}</span>
                 </div>
                 <div role="cell" className="w-24 shrink-0 p-2">
                   <FillBars summary={summary} />

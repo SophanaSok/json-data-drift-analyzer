@@ -1,10 +1,23 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { percent } from "../../lib/format";
 import { useUiStore } from "../../stores/ui-store";
 
+/**
+ * Tiles are real links, not buttons that navigate: a link can be middle-clicked
+ * into a new tab, copied, and reached by link navigation — all things a QC
+ * reviewer juggling several filtered views actually does.
+ */
+function TileLink({ to, label, value, testid }: { to: string; label: string; value: string | number; testid: string }) {
+  return (
+    <Link className="block rounded border bg-white p-3 text-left hover:bg-slate-50" to={to} data-testid={testid}>
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="text-lg font-semibold">{value}</p>
+    </Link>
+  );
+}
+
 export function OverviewPage() {
   const analysis = useUiStore((state) => state.analysis);
-  const navigate = useNavigate();
 
   if (!analysis) {
     return <p className="p-6">Run an analysis first.</p>;
@@ -19,10 +32,11 @@ export function OverviewPage() {
     <div className="space-y-6 p-6">
       <h2 className="text-xl font-semibold">Overview</h2>
       <section className="grid gap-3 md:grid-cols-4">
-        <div className="rounded border bg-white p-3"><p className="text-xs text-slate-500">Quality gate</p><p className="text-lg font-semibold">{analysis.summary.qualityGate}</p></div>
-        <button className="rounded border bg-white p-3 text-left" onClick={() => navigate("/results?tab=records&status=added")}><p className="text-xs text-slate-500">Added</p><p className="text-lg font-semibold">{analysis.summary.addedCount}</p></button>
-        <button className="rounded border bg-white p-3 text-left" onClick={() => navigate("/results?tab=records&status=removed")}><p className="text-xs text-slate-500">Removed</p><p className="text-lg font-semibold">{analysis.summary.removedCount}</p></button>
-        <button className="rounded border bg-white p-3 text-left" onClick={() => navigate("/results?tab=records&status=changed")}><p className="text-xs text-slate-500">Changed</p><p className="text-lg font-semibold">{analysis.summary.changedCount}</p></button>
+        {/* The gate verdict is explained on the Recovery tab, so that is where the tile goes. */}
+        <TileLink to="/results?tab=recovery" label="Quality gate" value={analysis.summary.qualityGate} testid="tile-quality-gate" />
+        <TileLink to="/results?tab=records&status=added" label="Added" value={analysis.summary.addedCount} testid="tile-added" />
+        <TileLink to="/results?tab=records&status=removed" label="Removed" value={analysis.summary.removedCount} testid="tile-removed" />
+        <TileLink to="/results?tab=records&status=changed" label="Changed" value={analysis.summary.changedCount} testid="tile-changed" />
       </section>
       <section className="rounded border bg-white p-4">
         <h3 className="font-medium">Critical quality issues</h3>

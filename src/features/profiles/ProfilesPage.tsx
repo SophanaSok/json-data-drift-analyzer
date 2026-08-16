@@ -42,7 +42,7 @@ export function ProfilesPage() {
                 onClick={() => setParams({ id: row.id })}
               >
                 <span className="block truncate font-medium">{row.displayName}</span>
-                <span className="block truncate text-xs text-slate-500">
+                <span className="block truncate text-xs text-slate-600">
                   {row.id} · v{row.version}
                 </span>
               </button>

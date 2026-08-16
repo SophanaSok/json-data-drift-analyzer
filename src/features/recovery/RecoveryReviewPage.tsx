@@ -23,6 +23,7 @@ import {
 } from "../../engine/decisions";
 import { useToastStore } from "../../stores/toast-store";
 import { useDecisionLog } from "./use-decision-log";
+import { DecisionTransferControls } from "./DecisionTransferControls";
 
 const TONE_CLASS = {
   neutral: "text-slate-900",
@@ -134,7 +135,7 @@ export function RecoveryReviewPage() {
           you record in the review queue are saved in this browser and applied to the exported
           artifacts below.
         </p>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-600">
           Profile <code className="rounded bg-slate-100 px-1">{review.profileId}</code> v
           {review.profileVersion}
           {review.overrideRevision > 0 ? (
@@ -232,6 +233,8 @@ export function RecoveryReviewPage() {
           now={() => new Date().toISOString()}
         />
       ) : null}
+
+      <DecisionTransferControls review={review} log={decisionLog} onRecord={onRecordDecisions} />
 
       <FindingsExplorer findings={review.qa.findings} />
 

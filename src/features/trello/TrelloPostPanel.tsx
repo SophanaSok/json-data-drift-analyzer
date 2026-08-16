@@ -208,7 +208,7 @@ export function TrelloPostPanel({
           <span className="text-slate-500"> — suggestions only; no label is applied to the card.</span>
         </p>
         <pre
-          className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-white p-2 text-xs"
+          tabIndex={0} aria-label="Card description preview" className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-white p-2 text-xs"
           data-testid="preview-body"
         >
           {draft.markdownDescription}
