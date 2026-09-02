@@ -6,6 +6,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { ProfilesPage } from "./ProfilesPage";
+import { listProfiles } from "../../profiles";
 
 vi.mock("../../db", () => ({
   getProfileOverride: async () => null,
@@ -27,7 +28,9 @@ describe("ProfilesPage", () => {
   it("lists every registered profile and opens the first by default", async () => {
     setup();
     expect(screen.getByTestId("profiles-row-bellingham-procureware")).toBeTruthy();
-    expect((await screen.findByTestId("profile-detail")).textContent).toContain("Bellingham ProcureWare");
+    // The list is sorted by display name; whichever profile sorts first opens.
+    const first = listProfiles()[0]!;
+    expect((await screen.findByTestId("profile-detail")).textContent).toContain(first.displayName);
     // A healthy registry shows no diagnostics.
     expect(screen.queryByTestId("profile-diagnostics")).toBeNull();
   });

@@ -1,0 +1,59 @@
+{
+  "id": "auburn-sciquest",
+  "sourceUrl": "https://bids.sciquest.com/apps/Router/PublicEvent?tab=PHX_NAV_SourcingOpenForBid&CustomerOrg=Auburn",
+  "displayName": "Auburn University AL - SciQ 01",
+  "detection": {
+    "identityValues": {
+      "AgentID": [
+        "1484"
+      ],
+      "AgentName": [
+        "Auburn University AL - SciQ 01"
+      ]
+    },
+    "urlFields": [
+      "ResourceURL"
+    ],
+    "urlPrefixes": [
+      "https://bids.sciquest.com/apps/Router/PublicEvent?tab=PHX_NAV_SourcingOpenForBid&CustomerOrg=Auburn"
+    ]
+  },
+  "version": 1,
+  "primaryKey": [
+    "AgentID",
+    "ProjectCode"
+  ],
+  "fallbackKeys": [],
+  "dedupeKey": [
+    "AgentID",
+    "BidURL"
+  ],
+  "hardRequiredFields": [
+    "AgentID",
+    "ProjectCode"
+  ],
+  "excludedFields": [
+    "Created",
+    "Refreshed",
+    "BidURL"
+  ],
+  "safeBackfillFields": [],
+  "quality": {
+    "requiredFields": [
+      "ProjectCode",
+      "Title"
+    ]
+  },
+  "notes": [
+    "STATUS: UNAPPROVED at v1. No field is approved for automatic backfill; per AGENTS.md rule 4 a field becomes backfillable only when a per-source decision adds it to safeBackfillFields (rule 6 fields additionally need an explicit approval note), accompanied by a version bump. Everything below is measured from the export drops named here, not assumed.",
+    "IDENTITY: AgentID \"1484\" and AgentName \"Auburn University AL - SciQ 01\" are constant across 1491/1491 records in lambda-20260803-072639-f284b7e9_2026-08-03.json, lambda-20260817-072703-f148c828_2026-08-17.json, lambda-20260817-191951-530d914b_2026-08-17.json. Detection ANDs both (see the base detection design); AgentID alone is not unique across the fleet — 1234 is carried by two bots.",
+    "FACT — SHAPE: root {\"Export\": [...]}, all 45 fields present in 100% of records, every value a JSON string, UTF-8 BOM present. sourceUrl is the constant ResourceURL with volatile query parameters (tmstmp, session state) removed.",
+    "FACT — KEYS (lambda-20260817-191951-530d914b_2026-08-17.json, 200 records): BidURL non-blank 200/200, distinct 200; ProjectCode non-blank 200/200, distinct 200; LegacyAgentID constant.",
+    "FACT — BidURL IS PER-RUN: every BidURL is a Jaggaer ViewSourcingEvent link carrying an AuthToken and tmstmp that change on every scrape. Across the two runs analysed, 0 BidURL values were shared for the same ProjectCode (match rate 0.000 on [AgentID, BidURL]) while ProjectCode carried over cleanly. primaryKey is therefore [AgentID, ProjectCode]; BidURL is unique WITHIN a run (measured) so it remains the dedupeKey — dedupe never collapses two records that carry different links. ASSUMPTION — requires approval: BidURL is listed in excludedFields because it would otherwise conflict in 100% of matched records by construction; excluding it also removes it from hardRequiredFields and quality.requiredFields (an excluded field is never compared), so a run that ships blank BidURLs will NOT be flagged by this profile until the exclusion is revisited.",
+    "FACT — PARTIAL RUN: the evening run on 2026-08-17/21 holds a strict subset of the morning run's ProjectCodes (Auburn 200 of 691; UVU 178 of 814) and the engine will report the drop as a record-count anomaly and a match-rate failure. Whether the shorter run is a page cap or a scrape abort cannot be established from the data.",
+    "FACT — PAIR: lambda-20260817-072703-f148c828_2026-08-17.json (691) vs lambda-20260817-191951-530d914b_2026-08-17.json (200) on ['AgentID', 'ProjectCode']: 200 shared, 491 reference-only, 0 candidate-only, match rate 0.289. minimumMatchRate is inherited from the base (0.95) and this pair is BELOW it — normal churn on this source may be higher than Bellingham's; ASSUMPTION — requires an approved per-source floor before the failure is treated as a regression.",
+    "FACT — FILL (lambda-20260817-191951-530d914b_2026-08-17.json): 17 fields populated in 100% of records (AgentName, AgentID, LegacyAgentID, ProjectCode, Title, BidStatus, BidType, BidURL, PublishedDate, DueDate, ContactName, ContactEmail, ResourceURL, BidDocuments, BidDocumentHashes, Created, Refreshed); 27 fields empty in 100% (Jurisdiction, ContractValue, AwardDate, IssuingAgencyAddress1, IssuingAgencyAddress2, IssuingAgencyCity, IssuingAgencyState, IssuingAgencyZip, ConferenceDescription, ConferenceInfo, Addendum, ContactTitle, ContactPhone, ContactFax, AwardedVendorName, AddendumDocuments, AddendumDocumentHashes, BidTabulations, BidTabulationHashes, AwardDocuments, AwardDocumentHashes, UsingAgencyAddress1, UsingAgencyAddress2, UsingAgencyCity, UsingAgencyState, UsingAgencyZip, Modified). Deliberately not excluded: a field that starts carrying data is information, not noise.",
+    "FACT — TITLES: 1 groups of 3 or more records share an identical Title in the newest run (largest: \"Whole Corn and Soybean Meal for the Poultry and Animal Nutrition Center\" x4). Title is not a key and must never drive dedupe (rule 5); this figure is the baseline for the GTZenda duplicate-titles alert.",
+    "VALIDATION WITHHELD: no validation block until the observed formats are verified against the engine's parsers with zero false positives, as was done for Bellingham v7. Observed samples — DueDate ['7/10/2026, 10:30 AM CDT', '6/24/2026, 10:30 AM CDT'], PublishedDate ['6/29/2026, 12:00 AM CDT', '6/16/2026, 12:00 AM CDT'], AwardDate []."
+  ]
+}

@@ -3,13 +3,18 @@ import { PROFILES } from "../profiles";
 import { resolveEffectiveProfile } from "../profiles/resolve";
 import bellinghamCandidate from "../test/fixtures/bellingham-candidate.json";
 import bellinghamReference from "../test/fixtures/bellingham-reference.json";
+import nashvilleCandidate from "../test/fixtures/nashville-candidate.json";
+import nashvilleReference from "../test/fixtures/nashville-reference.json";
+import { detectSourceProfile } from "../profiles/detect";
 import tinyBaseline from "../test/fixtures/baseline.json";
 import { runHeadlessAnalysis } from "./run";
 
 const texts: Record<string, string> = {
   "bellingham-reference.json": JSON.stringify(bellinghamReference),
   "bellingham-candidate.json": JSON.stringify(bellinghamCandidate),
-  "baseline.json": JSON.stringify(tinyBaseline)
+  "baseline.json": JSON.stringify(tinyBaseline),
+  "nashville-reference.json": JSON.stringify(nashvilleReference),
+  "nashville-candidate.json": JSON.stringify(nashvilleCandidate)
 };
 const read = (name: string) => texts[name]!;
 
@@ -80,5 +85,43 @@ describe("headless run", () => {
         profile: bellingham
       })
     ).rejects.toThrow(/broken\.json/);
+  });
+});
+
+describe("headless run on a second real source (Nashville, no BidURL)", () => {
+  // Anonymised 40-record slice of the 2026-08-27/28 Nashville pair. Every
+  // BidURL is "", so this source keys on ProjectCode alone — the profile must
+  // neither require BidURL nor fail to match on it.
+  it("detects the profile by bot identity and matches every record on ProjectCode", async () => {
+    const detection = detectSourceProfile(nashvilleCandidate, Object.values(PROFILES));
+    expect(detection.status).toBe("match");
+    if (detection.status === "match") {
+      expect(detection.match.profileId).toBe("nashville-oracle-cloud");
+      expect(detection.match.method).toBe("identity");
+    }
+
+    const nashville = resolveEffectiveProfile(PROFILES["nashville-oracle-cloud"]!, null).profile;
+    expect(nashville.safeBackfillFields).toEqual([]);
+    const run = await runHeadlessAnalysis({
+      baselineText: read("nashville-reference.json"),
+      latestText: read("nashville-candidate.json"),
+      baselineFileName: "nashville-reference.json",
+      latestFileName: "nashville-candidate.json",
+      profile: nashville,
+      generatedAt: "2026-09-02T00:00:00.000Z"
+    });
+
+    expect(run.review.match.primaryKey).toEqual(["AgentID", "ProjectCode"]);
+    expect(run.review.match.matchRate).toBe(1);
+    expect(run.review.match.meetsMinimumMatchRate).toBe(true);
+    const categories = new Set(run.review.qa.findings.map((finding) => finding.category));
+    expect(categories.has("identity_match_issue")).toBe(false);
+    expect(categories.has("required_field_missing")).toBe(false);
+    expect(categories.has("duplicate_identity_key")).toBe(false);
+    expect(run.analysis.summary.qualityGate).toBe("Pass");
+    expect(run.bundle.gate.recoveredExportAllowed).toBe(true);
+    // Unapproved profile: nothing is backfilled, whatever the drift.
+    expect(run.review.recovery.summary.backfilledFieldCount).toBe(0);
+    expect(run.review.recovery.summary.backfillableFields).toEqual([]);
   });
 });

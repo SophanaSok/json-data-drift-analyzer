@@ -62,11 +62,15 @@ test.describe("profile picker", () => {
   test("keeps the selection across a reload", async ({ page }) => {
     await page.goto("");
     const picker = page.getByTestId("source-profile-select");
+    // Pick a profile that is NOT the default, so a reload that silently fell
+    // back to the default would fail this test.
     await picker.click();
+    await picker.fill("Nashville");
     await picker.press("ArrowDown");
     await picker.press("Enter");
+    await expect(picker).toHaveValue(/Nashville-Davidson County Met Gov TN-01 · v1/);
     await page.reload();
-    await expect(page.getByTestId("source-profile-select")).toHaveValue(/Bellingham ProcureWare · v8/);
+    await expect(page.getByTestId("source-profile-select")).toHaveValue(/Nashville-Davidson County Met Gov TN-01 · v1/);
   });
 
   test("detects the source from the uploaded files and says so", async ({ page }) => {
