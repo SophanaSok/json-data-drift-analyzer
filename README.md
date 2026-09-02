@@ -20,7 +20,7 @@ Scraper pipelines fail quietly: a changed page layout empties a field across eve
 - **Findings, not verdicts** — QA emits structured findings (severity, category, evidence, recommended action) across thirteen categories, including a baseline-aware mirror of the pipeline's duplicate-titles alert, per-record dropped-record reports and dataset-level **systemic field loss** (a field lost in 100% of matched records — the signature of a broken selector).
 - **Human decision queue** — every reviewable cell is classified `auto` (policy applied it), `review` (a person must decide), or `ineligible`. Decisions (use reference / keep candidate / custom value) require a reason and land in an append-only log. Bulk decisions show their impact — including how many populated values would be overwritten — before you confirm.
 - **Full provenance** — every value in the recovered artifact is traceable: candidate-sourced, reference backfill, or manual override, with rule ID, actor, reason, profile version, and input-file hashes.
-- **Five export artifacts** — recovered data, quality report, field-level recovery audit, findings CSV, and a Markdown contractor ticket. Only the recovered *data* is gated (blocked on low match rate or critical findings); reports and audits always export.
+- **Six export artifacts, or one zip** — recovered data, quality report, field-level recovery audit, findings CSV, a Markdown contractor ticket, and a delivery manifest listing every file's SHA-256 with the app build, policy hash, and decision count. "Download bundle (.zip)" hands all of them back as one file. Only the recovered *data* is gated (blocked on low match rate or critical findings); reports, audits, and the manifest always export.
 - **Optional Trello handoff** — post the contractor ticket as a Trello card with your own API key/token (token is never persisted), guarded by an arm-then-confirm flow and a run fingerprint that blocks duplicate posts.
 - **Built for large exports** — analysis runs once in a Web Worker, results are cached in IndexedDB keyed by file content + configuration, and every large table (records, field changes, findings, decision queue) is virtualized. Search uses a prebuilt MiniSearch index.
 
@@ -107,7 +107,7 @@ The source profile is auto-detected from the file contents (pass `--profile
 run always uses the committed repo policy. Note the TypeScript CLI tools
 (`analyze`, `new-profile`, `profiles:manifest`) need **Node ≥ 22.18** (built-in
 type stripping); the app's build/test toolchain itself runs on Node 20. Every artifact (recovered JSON,
-quality report, recovery audit, findings CSV, contractor ticket) is written to
+quality report, recovery audit, findings CSV, contractor ticket, delivery manifest) is written to
 `--out` on every run.
 
 The routine this enables — detection in the pipeline, review in the UI:

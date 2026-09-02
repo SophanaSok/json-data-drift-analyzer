@@ -10,7 +10,15 @@ import {
 import { FindingsExplorer } from "./FindingsExplorer";
 import { RecordInspector } from "./RecordInspector";
 import { DecisionQueue } from "./DecisionQueue";
-import { buildExportBundle, downloadArtifact, type ExportArtifact } from "../../engine/export";
+import {
+  buildDeliveryManifest,
+  buildExportBundle,
+  downloadArtifact,
+  downloadBlob,
+  type ExportArtifact,
+  type ExportInputs
+} from "../../engine/export";
+import { buildZipArchive, zipFileName } from "../../engine/bundle-zip";
 import { applyOverridesToRecovery, type OverrideApplication } from "../../engine/recovery";
 import { useEffectiveProfile } from "../profiles/use-effective-profile";
 import { useUiStore } from "../../stores/ui-store";
@@ -78,6 +86,19 @@ export function RecoveryReviewPage() {
       .filter((finding) => finding.category === "systemic_field_regression" && finding.fieldPath !== null)
       .map((finding) => finding.fieldPath as string);
 
+    const exportInputs: ExportInputs | null = profile
+      ? {
+          profile,
+          qa: review.qa,
+          recovery,
+          dedupe: review.dedupe,
+          generatedAt: review.generatedAt,
+          inputHashes: review.inputHashes,
+          sourceRun: review.sourceRun,
+          referenceRun: review.referenceRun
+        }
+      : null;
+
     return {
       profile,
       staleUnderProfile,
@@ -91,18 +112,9 @@ export function RecoveryReviewPage() {
       recoverableFields: review.recovery.summary.backfillableFields,
       overrideCount: overrides.length,
       application,
-      bundle: profile
-        ? buildExportBundle({
-            profile,
-            qa: review.qa,
-            recovery,
-            dedupe: review.dedupe,
-            generatedAt: review.generatedAt,
-            inputHashes: review.inputHashes,
-            sourceRun: review.sourceRun,
-            referenceRun: review.referenceRun
-          })
-        : null
+      exportInputs,
+      recordedDecisionCount: decisionLog.length,
+      bundle: exportInputs ? buildExportBundle(exportInputs) : null
     };
   }, [review, decisionLog, effectiveProfile]);
 
@@ -123,6 +135,26 @@ export function RecoveryReviewPage() {
   const onDownload = (artifact: ExportArtifact) => {
     if (!downloadArtifact(artifact)) {
       showToast(`Could not start the download for ${artifact.fileName}.`, "warning");
+    }
+  };
+
+  // The manifest hashes the other artifacts, so it is built on demand rather
+  // than on every render; the decision counts it records are the ones in force.
+  const manifestOptions = {
+    appliedDecisionCount: model?.application?.appliedCount ?? 0,
+    recordedDecisionCount: model?.recordedDecisionCount ?? 0
+  };
+  const onDownloadManifest = async () => {
+    if (!model?.bundle || !model.exportInputs) return;
+    onDownload(await buildDeliveryManifest(model.bundle, model.exportInputs, manifestOptions));
+  };
+  const onDownloadZip = async () => {
+    if (!model?.bundle || !model.exportInputs) return;
+    const manifest = await buildDeliveryManifest(model.bundle, model.exportInputs, manifestOptions);
+    const fileName = zipFileName(model.exportInputs.profile.id, model.exportInputs.generatedAt);
+    const bytes = buildZipArchive([...model.bundle.artifacts, manifest]);
+    if (!downloadBlob(new Blob([bytes as BlobPart], { type: "application/zip" }), fileName)) {
+      showToast(`Could not start the download for ${fileName}.`, "warning");
     }
   };
 
@@ -387,6 +419,30 @@ export function RecoveryReviewPage() {
           <p className="mt-2 rounded border border-red-300 bg-red-50 p-2 text-sm text-red-900" data-testid="export-blocked">
             Recovered data export is blocked: {model.bundle.blocked.map((item) => item.reason).join(" ")}
           </p>
+        ) : null}
+        {model.bundle ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="export-bundle-controls">
+            <button
+              type="button"
+              className="rounded bg-sky-700 px-3 py-1 text-sm font-medium text-white hover:bg-sky-800"
+              data-testid="download-zip"
+              onClick={() => void onDownloadZip()}
+            >
+              Download bundle (.zip)
+            </button>
+            <button
+              type="button"
+              className="rounded border px-3 py-1 text-sm text-sky-700 hover:bg-slate-100"
+              data-testid="download-manifest"
+              onClick={() => void onDownloadManifest()}
+            >
+              Download manifest
+            </button>
+            <span className="text-xs text-slate-500">
+              The zip holds every file below plus a manifest listing each file's SHA-256, the app build,
+              the policy hash, and the decision count — one file to hand back or archive.
+            </span>
+          </div>
         ) : null}
         <div className="mt-3 flex flex-wrap gap-2">
           {(model.bundle?.artifacts ?? []).map((artifact) => (

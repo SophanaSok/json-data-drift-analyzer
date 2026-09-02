@@ -1,5 +1,5 @@
 import { runAnalysis } from "../engine/diff";
-import { buildExportBundle, hashInputFile, type ExportBundle } from "../engine/export";
+import { buildExportBundle, hashInputFile, withDeliveryManifest, type ExportBundle } from "../engine/export";
 import { getCollection } from "../engine/normalize";
 import { runRecoveryReview, type RecoveryReview } from "../engine/review";
 import { parseJSON } from "../engine/source-loader";
@@ -79,7 +79,7 @@ export async function runHeadlessAnalysis(input: HeadlessInput): Promise<Headles
     generatedAt: input.generatedAt
   });
 
-  const bundle = buildExportBundle({
+  const exportInputs = {
     profile,
     qa: review.qa,
     recovery: review.recovery,
@@ -88,6 +88,11 @@ export async function runHeadlessAnalysis(input: HeadlessInput): Promise<Headles
     inputHashes: review.inputHashes,
     sourceRun: review.sourceRun,
     referenceRun: review.referenceRun
+  };
+  // Headless runs apply no decisions, and the manifest says so.
+  const bundle = await withDeliveryManifest(buildExportBundle(exportInputs), exportInputs, {
+    appliedDecisionCount: 0,
+    recordedDecisionCount: 0
   });
 
   return { analysis, review, bundle, failures: collectFailures(analysis, bundle) };

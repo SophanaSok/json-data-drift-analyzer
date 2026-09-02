@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   assertNoSecrets,
   buildContractorTicketArtifact,
+  buildDeliveryManifest,
+  withDeliveryManifest,
   buildExportBundle,
   buildFileName,
   buildFindingsCsvArtifact,
@@ -573,5 +575,119 @@ describe("export: a dropped record reaches the contractor ticket", () => {
     const csv = buildFindingsCsvArtifact(exportInputs);
     expect(csv.content).toContain("record_missing_from_candidate");
     expect(csv.content).toContain("dropped");
+  });
+});
+
+describe("export: round trip (delivery fidelity)", () => {
+  it("reproduces the reference records field-for-field, in key order, when nothing is decided", () => {
+    // Reference analysed against itself: no regression, no backfill, no dedupe
+    // removal — the recovered file must be the input records, untouched.
+    const artifact = buildRecoveredArtifact(inputs(referenceRecords, referenceRecords, bellinghamProfile));
+    const parsed = JSON.parse(artifact.content) as { Export: Array<Record<string, unknown>> };
+    expect(parsed.Export).toHaveLength(referenceRecords.length);
+    parsed.Export.forEach((record, index) => {
+      const original = referenceRecords[index]!;
+      expect(Object.keys(record)).toEqual(Object.keys(original));
+      expect(record).toEqual(original);
+    });
+  });
+
+  it("differs from the candidate only in the cells the audit names as backfilled", () => {
+    const exportInputs = inputs(referenceRecords, candidateRecords, bellinghamProfile);
+    const artifact = buildRecoveredArtifact(exportInputs);
+    const parsed = JSON.parse(artifact.content) as { Export: Array<Record<string, unknown>> };
+    const byIndex = new Map(exportInputs.recovery.recovered.map((record) => [record.candidateIndex, record]));
+
+    let backfilledCells = 0;
+    let changedCells = 0;
+    parsed.Export.forEach((record, position) => {
+      const recovered = exportInputs.recovery.recovered[position]!;
+      const original = candidateRecords[recovered.candidateIndex]!;
+      expect(byIndex.get(recovered.candidateIndex)?.record).toEqual(record);
+      expect(Object.keys(record)).toEqual(Object.keys(original));
+      const audited = new Set(recovered.backfilledFields);
+      for (const field of Object.keys(original)) {
+        if (record[field] !== original[field]) {
+          changedCells += 1;
+          expect(audited.has(field), `${field} changed without an audit entry`).toBe(true);
+        }
+      }
+      backfilledCells += audited.size;
+    });
+    expect(changedCells).toBe(backfilledCells);
+    expect(changedCells).toBeGreaterThan(0);
+  });
+});
+
+describe("export: delivery manifest", () => {
+  const options = { appliedDecisionCount: 2, recordedDecisionCount: 3 };
+
+  it("lists every artifact with its SHA-256 and byte length, never itself", async () => {
+    const exportInputs = bellinghamInputs();
+    const bundle = buildExportBundle(exportInputs);
+    const manifest = await buildDeliveryManifest(bundle, exportInputs, options);
+    expect(manifest.kind).toBe("manifest");
+    expect(manifest.fileName).toContain("-manifest-");
+    const parsed = JSON.parse(manifest.content);
+    expect(parsed.formatVersion).toBe(1);
+    expect(parsed.files.map((file: { kind: string }) => file.kind)).toEqual(bundle.artifacts.map((artifact) => artifact.kind));
+    expect(parsed.files.some((file: { kind: string }) => file.kind === "manifest")).toBe(false);
+    for (const [index, file] of parsed.files.entries()) {
+      const artifact = bundle.artifacts[index]!;
+      expect(file.fileName).toBe(artifact.fileName);
+      expect(file.bytes).toBe(new TextEncoder().encode(artifact.content).length);
+      expect(file.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(file.sha256).toBe(await hashInputFile(file.fileName, "candidate", artifact.content).then((h) => h.sha256));
+    }
+  });
+
+  it("records the build, the policy identity, the input hashes, the gate, and the decision counts", async () => {
+    const exportInputs = bellinghamInputs();
+    const bundle = buildExportBundle(exportInputs);
+    const parsed = JSON.parse((await buildDeliveryManifest(bundle, exportInputs, options)).content);
+    expect(parsed.run.profileId).toBe("bellingham-procureware");
+    expect(parsed.run.profileVersion).toBe(bellinghamProfile.version);
+    expect(parsed.run.hashAlgorithm).toBe("SHA-256");
+    expect(parsed.run.inputFiles.map((file: { role: string }) => file.role).sort()).toEqual(["candidate", "reference"]);
+    expect(typeof parsed.run.appVersion).toBe("string");
+    expect(parsed.decisions).toEqual({ applied: 2, recorded: 3 });
+    expect(parsed.gate.recoveredExportAllowed).toBe(true);
+    expect(parsed.gate.withheld).toEqual([]);
+  });
+
+  it("names a withheld artifact when the gate blocks it", async () => {
+    const exportInputs = inputs(referenceRecords, candidateRecords, { ...bellinghamProfile, minimumMatchRate: 1 });
+    const bundle = buildExportBundle(exportInputs);
+    const parsed = JSON.parse((await buildDeliveryManifest(bundle, exportInputs, options)).content);
+    expect(parsed.gate.recoveredExportAllowed).toBe(false);
+    expect(parsed.gate.withheld.map((entry: { kind: string }) => entry.kind)).toEqual(["recovered"]);
+    expect(parsed.files.some((file: { kind: string }) => file.kind === "recovered")).toBe(false);
+  });
+
+  it("is deterministic and appends itself last via withDeliveryManifest", async () => {
+    const exportInputs = bellinghamInputs();
+    const bundle = buildExportBundle(exportInputs);
+    const [first, second] = await Promise.all([
+      withDeliveryManifest(bundle, exportInputs, options),
+      withDeliveryManifest(bundle, exportInputs, options)
+    ]);
+    expect(first.artifacts.at(-1)?.kind).toBe("manifest");
+    expect(first.artifacts).toEqual(second.artifacts);
+    // Applying twice does not stack manifests.
+    const again = await withDeliveryManifest(first, exportInputs, options);
+    expect(again.artifacts.filter((artifact) => artifact.kind === "manifest")).toHaveLength(1);
+  });
+
+  it("states why a hash is missing instead of failing when crypto is absent", async () => {
+    const saved = globalThis.crypto;
+    Object.defineProperty(globalThis, "crypto", { value: undefined, configurable: true });
+    try {
+      const exportInputs = bellinghamInputs();
+      const parsed = JSON.parse((await buildDeliveryManifest(buildExportBundle(exportInputs), exportInputs, options)).content);
+      expect(parsed.files.every((file: { sha256: unknown }) => file.sha256 === null)).toBe(true);
+      expect(parsed.files[0].hashUnavailableReason).toContain("SubtleCrypto");
+    } finally {
+      Object.defineProperty(globalThis, "crypto", { value: saved, configurable: true });
+    }
   });
 });

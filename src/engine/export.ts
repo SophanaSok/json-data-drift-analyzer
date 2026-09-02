@@ -28,6 +28,12 @@ export type ExportArtifactKind =
   | "recovery-audit"
   | "findings"
   | "contractor-ticket"
+  /**
+   * Delivery manifest: every file in the hand-back with its SHA-256, plus the
+   * app build, policy identity, and decision count. Built after the other
+   * artifacts because it hashes them (see `buildDeliveryManifest`).
+   */
+  | "manifest"
   /** Decision-log transfer file (see decisions-transfer.ts); not part of the bundle. */
   | "decisions";
 
@@ -125,7 +131,7 @@ export async function hashInputFile(
 // ---------------------------------------------------------------------------
 
 /** Filesystem-safe slug: keeps the value recognisable without inventing characters. */
-function slugify(value: string): string {
+export function slugify(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "unnamed";
 }
 
@@ -140,6 +146,7 @@ const EXTENSIONS: Record<ExportArtifactKind, string> = {
   "recovery-audit": "json",
   findings: "csv",
   "contractor-ticket": "md",
+  manifest: "json",
   decisions: "json"
 };
 
@@ -635,6 +642,99 @@ export function buildExportBundle(inputs: ExportInputs): ExportBundle {
 }
 
 // ---------------------------------------------------------------------------
+// Delivery manifest
+// ---------------------------------------------------------------------------
+
+export const DELIVERY_MANIFEST_FORMAT_VERSION = 1;
+
+export type DeliveryManifestOptions = {
+  /** Decisions in force when the artifacts were built (applied overrides). */
+  appliedDecisionCount: number;
+  /** Every decision recorded for this run, applied or not. */
+  recordedDecisionCount: number;
+};
+
+type ManifestFileEntry = {
+  fileName: string;
+  kind: ExportArtifactKind;
+  contentType: string;
+  /** UTF-8 byte length of the file content. */
+  bytes: number;
+  sha256: string | null;
+  hashUnavailableReason: string | null;
+};
+
+async function hashArtifactContent(content: string): Promise<Pick<ManifestFileEntry, "sha256" | "hashUnavailableReason">> {
+  if (!subtleCryptoAvailable()) {
+    return { sha256: null, hashUnavailableReason: "SubtleCrypto unavailable in this context (requires a secure context)" };
+  }
+  try {
+    return { sha256: await hashText(content), hashUnavailableReason: null };
+  } catch (error) {
+    return { sha256: null, hashUnavailableReason: error instanceof Error ? error.message : "hashing failed" };
+  }
+}
+
+/**
+ * The manifest of a hand-back: what is in it, what produced it, and what governed
+ * it, so the receiving team can verify every file without opening the app.
+ *
+ * Async because it hashes the artifacts it lists; hashes fall back to null with
+ * a stated reason rather than failing the export, exactly as input hashing does.
+ * The manifest never lists itself.
+ */
+export async function buildDeliveryManifest(
+  bundle: ExportBundle,
+  inputs: ExportInputs,
+  options: DeliveryManifestOptions
+): Promise<ExportArtifact> {
+  const files: ManifestFileEntry[] = await Promise.all(
+    bundle.artifacts
+      .filter((artifact) => artifact.kind !== "manifest")
+      .map(async (artifact) => ({
+        fileName: artifact.fileName,
+        kind: artifact.kind,
+        contentType: artifact.contentType,
+        bytes: new TextEncoder().encode(artifact.content).length,
+        ...(await hashArtifactContent(artifact.content))
+      }))
+  );
+
+  const payload = {
+    artifact: "manifest",
+    formatVersion: DELIVERY_MANIFEST_FORMAT_VERSION,
+    run: buildRunMetadata(inputs),
+    decisions: {
+      applied: options.appliedDecisionCount,
+      recorded: options.recordedDecisionCount
+    },
+    gate: {
+      recoveredExportAllowed: bundle.gate.recoveredExportAllowed,
+      blockingReasons: bundle.gate.blockingReasons,
+      withheld: bundle.blocked.map((entry) => ({ kind: entry.kind, reason: entry.reason }))
+    },
+    files,
+    note: "Every file listed was produced locally by the analyzer from the two input files named in run.inputFiles. Verify a file by recomputing its SHA-256."
+  };
+
+  const content = `${JSON.stringify(payload, null, 2)}\n`;
+  const fileName = buildFileName("manifest", inputs.profile.id, inputs.generatedAt);
+  assertNoSecrets(content, fileName);
+
+  return { kind: "manifest", fileName, contentType: "application/json", content };
+}
+
+/** The bundle plus its manifest, in delivery order (manifest last). */
+export async function withDeliveryManifest(
+  bundle: ExportBundle,
+  inputs: ExportInputs,
+  options: DeliveryManifestOptions
+): Promise<ExportBundle> {
+  const manifest = await buildDeliveryManifest(bundle, inputs, options);
+  return { ...bundle, artifacts: [...bundle.artifacts.filter((artifact) => artifact.kind !== "manifest"), manifest] };
+}
+
+// ---------------------------------------------------------------------------
 // Browser download
 // ---------------------------------------------------------------------------
 
@@ -645,16 +745,20 @@ export function buildExportBundle(inputs: ExportInputs): ExportBundle {
  * throwing, so callers can build artifacts in any environment.
  */
 export function downloadArtifact(artifact: ExportArtifact): boolean {
+  return downloadBlob(new Blob([artifact.content], { type: `${artifact.contentType};charset=utf-8` }), artifact.fileName);
+}
+
+/** Hand arbitrary bytes to the browser as a download (binary artifacts such as a zip). */
+export function downloadBlob(blob: Blob, fileName: string): boolean {
   if (typeof document === "undefined" || typeof URL?.createObjectURL !== "function") {
     return false;
   }
 
-  const blob = new Blob([artifact.content], { type: `${artifact.contentType};charset=utf-8` });
   const url = URL.createObjectURL(blob);
   try {
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = artifact.fileName;
+    anchor.download = fileName;
     anchor.rel = "noopener";
     document.body.appendChild(anchor);
     anchor.click();

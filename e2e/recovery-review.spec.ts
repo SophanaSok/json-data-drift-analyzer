@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import fs from "node:fs/promises";
 import path from "node:path";
 
 const root = process.cwd();
@@ -302,4 +303,21 @@ test.describe("recovery review: bulk decisions", () => {
     await expect(page.getByTestId("bulk-error")).toContainText("reason is required");
     await expect(page.getByTestId("decision-log")).toHaveCount(0);
   });
-})
+
+  test("hands the whole bundle back as one zip, and the manifest on its own", async ({ page }) => {
+    const zip = page.waitForEvent("download");
+    await page.getByTestId("download-zip").click();
+    const zipDownload = await zip;
+    expect(zipDownload.suggestedFilename()).toMatch(/^bellingham-procureware-bundle-.*\.zip$/);
+
+    const manifest = page.waitForEvent("download");
+    await page.getByTestId("download-manifest").click();
+    const manifestDownload = await manifest;
+    expect(manifestDownload.suggestedFilename()).toMatch(/^bellingham-procureware-manifest-.*\.json$/);
+    const body = await fs.readFile(await manifestDownload.path(), "utf8");
+    const parsed = JSON.parse(body);
+    expect(parsed.formatVersion).toBe(1);
+    expect(parsed.files.map((file: { kind: string }) => file.kind)).toContain("recovered");
+    expect(parsed.files.every((file: { sha256: string | null }) => /^[0-9a-f]{64}$/.test(file.sha256 ?? ""))).toBe(true);
+  });
+});
