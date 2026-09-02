@@ -102,7 +102,7 @@ them rather than trusting this section.
   stamps the `policyHash` provenance compares. `defaultProfile` in
   `src/engine/profile.ts` is a deprecated engine-test fallback pinned equal to
   the base's quality section. The one registered source is
-  `bellingham-procureware` (version 6 — bump the version on any policy change;
+  `bellingham-procureware` (version 8 — bump the version on any policy change;
   the delta's notes record the approval history, and
   `src/profiles/policy-manifest.json` must be regenerated via
   `npm run profiles:manifest`, which refuses a content change without a bump).

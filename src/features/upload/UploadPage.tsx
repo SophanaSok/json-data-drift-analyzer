@@ -12,7 +12,7 @@ import { hashText } from "../../lib/hash";
 import { parseExport } from "../../lib/file-order";
 import { assessFileOrder } from "../../engine/export-metadata";
 import { PROFILES } from "../../profiles";
-import { detectSourceProfile, type DetectionResult } from "../../profiles/detect";
+import { describeDetectionMatch, detectSourceProfile, type DetectionResult } from "../../profiles/detect";
 import { useUiStore } from "../../stores/ui-store";
 import { useToastStore } from "../../stores/toast-store";
 import { createAnalysisRunner } from "./analysis-runner";
@@ -420,8 +420,8 @@ export function UploadPage() {
               data-testid="profile-detection-notice"
               className="mt-1 block rounded border border-sky-300 bg-sky-50 p-2 text-xs text-sky-800"
             >
-              Detected from the uploaded file ({detection.baseline.match.matchedField} starts with{" "}
-              {detection.baseline.match.matchedPrefix}). Not this source? Pick another profile above.
+              Detected from the uploaded file ({describeDetectionMatch(detection.baseline.match)}). Not this
+              source? Pick another profile above.
             </span>
           ) : null}
           {detection?.baseline.status === "match" &&
@@ -433,7 +433,7 @@ export function UploadPage() {
             >
               This file looks like{" "}
               <strong>{PROFILES[detection.baseline.match.profileId]?.displayName ?? detection.baseline.match.profileId}</strong>{" "}
-              ({detection.baseline.match.matchedField} starts with {detection.baseline.match.matchedPrefix}), but{" "}
+              ({describeDetectionMatch(detection.baseline.match)}), but{" "}
               <strong>{sourceProfile.displayName ?? sourceProfile.id}</strong> is selected.{" "}
               <button
                 type="button"
@@ -458,7 +458,7 @@ export function UploadPage() {
               className="mt-1 block rounded border border-slate-300 bg-slate-50 p-2 text-xs text-slate-600"
             >
               The uploaded file matches more than one profile (
-              {detection.baseline.matches.map((match) => match.profileId).join(", ")}) — their detection prefixes
+              {detection.baseline.matches.map((match) => match.profileId).join(", ")}) — their detection rules
               overlap. Pick the right one manually.
             </span>
           ) : null}

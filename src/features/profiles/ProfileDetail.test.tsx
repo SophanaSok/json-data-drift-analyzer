@@ -32,7 +32,7 @@ vi.mock("../../db", () => ({
 const savedOverride: SavedProfileOverride = {
   profileId: "bellingham-procureware",
   revision: 1,
-  baseVersion: 7,
+  baseVersion: 8,
   delta: { safeBackfillFields: ["ContactPhone", "ContactEmail", "BidType"] },
   reason: "Title backfill suspended pending re-review.",
   updatedAt: "2026-08-12T00:00:00.000Z"
@@ -50,7 +50,7 @@ afterEach(cleanup);
 describe("ProfileDetail", () => {
   it("shows the resolved policy of the repo profile", async () => {
     render(<ProfileDetail profileId="bellingham-procureware" />);
-    await waitFor(() => expect((screen.getByTestId("profile-effective-version")).textContent).toContain("Repo v7"));
+    await waitFor(() => expect((screen.getByTestId("profile-effective-version")).textContent).toContain("Repo v8"));
     expect((screen.getByTestId("profile-detail")).textContent).toContain("Bellingham ProcureWare");
     expect((screen.getByTestId("profile-detail")).textContent).toContain("ContactPhone, ContactEmail, BidType, Title");
     expect((screen.getByTestId("profile-detail")).textContent).toContain("AgentID + BidURL");
@@ -61,7 +61,7 @@ describe("ProfileDetail", () => {
 
   it("lists the configured format-validation fields as report-only", async () => {
     render(<ProfileDetail profileId="bellingham-procureware" />);
-    await waitFor(() => expect((screen.getByTestId("profile-effective-version")).textContent).toContain("Repo v7"));
+    await waitFor(() => expect((screen.getByTestId("profile-effective-version")).textContent).toContain("Repo v8"));
 
     const section = screen.getByTestId("profile-validation");
     expect(section.textContent).toContain("Report-only");
@@ -143,7 +143,7 @@ describe("ProfileDetail", () => {
     await waitFor(() => expect(mockDb.puts).toHaveLength(1));
     const saved = mockDb.puts[0];
     expect(saved?.revision).toBe(1);
-    expect(saved?.baseVersion).toBe(7);
+    expect(saved?.baseVersion).toBe(8);
     // Minimal: only the field that differs from the repo profile.
     expect(Object.keys(saved?.delta ?? {})).toEqual(["safeBackfillFields"]);
   });
