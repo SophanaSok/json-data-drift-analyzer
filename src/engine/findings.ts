@@ -52,7 +52,15 @@ export type FindingCategory =
    */
   | "record_missing_from_candidate"
   /** A record could not be matched unambiguously, or could not be keyed at all. */
-  | "identity_match_issue";
+  | "identity_match_issue"
+  /**
+   * `alerts.duplicateTitle` mirror: a group of candidate records shares one
+   * title value at or above the profile's threshold. Group-level, one finding
+   * per title; the evidence says whether the same group already existed in
+   * the reference run, which is what separates a recurring solicitation from
+   * a scrape that duplicated records.
+   */
+  | "duplicate_title";
 
 /**
  * What the profile permits for this finding. Advisory only.
@@ -179,7 +187,8 @@ const ZERO_CATEGORY: Record<FindingCategory, number> = {
   duplicate_identity_key: 0,
   record_count_anomaly: 0,
   record_missing_from_candidate: 0,
-  identity_match_issue: 0
+  identity_match_issue: 0,
+  duplicate_title: 0
 };
 
 export function summarizeFindings(findings: Finding[]): FindingCounts {

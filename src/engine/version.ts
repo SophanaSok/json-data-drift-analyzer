@@ -18,5 +18,8 @@
  *
  * Version 4: QA emits schema_field_added and field_type_change findings, so a
  * cached review no longer reflects the full finding set.
+ *
+ * Version 5: QA emits duplicate_title findings for profiles that configure
+ * `alerts.duplicateTitle`, annotated with the reference-run count.
  */
-export const ENGINE_SEMANTICS_VERSION = 4;
+export const ENGINE_SEMANTICS_VERSION = 5;

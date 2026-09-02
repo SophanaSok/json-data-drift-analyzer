@@ -770,3 +770,92 @@ describe("qa: systemic field regression", () => {
     expect(contactPhone?.evidence.referencePopulated).toBe(171);
   });
 });
+
+describe("duplicate_title: the pipeline's duplicate-titles alert, baseline-aware", () => {
+  const alerting: SourceProfile = { ...genericProfile, alerts: { duplicateTitle: { field: "Title", threshold: 3 } } };
+  const titled = (id: string, title: string) => ({ Id: id, Title: title });
+
+  it("emits nothing when the profile configures no alert", () => {
+    const candidate = [titled("1", "Salt"), titled("2", "Salt"), titled("3", "Salt")];
+    expect(of(run([], candidate), "duplicate_title")).toEqual([]);
+  });
+
+  it("reports a group at or above the threshold, once per title, with its members", () => {
+    const candidate = [titled("1", "Salt"), titled("2", "Salt"), titled("3", "Salt"), titled("4", "Sand"), titled("5", "Sand")];
+    const findings = of(run([], candidate, alerting), "duplicate_title");
+    expect(findings).toHaveLength(1);
+    const [finding] = findings;
+    expect(finding?.fieldPath).toBe("Title");
+    expect(finding?.recordKey).toBeNull();
+    expect(finding?.candidateValue).toBe(3);
+    expect(finding?.referenceValue).toBe(0);
+    expect(finding?.recommendedAction).toBe("report_only");
+    // recordKey is the engine's identity key (a JSON array of key parts).
+    expect(finding?.evidence.members).toEqual([
+      { index: 0, recordKey: '["1"]' },
+      { index: 1, recordKey: '["2"]' },
+      { index: 2, recordKey: '["3"]' }
+    ]);
+  });
+
+  it("is high when the group is new and medium when the reference already held it", () => {
+    const candidate = [titled("1", "Salt"), titled("2", "Salt"), titled("3", "Salt")];
+    const fresh = of(run([titled("1", "Salt")], candidate, alerting), "duplicate_title")[0];
+    expect(fresh?.severity).toBe("high");
+    expect(fresh?.evidence.preExisting).toBe(false);
+    expect(fresh?.message).toContain("reference had 1");
+
+    const recurring = of(run(candidate, candidate, alerting), "duplicate_title")[0];
+    expect(recurring?.severity).toBe("medium");
+    expect(recurring?.evidence.preExisting).toBe(true);
+    expect(recurring?.referenceValue).toBe(3);
+    expect(recurring?.message).toContain("recurring group");
+  });
+
+  it("groups on the trimmed, case-sensitive value and ignores blank or non-string titles", () => {
+    const candidate = [
+      titled("1", " Salt "),
+      titled("2", "Salt"),
+      titled("3", "Salt\n"),
+      titled("4", "salt"),
+      titled("5", "salt"),
+      titled("6", "salt"),
+      titled("7", ""),
+      titled("8", "   "),
+      { Id: "9", Title: 42 },
+      { Id: "10" }
+    ];
+    const findings = of(run([], candidate, alerting), "duplicate_title");
+    expect(findings.map((finding) => finding.evidence.title).sort()).toEqual(["Salt", "salt"]);
+  });
+
+  it("honors the profile threshold", () => {
+    const candidate = [titled("1", "Salt"), titled("2", "Salt")];
+    expect(of(run([], candidate, alerting), "duplicate_title")).toEqual([]);
+    const lower: SourceProfile = { ...genericProfile, alerts: { duplicateTitle: { field: "Title", threshold: 2 } } };
+    expect(of(run([], candidate, lower), "duplicate_title")).toHaveLength(1);
+  });
+
+  it("keeps ids stable and distinct per title", () => {
+    const candidate = [titled("1", "Salt"), titled("2", "Salt"), titled("3", "Salt"), titled("4", "Sand"), titled("5", "Sand"), titled("6", "Sand")];
+    const first = of(run([], candidate, alerting), "duplicate_title").map((finding) => finding.id);
+    const second = of(run([], candidate, alerting), "duplicate_title").map((finding) => finding.id);
+    expect(first).toEqual(second);
+    expect(new Set(first).size).toBe(2);
+  });
+
+  it("finds the six recurring Bellingham groups and none in the wiped candidate (real fixtures)", () => {
+    // Bellingham inherits the base alert (Title, 3). The reference holds 6
+    // groups of >= 3 identical titles — annual re-bids — and the candidate's
+    // Titles are all "", so the regression must not read as a thousand-way
+    // duplicate.
+    const selfCheck = of(run(referenceRecords, referenceRecords, bellinghamProfile), "duplicate_title");
+    expect(selfCheck).toHaveLength(6);
+    expect(selfCheck.every((finding) => finding.severity === "medium" && finding.evidence.preExisting === true)).toBe(true);
+    expect(Math.max(...selfCheck.map((finding) => finding.candidateValue as number))).toBe(5);
+
+    const regressed = run(referenceRecords, candidateRecords, bellinghamProfile);
+    expect(of(regressed, "duplicate_title")).toEqual([]);
+    expect(regressed.counts.byCategory.duplicate_title).toBe(0);
+  });
+});

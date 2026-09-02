@@ -28,7 +28,7 @@ test.describe("profile picker", () => {
   test("shows the selection closed and filters when typing", async ({ page }) => {
     await page.goto("");
     const picker = page.getByTestId("source-profile-select");
-    await expect(picker).toHaveValue(/Bellingham ProcureWare · v8/);
+    await expect(picker).toHaveValue(/Bellingham ProcureWare · v9/);
 
     await picker.click();
     await expect(page.getByTestId("profile-picker-listbox")).toBeVisible();
@@ -47,7 +47,7 @@ test.describe("profile picker", () => {
     await picker.press("ArrowDown");
     await picker.press("Enter");
     await expect(page.getByTestId("profile-picker-listbox")).not.toBeVisible();
-    await expect(picker).toHaveValue(/Bellingham ProcureWare · v8/);
+    await expect(picker).toHaveValue(/Bellingham ProcureWare · v9/);
   });
 
   test("escape reverts without committing a filter", async ({ page }) => {
@@ -56,7 +56,7 @@ test.describe("profile picker", () => {
     await picker.click();
     await picker.fill("zzz");
     await picker.press("Escape");
-    await expect(picker).toHaveValue(/Bellingham ProcureWare · v8/);
+    await expect(picker).toHaveValue(/Bellingham ProcureWare · v9/);
   });
 
   test("keeps the selection across a reload", async ({ page }) => {
