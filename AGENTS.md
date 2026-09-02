@@ -102,7 +102,7 @@ them rather than trusting this section.
   stamps the `policyHash` provenance compares. `defaultProfile` in
   `src/engine/profile.ts` is a deprecated engine-test fallback pinned equal to
   the base's quality section. Thirteen sources are registered: the approved
-  `bellingham-procureware` (version 8) and twelve UNAPPROVED v1 profiles
+  `bellingham-procureware` (version 9) and twelve UNAPPROVED v1 profiles
   onboarded from the 2026-08/09 export drops with `safeBackfillFields: []`
   and keys measured from the real files (each delta's notes hold the
   evidence). Bump the version on any policy change; the delta's notes record

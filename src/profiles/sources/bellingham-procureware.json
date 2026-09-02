@@ -13,7 +13,7 @@
       ]
     }
   },
-  "version": 8,
+  "version": 9,
   "primaryKey": [
     "AgentID",
     "BidURL"
@@ -60,6 +60,7 @@
     ]
   },
   "notes": [
+    "ALERT MIRROR (v8 -> v9): the base policy now carries alerts.duplicateTitle { field: Title, threshold: 3 } — the upstream pipeline's own 'duplicate bid titles' batch check (3 or more records sharing a trimmed, case-sensitive Title), which is the rule that places a run on hold. This source inherits it unchanged. MEASURED on the shipped pair: the reference run holds 6 groups of 3 or more identical Titles (largest 5) — annual re-bids with distinct project codes, URLs, and due dates — and the candidate holds 0 because its Titles are wiped; the engine therefore reports 6 recurring groups when the reference is analysed against itself and none for the regressed candidate. Findings are report-only (no field action, rule 5); the reference count on each group is what lets a reviewer say 'recurring, not new'. Bumping the version because the policy hash now covers the alert rule and a run that emits duplicate_title findings is a different policy from one that cannot.",
     "DETECTION (v7 -> v8): the 'detection.identityValues' block makes source detection key on the bot identity every record carries (AgentID \"1431\" AND AgentName \"Bellingham WA - PW-02\", both constant across 1000/1000 fixture records) instead of on the BidURL host prefix. Both fields must match on the same record: measured on the 2026-08 export drops, AgentID 1234 was carried by two different bots (Transportation Research Board 2 and Nashville-Davidson County Met Gov TN-01), so a bare id is not an identity, and three SciQuest/Jaggaer sources share one BidURL host, so a URL prefix is not one either. URL-prefix detection remains the fallback for files that lack these fields. Detection is advisory (rule 5 in spirit): it suggests the profile in the picker and never overrides a manual choice. Bumping the version because the profile's identity now includes how the source is recognised; no matching, backfill, or quality policy changed.",
     "STATUS: PARTIALLY APPROVED at v4. ContactPhone, ContactEmail, BidType, and Title are approved for automatic backfill. Every other field remains unapproved, and per AGENTS.md rule 4 a field is backfillable only when it appears in safeBackfillFields. The five rule 6 date-sensitive fields remain withheld and require their own explicit decision.",
     "Derived from a read-only comparison of reference lambda-20260714-194920-c3177c97_2026-07-15.json (500 records) against candidate lambda-20260715-080212-d3836a0d_2026-07-15.json (500 records). Full evidence: docs/forensic-bellingham-report.md.",

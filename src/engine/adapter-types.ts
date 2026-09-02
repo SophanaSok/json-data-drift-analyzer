@@ -178,6 +178,22 @@ export type SourceProfile = {
     blockOnCriticalFindings?: boolean;
   };
 
+  /**
+   * Mirrors of the upstream pipeline's own batch alerts, so a run can be
+   * triaged in the vocabulary of the alert that put it on hold. Every value
+   * is policy: the field and threshold come from the profile, never from the
+   * engine, and a profile without this block emits no alert findings.
+   */
+  alerts?: {
+    /**
+     * "Duplicate bid titles": N or more candidate records share an identical
+     * trimmed, case-sensitive value of `field`. Reported per group, annotated
+     * with the reference count so a recurring annual solicitation reads as
+     * pre-existing rather than new.
+     */
+    duplicateTitle?: { field: string; threshold: number };
+  };
+
   /** Optional notes documenting profile decisions and assumptions */
   notes?: string[];
 };

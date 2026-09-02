@@ -1,54 +1,54 @@
 {
   "alabama-buys": {
     "version": 1,
-    "policyHash": "67b72aeff247165d"
+    "policyHash": "2be05935547ebc8b"
   },
   "alaska-public-notices": {
     "version": 1,
-    "policyHash": "fdc214a5ae072441"
+    "policyHash": "f391fdda8a570077"
   },
   "arizona-procure": {
     "version": 1,
-    "policyHash": "58610ace34e709d8"
+    "policyHash": "d2b80d577a1926ba"
   },
   "auburn-sciquest": {
     "version": 1,
-    "policyHash": "313c075726e6b953"
+    "policyHash": "2cfdd1478d0e4e2d"
   },
   "bellingham-procureware": {
-    "version": 8,
-    "policyHash": "14d7746e82cc4482"
+    "version": 9,
+    "policyHash": "73eae1d9d190e3a6"
   },
   "hawaii-hands": {
     "version": 1,
-    "policyHash": "865adac7191005a7"
+    "policyHash": "92299eb26029ad09"
   },
   "kansas-state-bidportal": {
     "version": 1,
-    "policyHash": "b500ee0dbd3cdc7a"
+    "policyHash": "2ae9218aa8c72fe0"
   },
   "nashville-oracle-cloud": {
     "version": 1,
-    "policyHash": "f088f9d769ad60b7"
+    "policyHash": "1d009585ad64f881"
   },
   "osceola-vendorlink": {
     "version": 1,
-    "policyHash": "b32a89c9a96a9f64"
+    "policyHash": "95f2fd1ad20cb0aa"
   },
   "sound-transit-biddingo": {
     "version": 1,
-    "policyHash": "726c5c041e54a57d"
+    "policyHash": "ac83111ed400ebd3"
   },
   "trb-crp-projects": {
     "version": 1,
-    "policyHash": "c60909a7f70f3c29"
+    "policyHash": "38e8eb992037a61f"
   },
   "unm-sciquest": {
     "version": 1,
-    "policyHash": "83fb0b04a5bf94f9"
+    "policyHash": "0e1fac5a912103cf"
   },
   "uvu-sciquest": {
     "version": 1,
-    "policyHash": "cb41e5eecd59a4da"
+    "policyHash": "0f5b45264563fb88"
   }
 }

@@ -59,6 +59,12 @@
       "closing"
     ]
   },
+  "alerts": {
+    "duplicateTitle": {
+      "field": "Title",
+      "threshold": 3
+    }
+  },
   "quality": {
     "requiredFields": [
       "ProjectCode",

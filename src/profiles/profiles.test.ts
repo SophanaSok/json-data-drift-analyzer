@@ -74,13 +74,14 @@ describe("profile contradiction checks", () => {
 describe("Bellingham profile: the approved policy", () => {
   const profile = BELLINGHAM_PROCUREWARE;
 
-  it("is at v8 with exactly the four approved fields", () => {
+  it("is at v9 with exactly the four approved fields", () => {
     // Deliberately literal: a policy change must fail this test and be re-confirmed
     // by a person, not quietly absorbed by deriving from the profile itself.
+    // v9 = duplicate-title alert mirror inherited from the base (report-only);
     // v8 = identity-value detection (advisory); v7 = format validation
     // activated (report-only); v6 = the base+delta restructure that absorbed
     // the quality section.
-    expect(profile.version).toBe(8);
+    expect(profile.version).toBe(9);
     expect(profile.safeBackfillFields).toEqual(["ContactPhone", "ContactEmail", "BidType", "Title"]);
   });
 

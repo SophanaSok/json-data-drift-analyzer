@@ -71,6 +71,18 @@ const TOP_LEVEL_CHECKS: Record<string, (v: unknown, problems: Problems, keyName?
     blockOnBelowMinimumMatchRate: expect((v) => typeof v === "boolean", "a boolean"),
     blockOnCriticalFindings: expect((v) => typeof v === "boolean", "a boolean")
   }),
+  alerts: subObject("alerts", {
+    duplicateTitle: subObject("alerts.duplicateTitle", {
+      field: (v, problems) => {
+        if (!isString(v) || v.length === 0) problems.push("alerts.duplicateTitle.field must be a non-empty string.");
+      },
+      threshold: (v, problems) => {
+        if (!isFiniteNumber(v) || !Number.isInteger(v) || v < 2) {
+          problems.push(`alerts.duplicateTitle.threshold must be an integer of at least 2, got ${JSON.stringify(v)}.`);
+        }
+      }
+    })
+  }),
   detection: subObject("detection", {
     identityValues: (v, problems) => {
       if (!isRecord(v)) {

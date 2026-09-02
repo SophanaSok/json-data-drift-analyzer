@@ -11,7 +11,7 @@ test.describe("profiles page", () => {
     await expect(page.getByTestId("profiles-page")).toBeVisible();
     await page.getByTestId("profiles-row-bellingham-procureware").click();
     await expect(page.getByTestId("profile-detail")).toContainText("Bellingham ProcureWare");
-    await expect(page.getByTestId("profile-effective-version")).toContainText("Repo v8");
+    await expect(page.getByTestId("profile-effective-version")).toContainText("Repo v9");
     await expect(page.getByTestId("profile-detail")).toContainText("ContactPhone, ContactEmail, BidType, Title");
   });
 

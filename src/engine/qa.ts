@@ -201,6 +201,26 @@ function duplicateGroups(
     .map(([key, indexes]) => ({ key, indexes }));
 }
 
+/**
+ * Records grouped by the trimmed, case-sensitive string value of `field`,
+ * exactly as the upstream duplicate-titles alert groups them. Non-string and
+ * blank values never form a group: a wiped field is a regression, not a
+ * thousand-way duplicate.
+ */
+function titleGroups(records: Array<Record<string, unknown>>, field: string): Map<string, number[]> {
+  const groups = new Map<string, number[]>();
+  records.forEach((record, index) => {
+    const value = record[field];
+    if (typeof value !== "string") return;
+    const title = value.trim();
+    if (title.length === 0) return;
+    const bucket = groups.get(title);
+    if (bucket) bucket.push(index);
+    else groups.set(title, [index]);
+  });
+  return groups;
+}
+
 /** Distinct configured key definitions, so identical primary and dedupe keys report once. */
 function distinctKeyDefinitions(profile: SourceProfile): Array<{ name: string; fields: string[] }> {
   const definitions: Array<{ name: string; fields: string[] }> = [];
@@ -393,6 +413,52 @@ export function runQa(
           })
         );
       }
+    }
+  }
+
+  // ---- Group level: duplicate titles (pipeline alert mirror) --------------------
+  // Mirrors the upstream "duplicate bid titles" batch alert: N or more records
+  // share an identical trimmed, case-sensitive title. The reference count on
+  // each group is what makes the finding triageable — an annual re-bid recurs
+  // in every run, a scrape that duplicated records does not.
+  const duplicateTitle = profile.alerts?.duplicateTitle;
+  if (duplicateTitle && duplicateTitle.field.length > 0 && duplicateTitle.threshold >= 2) {
+    const { field, threshold } = duplicateTitle;
+    const referenceGroups = titleGroups(referenceRecords, field);
+    for (const [title, indexes] of titleGroups(candidateRecords, field)) {
+      if (indexes.length < threshold) continue;
+      const referenceCount = referenceGroups.get(title)?.length ?? 0;
+      const preExisting = referenceCount >= threshold;
+      findings.push(
+        createFinding({
+          severity: preExisting ? "medium" : "high",
+          category: "duplicate_title",
+          fieldPath: field,
+          recordKey: null,
+          candidateValue: indexes.length,
+          referenceValue: referenceCount,
+          message:
+            `${indexes.length} candidate records share the ${field} ${JSON.stringify(title)} (alert threshold ${threshold}) — ` +
+            (preExisting
+              ? `also present in the reference (${referenceCount}); a recurring group, not new to this run.`
+              : referenceCount > 0
+                ? `new at this size in this run (reference had ${referenceCount}).`
+                : "new in this run (absent from the reference)."),
+          evidence: {
+            title,
+            threshold,
+            candidateCount: indexes.length,
+            referenceCount,
+            preExisting,
+            members: indexes.map((index) => ({
+              index,
+              recordKey: keyOf(candidateRecords[index], profile.primaryKey)
+            }))
+          },
+          recommendedAction: "report_only",
+          discriminator: title
+        })
+      );
     }
   }
 
