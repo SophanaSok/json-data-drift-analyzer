@@ -177,7 +177,7 @@ Built with React 19, TypeScript (strict), Vite, Tailwind CSS, Zustand, Dexie, Mi
 
 ## Limitations
 
-- One source profile ships today (`bellingham-procureware`); onboarding a source means scaffolding a delta (`npm run new-profile`) and verifying its keys against real exports before first use.
+- Thirteen source profiles ship; only `bellingham-procureware` has any backfill approvals. The other twelve are v1 and UNAPPROVED: they detect their source, match and dedupe on keys measured from real exports, and report — they backfill nothing until a per-source approval lands. Onboarding another source means scaffolding a delta (`npm run new-profile`) and verifying its keys against real exports before first use.
 - Systemic field loss is flagged only at exactly 100% loss — partial thresholds are deliberately not invented.
 - Dropped baseline records are reported per record but never reinstated into the recovered artifact.
 - The recovered artifact is a stopgap for triage: the primary remedy for systemic loss is fixing and re-running the scraper.

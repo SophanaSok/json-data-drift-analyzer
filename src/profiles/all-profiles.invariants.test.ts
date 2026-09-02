@@ -6,6 +6,7 @@ import {
   findRegisteredProfileContradictions
 } from "./index";
 import { validateDelta } from "./validate";
+import { detectSourceProfile } from "./detect";
 
 /**
  * Invariants every registered source must satisfy, however many there are.
@@ -72,6 +73,34 @@ describe("the registry", () => {
     for (const profile of Object.values(PROFILES)) {
       expect(profile.quality.requiredFields.length, profile.id).toBeGreaterThan(0);
       expect(profile.quality.searchSourceFields.url.length, profile.id).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("fleet detection invariants", () => {
+  const profiles = Object.values(PROFILES);
+
+  it("declares a bot identity (AgentID and AgentName) on every profile", () => {
+    // A bare AgentID is shared between bots in observed exports (1234 is
+    // carried by TRB and Nashville), so both fields are required.
+    for (const profile of profiles) {
+      const identity = profile.detection?.identityValues;
+      expect(identity, `${profile.id} declares no detection.identityValues`).toBeDefined();
+      expect(Object.keys(identity ?? {}).sort(), `${profile.id} identity fields`).toEqual(["AgentID", "AgentName"]);
+    }
+  });
+
+  it("gives every profile an identity that detects only itself across the whole fleet", () => {
+    for (const profile of profiles) {
+      const identity = profile.detection?.identityValues ?? {};
+      const record: Record<string, string> = {};
+      for (const [field, values] of Object.entries(identity)) record[field] = values[0]!;
+      const result = detectSourceProfile({ [profile.collectionPath]: [record] }, profiles);
+      expect(result.status, `${profile.id}: ${JSON.stringify(result)}`).toBe("match");
+      if (result.status === "match") {
+        expect(result.match.profileId).toBe(profile.id);
+        expect(result.match.method).toBe("identity");
+      }
     }
   });
 });

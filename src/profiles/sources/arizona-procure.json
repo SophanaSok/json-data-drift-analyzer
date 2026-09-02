@@ -1,0 +1,53 @@
+{
+  "id": "arizona-procure",
+  "sourceUrl": "https://app.az.gov/page.aspx/en/rfp/request_browse_public",
+  "displayName": "State of Arizona - 02",
+  "detection": {
+    "identityValues": {
+      "AgentID": [
+        "1603"
+      ],
+      "AgentName": [
+        "State of Arizona - 02"
+      ]
+    },
+    "urlFields": [
+      "ResourceURL"
+    ],
+    "urlPrefixes": [
+      "https://app.az.gov/page.aspx/en/rfp/request_browse_public"
+    ]
+  },
+  "version": 1,
+  "primaryKey": [
+    "AgentID",
+    "BidURL"
+  ],
+  "fallbackKeys": [
+    [
+      "AgentID",
+      "ProjectCode"
+    ]
+  ],
+  "dedupeKey": [
+    "AgentID",
+    "BidURL"
+  ],
+  "hardRequiredFields": [
+    "AgentID",
+    "ProjectCode",
+    "BidURL"
+  ],
+  "safeBackfillFields": [],
+  "notes": [
+    "STATUS: UNAPPROVED at v1. No field is approved for automatic backfill; per AGENTS.md rule 4 a field becomes backfillable only when a per-source decision adds it to safeBackfillFields (rule 6 fields additionally need an explicit approval note), accompanied by a version bump. Everything below is measured from the export drops named here, not assumed.",
+    "IDENTITY: AgentID \"1603\" and AgentName \"State of Arizona - 02\" are constant across 8738/8738 records in lambda-20260817-071809-0503619e_2026-08-18.json, lambda-20260817-191339-5ea8e7a3_2026-08-18.json. Detection ANDs both (see the base detection design); AgentID alone is not unique across the fleet — 1234 is carried by two bots.",
+    "FACT — SHAPE: root {\"Export\": [...]}, all 45 fields present in 100% of records, every value a JSON string, UTF-8 BOM present. sourceUrl is the constant ResourceURL with volatile query parameters (tmstmp, session state) removed.",
+    "FACT — KEYS (lambda-20260817-191339-5ea8e7a3_2026-08-18.json, 4369 records): BidURL non-blank 4369/4369, distinct 4369; ProjectCode non-blank 4369/4369, distinct 4369; LegacyAgentID constant.",
+    "FACT — SCALE: 4369 records per run, 5.4 MB per file; the largest source observed. BidDocuments and BidDocumentHashes are the empty string in 100% of records (no document extraction on this source), as are BidType and AwardDate.",
+    "FACT — PAIR: lambda-20260817-071809-0503619e_2026-08-18.json (4369) vs lambda-20260817-191339-5ea8e7a3_2026-08-18.json (4369) on ['AgentID', 'BidURL']: 4369 shared, 0 reference-only, 0 candidate-only, match rate 1.000. minimumMatchRate is inherited from the base (0.95).",
+    "FACT — FILL (lambda-20260817-191339-5ea8e7a3_2026-08-18.json): 13 fields populated in 100% of records (AgentName, AgentID, LegacyAgentID, Jurisdiction, ProjectCode, Title, Description, BidStatus, BidURL, DueDate, ResourceURL, Created, Refreshed); 31 fields empty in 100% (BidType, ContractValue, AwardDate, IssuingAgencyAddress1, IssuingAgencyAddress2, IssuingAgencyCity, IssuingAgencyState, IssuingAgencyZip, ConferenceDescription, ConferenceInfo, Addendum, ContactName, ContactTitle, ContactPhone, ContactFax, ContactEmail, AwardedVendorName, BidDocuments, BidDocumentHashes, AddendumDocuments, AddendumDocumentHashes, BidTabulations, BidTabulationHashes, AwardDocuments, AwardDocumentHashes, UsingAgencyAddress1, UsingAgencyAddress2, UsingAgencyCity, UsingAgencyState, UsingAgencyZip, Modified). Deliberately not excluded: a field that starts carrying data is information, not noise.",
+    "FACT — TITLES: 50 groups of 3 or more records share an identical Title in the newest run (largest: \"Mass Communication\" x11). Title is not a key and must never drive dedupe (rule 5); this figure is the baseline for the GTZenda duplicate-titles alert.",
+    "VALIDATION WITHHELD: no validation block until the observed formats are verified against the engine's parsers with zero false positives, as was done for Bellingham v7. Observed samples — DueDate ['12/14/2022 3:00:00 PM', '12/28/2022 3:00:00 PM'], PublishedDate ['11/1/2022 5:00:00 PM', '11/30/2022 12:00:00 AM'], AwardDate []."
+  ]
+}

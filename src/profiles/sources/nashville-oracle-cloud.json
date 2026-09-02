@@ -1,0 +1,53 @@
+{
+  "id": "nashville-oracle-cloud",
+  "sourceUrl": "https://ibqhjb.fa.ocs.oraclecloud.com/fscmUI/faces/NegotiationAbstracts",
+  "displayName": "Nashville-Davidson County Met Gov TN-01",
+  "detection": {
+    "identityValues": {
+      "AgentID": [
+        "1234"
+      ],
+      "AgentName": [
+        "Nashville-Davidson County Met Gov TN-01"
+      ]
+    },
+    "urlFields": [
+      "ResourceURL"
+    ],
+    "urlPrefixes": [
+      "https://ibqhjb.fa.ocs.oraclecloud.com/fscmUI/faces/NegotiationAbstracts"
+    ]
+  },
+  "version": 1,
+  "primaryKey": [
+    "AgentID",
+    "ProjectCode"
+  ],
+  "fallbackKeys": [],
+  "dedupeKey": [
+    "AgentID",
+    "ProjectCode"
+  ],
+  "hardRequiredFields": [
+    "AgentID",
+    "ProjectCode"
+  ],
+  "safeBackfillFields": [],
+  "quality": {
+    "requiredFields": [
+      "ProjectCode",
+      "Title"
+    ]
+  },
+  "notes": [
+    "STATUS: UNAPPROVED at v1. No field is approved for automatic backfill; per AGENTS.md rule 4 a field becomes backfillable only when a per-source decision adds it to safeBackfillFields (rule 6 fields additionally need an explicit approval note), accompanied by a version bump. Everything below is measured from the export drops named here, not assumed.",
+    "IDENTITY: AgentID \"1234\" and AgentName \"Nashville-Davidson County Met Gov TN-01\" are constant across 392/392 records in lambda-20260827-083701-caa58a75_2026-08-27.json, lambda-20260828-071148-4e65fa90_2026-08-28.json. Detection ANDs both (see the base detection design); AgentID alone is not unique across the fleet — 1234 is carried by two bots.",
+    "FACT — SHAPE: root {\"Export\": [...]}, all 45 fields present in 100% of records, every value a JSON string, UTF-8 BOM present. sourceUrl is the constant ResourceURL with volatile query parameters (tmstmp, session state) removed.",
+    "FACT — KEYS (lambda-20260828-071148-4e65fa90_2026-08-28.json, 196 records): BidURL non-blank 0/196, distinct 0; ProjectCode non-blank 196/196, distinct 196; LegacyAgentID constant.",
+    "FACT — NO BidURL: BidURL is the empty string in 196/196 records of both observed runs; the source lists solicitations on one Oracle Cloud abstracts page and the scraper records no per-record link. ProjectCode is 100% populated and 100% distinct, so it is the primary key, the dedupe key, and the only routing field this profile can require. BidURL is deliberately NOT excluded — if the scraper ever starts emitting links, that is drift worth seeing.",
+    "FACT — PAIR: lambda-20260827-083701-caa58a75_2026-08-27.json (196) vs lambda-20260828-071148-4e65fa90_2026-08-28.json (196) on ['AgentID', 'ProjectCode']: 196 shared, 0 reference-only, 0 candidate-only, match rate 1.000. minimumMatchRate is inherited from the base (0.95).",
+    "FACT — FILL (lambda-20260828-071148-4e65fa90_2026-08-28.json): 16 fields populated in 100% of records (AgentName, AgentID, LegacyAgentID, ProjectCode, Title, BidStatus, BidType, PublishedDate, DueDate, ContactName, ContactEmail, ResourceURL, BidDocuments, BidDocumentHashes, Created, Refreshed); 28 fields empty in 100% (Jurisdiction, BidURL, ContractValue, AwardDate, IssuingAgencyAddress1, IssuingAgencyAddress2, IssuingAgencyCity, IssuingAgencyState, IssuingAgencyZip, ConferenceDescription, ConferenceInfo, Addendum, ContactTitle, ContactPhone, ContactFax, AwardedVendorName, AddendumDocuments, AddendumDocumentHashes, BidTabulations, BidTabulationHashes, AwardDocuments, AwardDocumentHashes, UsingAgencyAddress1, UsingAgencyAddress2, UsingAgencyCity, UsingAgencyState, UsingAgencyZip, Modified). Deliberately not excluded: a field that starts carrying data is information, not noise.",
+    "FACT — TITLES: 43 groups of 3 or more records share an identical Title in the newest run (largest: \"Doula Services\" x7). Title is not a key and must never drive dedupe (rule 5); this figure is the baseline for the GTZenda duplicate-titles alert.",
+    "VALIDATION WITHHELD: no validation block until the observed formats are verified against the engine's parsers with zero false positives, as was done for Bellingham v7. Observed samples — DueDate ['8/27/2026 2:00 PM', '9/24/2026 2:00 PM'], PublishedDate ['8/12/2026 3:05 PM', '8/26/2026 2:08 PM'], AwardDate []."
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "id": "trb-crp-projects",
+  "sourceUrl": "http://www.trb.org/Projects/UpcomingCRPProjects.aspx",
+  "displayName": "Transportation Research Board 2",
+  "detection": {
+    "identityValues": {
+      "AgentID": [
+        "1234"
+      ],
+      "AgentName": [
+        "Transportation Research Board 2"
+      ]
+    },
+    "urlFields": [
+      "ResourceURL"
+    ],
+    "urlPrefixes": [
+      "http://www.trb.org/Projects/UpcomingCRPProjects.aspx"
+    ]
+  },
+  "version": 1,
+  "primaryKey": [
+    "AgentID",
+    "BidURL"
+  ],
+  "fallbackKeys": [
+    [
+      "AgentID",
+      "ProjectCode"
+    ]
+  ],
+  "dedupeKey": [
+    "AgentID",
+    "BidURL"
+  ],
+  "hardRequiredFields": [
+    "AgentID",
+    "ProjectCode",
+    "BidURL"
+  ],
+  "safeBackfillFields": [],
+  "notes": [
+    "STATUS: UNAPPROVED at v1. No field is approved for automatic backfill; per AGENTS.md rule 4 a field becomes backfillable only when a per-source decision adds it to safeBackfillFields (rule 6 fields additionally need an explicit approval note), accompanied by a version bump. Everything below is measured from the export drops named here, not assumed.",
+    "IDENTITY: AgentID \"1234\" and AgentName \"Transportation Research Board 2\" are constant across 10/10 records in lambda-20260827-072326-9640ef9e_2026-08-27.json. Detection ANDs both (see the base detection design); AgentID alone is not unique across the fleet — 1234 is carried by two bots.",
+    "FACT — SHAPE: root {\"Export\": [...]}, all 45 fields present in 100% of records, every value a JSON string, UTF-8 BOM present. sourceUrl is the constant ResourceURL with volatile query parameters (tmstmp, session state) removed.",
+    "FACT — KEYS (lambda-20260827-072326-9640ef9e_2026-08-27.json, 10 records): BidURL non-blank 10/10, distinct 10; ProjectCode non-blank 10/10, distinct 10; LegacyAgentID constant.",
+    "FACT — SHARED AgentID: 1234 is also carried by Nashville-Davidson County Met Gov TN-01; only AgentName separates the two bots, which is why detection requires both. 10 records observed; ContractValue is populated in 10/10 (the only source where it is), so rule 6 applies to a field that actually carries data here.",
+    "FACT — FILL (lambda-20260827-072326-9640ef9e_2026-08-27.json): 17 fields populated in 100% of records (AgentName, AgentID, LegacyAgentID, ProjectCode, Title, Description, BidURL, ContractValue, IssuingAgencyAddress1, IssuingAgencyCity, IssuingAgencyState, IssuingAgencyZip, ContactName, ContactPhone, ResourceURL, Created, Refreshed); 25 fields empty in 100% (Jurisdiction, BidStatus, BidType, AwardDate, IssuingAgencyAddress2, ConferenceDescription, ConferenceInfo, Addendum, ContactTitle, ContactFax, AwardedVendorName, BidDocuments, BidDocumentHashes, AddendumDocuments, AddendumDocumentHashes, BidTabulations, BidTabulationHashes, AwardDocuments, AwardDocumentHashes, UsingAgencyAddress1, UsingAgencyAddress2, UsingAgencyCity, UsingAgencyState, UsingAgencyZip, Modified). Deliberately not excluded: a field that starts carrying data is information, not noise.",
+    "FACT — TITLES: 0 groups of 3 or more records share an identical Title in the newest run. Title is not a key and must never drive dedupe (rule 5); this figure is the baseline for the GTZenda duplicate-titles alert.",
+    "VALIDATION WITHHELD: no validation block until the observed formats are verified against the engine's parsers with zero false positives, as was done for Bellingham v7. Observed samples — DueDate ['9/25/2026', '8/25/2026'], PublishedDate ['8/7/2026', '6/30/2026'], AwardDate []."
+  ]
+}
