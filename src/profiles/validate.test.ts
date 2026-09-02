@@ -88,6 +88,21 @@ describe("validateDelta", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("accepts identity values as non-empty string lists per field, and rejects anything else", () => {
+    expect(
+      validateDelta({ ...goodDelta, detection: { identityValues: { AgentID: ["1431"], AgentName: ["Bot"] } } }).ok
+    ).toBe(true);
+    expect(problemsOf(validateDelta({ ...goodDelta, detection: { identityValues: { AgentID: [] } } }))).toContain(
+      'detection.identityValues["AgentID"] must be a non-empty string array'
+    );
+    expect(problemsOf(validateDelta({ ...goodDelta, detection: { identityValues: { AgentID: "1431" } } }))).toContain(
+      'detection.identityValues["AgentID"]'
+    );
+    expect(problemsOf(validateDelta({ ...goodDelta, detection: { identityValues: ["1431"] } }))).toContain(
+      "detection.identityValues must be an object"
+    );
+  });
+
   it("requires an explicit safeBackfillFields, even when empty", () => {
     const { safeBackfillFields: _dropped, ...withoutApprovals } = goodDelta;
     const problems = problemsOf(validateDelta(withoutApprovals));

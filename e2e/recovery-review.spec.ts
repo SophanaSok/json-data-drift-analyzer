@@ -146,7 +146,7 @@ test("source profile is selectable and governs the review", async ({ page }) => 
   // The picker is a combobox now; its closed value renders the display name.
   const picker = page.getByTestId("source-profile-select");
   await expect(picker).toBeVisible();
-  await expect(picker).toHaveValue(/Bellingham ProcureWare · v7/);
+  await expect(picker).toHaveValue(/Bellingham ProcureWare · v8/);
   await expect(page.getByText("Approved fields:")).toContainText("ContactPhone");
 });
 

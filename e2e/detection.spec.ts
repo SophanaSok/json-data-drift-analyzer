@@ -83,3 +83,36 @@ test("the fixture profile appears in the picker while installed", async ({ page 
   await picker.fill("Detection Twin");
   await expect(page.getByRole("option", { name: /Detection Twin/ })).toBeVisible();
 });
+
+test("bot identity outranks a URL prefix, and a mismatched identity is not rescued by the URL", async ({ page }) => {
+  // Twin URLs but Bellingham's bot identity: identity wins.
+  const identified = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "detection-")), "identified.json");
+  fs.writeFileSync(
+    identified,
+    JSON.stringify({
+      Export: [
+        { AgentID: "1431", AgentName: "Bellingham WA - PW-02", ProjectCode: "E2E-0", BidURL: `${TWIN_URL}/Bids/1`, Title: "R0" }
+      ]
+    })
+  );
+  await page.goto("");
+  await page.getByTestId("baseline-input").setInputFiles(identified);
+  await page.getByTestId("latest-input").setInputFiles(identified);
+  const notice = page.getByTestId("profile-detection-notice");
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('AgentID is "1431" and AgentName is "Bellingham WA - PW-02"');
+
+  // Bellingham URLs but another bot's identity: not Bellingham, and the twin
+  // (URL-only) does not match these URLs either, so nothing matches.
+  const foreign = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "detection-")), "foreign.json");
+  fs.writeFileSync(
+    foreign,
+    JSON.stringify({
+      Export: [{ AgentID: "1431", AgentName: "Some Other Bot", ProjectCode: "E2E-0", BidURL: `${COB_URL}/Bids/1`, Title: "R0" }]
+    })
+  );
+  await page.goto("");
+  await page.getByTestId("baseline-input").setInputFiles(foreign);
+  await page.getByTestId("latest-input").setInputFiles(foreign);
+  await expect(page.getByTestId("profile-detection-none")).toBeVisible();
+});

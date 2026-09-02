@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import referenceData from "../test/fixtures/bellingham-reference.json";
+import { detectSourceProfile } from "./detect";
 import { BELLINGHAM_PROCUREWARE, PROFILES, assertProfileCoherent, findProfileContradictions, getProfile } from "./index";
 import type { SourceProfile } from "../engine/adapter-types";
 
@@ -72,13 +74,26 @@ describe("profile contradiction checks", () => {
 describe("Bellingham profile: the approved policy", () => {
   const profile = BELLINGHAM_PROCUREWARE;
 
-  it("is at v7 with exactly the four approved fields", () => {
+  it("is at v8 with exactly the four approved fields", () => {
     // Deliberately literal: a policy change must fail this test and be re-confirmed
     // by a person, not quietly absorbed by deriving from the profile itself.
-    // v7 = format validation activated (report-only); v6 = the base+delta
-    // restructure that absorbed the quality section.
-    expect(profile.version).toBe(7);
+    // v8 = identity-value detection (advisory); v7 = format validation
+    // activated (report-only); v6 = the base+delta restructure that absorbed
+    // the quality section.
+    expect(profile.version).toBe(8);
     expect(profile.safeBackfillFields).toEqual(["ContactPhone", "ContactEmail", "BidType", "Title"]);
+  });
+
+  it("is recognised by bot identity, both fields ANDed (see the v7 -> v8 note)", () => {
+    expect(profile.detection).toEqual({
+      identityValues: { AgentID: ["1431"], AgentName: ["Bellingham WA - PW-02"] }
+    });
+    const result = detectSourceProfile(referenceData, [profile]);
+    expect(result.status).toBe("match");
+    if (result.status === "match") {
+      expect(result.match.method).toBe("identity");
+      expect(result.match.profileId).toBe("bellingham-procureware");
+    }
   });
 
   it("validates only evidence-backed fields, and validation stays report-only", () => {

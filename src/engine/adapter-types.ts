@@ -50,6 +50,14 @@ export type QualitySection = {
  * lists are data, never code (AGENTS.md rule 1).
  */
 export type ProfileDetectionHints = {
+  /**
+   * Record fields and the exact values that identify this source, e.g.
+   * `{ "AgentID": ["1431"], "AgentName": ["Bellingham WA - PW-02"] }`. A
+   * record matches only when every listed field holds an accepted value —
+   * fields are ANDed, because a bot id alone is not unique in observed
+   * exports. When declared, this outranks URL matching for the profile.
+   */
+  identityValues?: Record<string, string[]>;
   /** Record fields whose values identify the source. */
   urlFields?: string[];
   /** Value prefixes that identify this source. */

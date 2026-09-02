@@ -28,7 +28,7 @@ test.describe("profile picker", () => {
   test("shows the selection closed and filters when typing", async ({ page }) => {
     await page.goto("");
     const picker = page.getByTestId("source-profile-select");
-    await expect(picker).toHaveValue(/Bellingham ProcureWare · v7/);
+    await expect(picker).toHaveValue(/Bellingham ProcureWare · v8/);
 
     await picker.click();
     await expect(page.getByTestId("profile-picker-listbox")).toBeVisible();
@@ -47,7 +47,7 @@ test.describe("profile picker", () => {
     await picker.press("ArrowDown");
     await picker.press("Enter");
     await expect(page.getByTestId("profile-picker-listbox")).not.toBeVisible();
-    await expect(picker).toHaveValue(/Bellingham ProcureWare · v7/);
+    await expect(picker).toHaveValue(/Bellingham ProcureWare · v8/);
   });
 
   test("escape reverts without committing a filter", async ({ page }) => {
@@ -56,7 +56,7 @@ test.describe("profile picker", () => {
     await picker.click();
     await picker.fill("zzz");
     await picker.press("Escape");
-    await expect(picker).toHaveValue(/Bellingham ProcureWare · v7/);
+    await expect(picker).toHaveValue(/Bellingham ProcureWare · v8/);
   });
 
   test("keeps the selection across a reload", async ({ page }) => {
@@ -66,7 +66,7 @@ test.describe("profile picker", () => {
     await picker.press("ArrowDown");
     await picker.press("Enter");
     await page.reload();
-    await expect(page.getByTestId("source-profile-select")).toHaveValue(/Bellingham ProcureWare · v7/);
+    await expect(page.getByTestId("source-profile-select")).toHaveValue(/Bellingham ProcureWare · v8/);
   });
 
   test("detects the source from the uploaded files and says so", async ({ page }) => {
@@ -77,9 +77,12 @@ test.describe("profile picker", () => {
     await page
       .getByTestId("latest-input")
       .setInputFiles(path.join(root, "src/test/fixtures/bellingham-candidate.json"));
-    // The fixtures' BidURL values start with the profile's sourceUrl.
+    // The fixtures carry the profile's bot identity (v8), which outranks the
+    // BidURL host prefix the profile also matches on.
     await expect(page.getByTestId("profile-detection-notice")).toBeVisible();
-    await expect(page.getByTestId("profile-detection-notice")).toContainText("cob.procureware.com");
+    await expect(page.getByTestId("profile-detection-notice")).toContainText(
+      'AgentID is "1431" and AgentName is "Bellingham WA - PW-02"'
+    );
     // Same source on both sides: no mismatch, no cross-source warning.
     await expect(page.getByTestId("profile-detection-mismatch")).not.toBeVisible();
     await expect(page.getByTestId("profile-detection-cross-source")).not.toBeVisible();

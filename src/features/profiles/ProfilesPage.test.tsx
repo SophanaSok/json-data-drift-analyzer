@@ -52,6 +52,6 @@ describe("ProfilesPage", () => {
     const user = userEvent.setup();
     setup();
     await user.click(screen.getByTestId("profiles-row-bellingham-procureware"));
-    expect((await screen.findByTestId("profile-detail")).textContent).toContain("Repo v7");
+    expect((await screen.findByTestId("profile-detail")).textContent).toContain("Repo v8");
   });
 });

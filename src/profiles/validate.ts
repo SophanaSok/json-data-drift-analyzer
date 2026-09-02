@@ -72,6 +72,17 @@ const TOP_LEVEL_CHECKS: Record<string, (v: unknown, problems: Problems, keyName?
     blockOnCriticalFindings: expect((v) => typeof v === "boolean", "a boolean")
   }),
   detection: subObject("detection", {
+    identityValues: (v, problems) => {
+      if (!isRecord(v)) {
+        problems.push("detection.identityValues must be an object keyed by field name.");
+        return;
+      }
+      for (const [field, values] of Object.entries(v)) {
+        if (!isStringArray(values) || values.length === 0) {
+          problems.push(`detection.identityValues["${field}"] must be a non-empty string array.`);
+        }
+      }
+    },
     urlFields: expect(isStringArray, "a string array"),
     urlPrefixes: expect(isStringArray, "a string array")
   }),

@@ -64,7 +64,7 @@ const latestFileName = latestPath.split("/").pop() ?? latestPath;
 // src/ modules use extensionless imports, so they load after the resolve hook
 // via dynamic import (a static import would resolve before the hook registers).
 const { parseJSON } = await import("../src/engine/source-loader.ts");
-const { detectSourceProfile } = await import("../src/profiles/detect.ts");
+const { describeDetectionMatch, detectSourceProfile } = await import("../src/profiles/detect.ts");
 const { runHeadlessAnalysis } = await import("../src/headless/run.ts");
 
 const registered = resolveAll();
@@ -86,7 +86,9 @@ function detectProfile() {
     );
   }
   const match = registered.find((profile) => profile.id === detection.match.profileId)!;
-  console.log(`Profile: ${match.id} v${match.version} (auto-detected from ${latestFileName})`);
+  console.log(
+    `Profile: ${match.id} v${match.version} (auto-detected from ${latestFileName}: ${describeDetectionMatch(detection.match)})`
+  );
   return match;
 }
 
