@@ -16,6 +16,76 @@ recovery policy model.
 Each release is tagged `vX.Y.Z` on `main`. The deployed footer shows the version
 and the exact build commit; exported artifacts carry both in their metadata.
 
+## [1.7.0] — 2026-09-02
+
+Fleet onboarding, alert triage, and a verifiable hand-back — the first three
+workstreams of the professional-viability plan. Minor per the versioning
+contract: new capability throughout, with every existing artifact still read
+the same way. The one new artifact (the delivery manifest) is additive, the
+new finding category is additive, and the recovered-data shape is unchanged.
+
+### Added
+
+- **Source detection by bot identity (Bellingham v8).** Profiles declare
+  `detection.identityValues` — record fields and the exact values that
+  identify a bot, ANDed across fields — and detection uses that before falling
+  back to URL prefixes. Measured on the 2026-08 export drops, neither half of
+  the old rule identifies a source alone: `AgentID` 1234 is carried by two
+  different bots, and three SciQuest/Jaggaer sources share one `BidURL` host.
+  Identity matches outrank URL matches; a declared identity that mismatches is
+  not rescued by the URL; files lacking the identity fields still detect by
+  URL. The picker and `npm run analyze` say what matched in one line.
+- **Twelve new source profiles**, one for every source in the current export
+  drops: `alabama-buys`, `alaska-public-notices`, `arizona-procure`,
+  `auburn-sciquest`, `hawaii-hands`, `kansas-state-bidportal`,
+  `nashville-oracle-cloud`, `osceola-vendorlink`, `sound-transit-biddingo`,
+  `trb-crp-projects`, `unm-sciquest`, `uvu-sciquest`. All v1 and UNAPPROVED
+  (`safeBackfillFields: []`), with keys measured against the real files and
+  the evidence in each delta's notes: the SciQuest sources match on
+  `ProjectCode` because their `BidURL` carries a per-run token, Nashville has
+  no `BidURL` at all, Alaska keys on `BidURL` because `ProjectCode` is sparse,
+  Hawaii shares one `BidURL` across several solicitations. Fleet invariants
+  require every profile to declare both `AgentID` and `AgentName` and to
+  detect only itself. An anonymised 40-record Nashville fixture pair joins
+  the test fixtures.
+- **`duplicate_title` finding — the pipeline's duplicate-titles alert,
+  baseline-aware (Bellingham v9).** The base policy carries
+  `alerts.duplicateTitle { field: Title, threshold: 3 }`, the upstream batch
+  check that places a run on hold; a delta can override the threshold. One
+  finding per group of candidate records sharing an identical trimmed,
+  case-sensitive title, with the reference-run count in the evidence: medium
+  when the reference already held the group (a recurring annual re-bid),
+  high when it is new to this run. Report-only; never a dedupe input. On the
+  shipped pair the reference holds 6 recurring groups and the wiped candidate
+  none.
+- **Delivery manifest** — a sixth export artifact listing every file in the
+  bundle with its SHA-256 and byte length, plus app version and build commit,
+  profile id/version/policy hash, input-file hashes, the gate verdict with
+  anything withheld, and the decision counts in force. Hashes degrade to
+  `null` with a stated reason outside a secure context. Written by
+  `npm run analyze` as well.
+- **One-file hand-back.** "Download bundle (.zip)" on the Recovery page zips
+  every artifact plus the manifest (fflate 0.8.2, loaded only by that page);
+  "Download manifest" sits beside it.
+- **Delivery round-trip tests** pin export fidelity: a reference analysed
+  against itself is reproduced field-for-field in the original key order, and
+  a recovered candidate differs from its input only in the cells the audit
+  names as backfilled.
+
+### Fixed
+
+- The build and lint gates broke on `main` after a grouped dependency bump
+  carried Tailwind 3 → 4 and oxlint 1.80 (React Compiler readiness rules).
+  Tailwind is pinned to 3.4 and dependabot now ignores Tailwind majors; the
+  four new lint rules are switched off pending a proper pass over the flagged
+  files.
+
+### Changed
+
+- `ENGINE_SEMANTICS_VERSION` 4 → 5: the new finding category changes stored
+  results, so cached analyses rebuild.
+- `AGENTS.md` and the README no longer describe Bellingham as the only source.
+
 ## [1.6.0] — 2026-08-16
 
 ### Added
@@ -292,6 +362,9 @@ Low-severity findings — is resolved, each fix with a proving test.
 Initial development version, superseded by 1.0.0. Kept for reference: this is
 the version every pre-release commit reported.
 
+[1.7.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.7.0
+[1.6.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.6.0
+[1.5.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.5.0
 [1.4.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.4.0
 [1.3.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.3.0
 [1.2.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.2.0
