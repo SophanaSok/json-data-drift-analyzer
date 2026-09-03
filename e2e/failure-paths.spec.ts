@@ -88,10 +88,12 @@ test("the Data Health tab lists the quality issues the engine found", async ({ p
   await page.getByRole("link", { name: "Data Health", exact: true }).click();
 
   await expect(page.getByRole("heading", { name: "Data Health" })).toBeVisible();
-  await expect(page.getByText("Quality issues")).toBeVisible();
-  // The Bellingham pair is a systemic-loss incident; an empty list here would
-  // mean the page is not wired to the analysis at all.
-  await expect(page.locator("li", { hasText: /\[(critical|high|warning|info)\]/ }).first()).toBeVisible();
+  await expect(page.getByText("Run health")).toBeVisible();
+  // The Bellingham pair is a systemic-loss incident, so both engines must have
+  // something to say here; an empty page would mean it is not wired to the run.
+  await expect(page.getByTestId("health-section-critical")).toBeVisible();
+  await expect(page.getByTestId("health-item-quality:group-header-metadata")).toBeVisible();
+  await expect(page.getByTestId("health-item-finding:systemic_field_regression")).toBeVisible();
 });
 
 test.describe("Trello posting against a mocked API", () => {
