@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriagePanel } from "./AlertTriagePanel";
+import { IngestionProxyPanel } from "./IngestionProxyPanel";
+import { buildIngestionProxies } from "./ingestion-proxies";
 import {
   buildHealthSections,
   countHealthItems,
@@ -13,6 +15,7 @@ import {
   type HealthSeverity
 } from "./data-health-model";
 import { useTriageVerdict } from "./use-triage-verdict";
+import { useEffectiveProfile } from "../profiles/use-effective-profile";
 import { useUiStore } from "../../stores/ui-store";
 
 /**
@@ -72,9 +75,12 @@ export function DataHealthPage() {
   const analysis = useUiStore((state) => state.analysis);
   const review = useUiStore((state) => state.review);
   const triage = useTriageVerdict();
+  const { profile } = useEffectiveProfile(review?.profileId ?? null);
   const [filter, setFilter] = useState<HealthFilter>(DEFAULT_HEALTH_FILTER);
 
   const sections = useMemo(() => (analysis ? buildHealthSections(analysis, review) : []), [analysis, review]);
+  // Proxies walk both sides of every record, so they are memoized on the run.
+  const proxies = useMemo(() => (analysis ? buildIngestionProxies(analysis, profile) : null), [analysis, profile]);
   const visible = useMemo(() => filterHealthSections(sections, filter), [sections, filter]);
 
   if (!analysis) {
@@ -99,6 +105,8 @@ export function DataHealthPage() {
       <h2 className="text-xl font-semibold">Data Health</h2>
 
       {triage ? <AlertTriagePanel verdict={triage.verdict} note={triage.note} showGroups /> : null}
+
+      {proxies ? <IngestionProxyPanel report={proxies} /> : null}
 
       <section className="rounded border bg-white p-4" data-testid="health-sections">
         <div className="flex flex-wrap items-baseline justify-between gap-2">

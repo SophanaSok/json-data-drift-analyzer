@@ -142,6 +142,21 @@ test.describe("data health sections", () => {
     await expect(page.getByTestId("health-count")).toHaveText(before ?? "");
   });
 
+  test("shows ingestion-share proxies against the reference run, labelled as proxies", async ({ page }) => {
+    const panel = page.getByTestId("ingestion-proxies");
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText("none of these numbers measures that alert");
+    await expect(panel).toContainText("no threshold is applied");
+
+    // BidStatus is wiped in the candidate, so its "(no value)" share goes to 100%.
+    const status = page.getByTestId("proxy-proxy:BidStatus:distribution");
+    await expect(status).toContainText("(no value)");
+    await expect(status).toContainText("100.0%");
+
+    // Documents survived the regression, so their JSON validity has not moved.
+    await expect(page.getByTestId("proxy-delta-proxy:BidDocuments:json")).toContainText("no change");
+  });
+
   test("says when a filter matches nothing instead of showing an empty page", async ({ page }) => {
     await page.getByTestId("health-filter-search").fill("zzzz-no-such-thing");
     await expect(page.getByTestId("health-no-matches")).toBeVisible();
