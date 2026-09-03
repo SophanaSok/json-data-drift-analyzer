@@ -15,6 +15,12 @@ updates:
         update-types:
           - minor
           - patch
+    # Tailwind 4 changes the PostCSS plugin and the config model; that
+    # migration is a deliberate PR, not a dependency bump (#84 pulled it in
+    # and broke the build).
+    ignore:
+      - dependency-name: tailwindcss
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: "/"
