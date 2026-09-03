@@ -16,6 +16,48 @@ recovery policy model.
 Each release is tagged `vX.Y.Z` on `main`. The deployed footer shows the version
 and the exact build commit; exported artifacts carry both in their metadata.
 
+## [1.8.0] — 2026-09-03
+
+Alert triage, in the pipeline's own vocabulary. v1.7.0 taught the engine to
+detect duplicate titles; this release puts that answer, and everything else
+known about a run's health, in front of the analyst. Minor per the versioning
+contract: new views and a new panel, with analysis semantics, artifact shapes,
+and the recovery policy model all unchanged.
+
+### Added
+
+- **Duplicate-title verdict on Overview.** The alert that puts a run on hold is
+  answered in one line, above the tiles. Four outcomes, each stated plainly:
+  *recurring* when every group at or above the threshold was already in the
+  reference run (the annual re-bids that make most of these alerts false
+  positives), *new* when this run introduced one, *clear* when nothing reaches
+  the threshold — naming the threshold it was checked against, so silence is
+  never mistaken for a clean bill — and *not checked* when the source's profile
+  configures no such alert. A **Copy triage note** button yields text naming
+  both runs, the policy version and hash, and the build, ending with the fact
+  that no hold was released by this tool. Releasing one stays a manual action in
+  the pipeline (AGENTS.md rule 11).
+- **Data Health, rebuilt.** The tab was a bare list; it is now the run's health
+  view. It carries the same verdict with every title group and its reference
+  count, then both engines' signals in a single severity order: the drift
+  engine's quality issues beside the QA engine's findings rolled up per category
+  with exact counts and the worst severity preserved. Filter by severity or by
+  text — the search covers the engine's own category names, so "systemic" finds
+  the row titled "Field lost in every matched record". Every row deep-links to
+  the field in Explore or to the view that can act on it; the thousands of
+  per-cell findings stay in Recovery rather than being reprinted here.
+- **Ingestion-share proxies.** The pipeline's other alert fires when an unusual
+  share of a batch reaches preclassification, and the export marks no such
+  record — so the panel says that plainly and shows proxies instead: text fields
+  going missing, categorical distributions per value, and document payloads
+  failing `JSON.parse`, each as a share of this run against the reference. A
+  categorical field counts blanks as their own "(no value)" row, so a wiped
+  field reads as 0% → 100% rather than as every real value quietly falling to
+  zero. No threshold is applied, because none has been established for these
+  sources. Every field examined is one the profile already names for another
+  purpose, so the twelve sources onboarded in 1.7.0 get their proxies with no
+  code change.
+
 ## [1.7.0] — 2026-09-02
 
 Fleet onboarding, alert triage, and a verifiable hand-back — the first three
@@ -362,6 +404,7 @@ Low-severity findings — is resolved, each fix with a proving test.
 Initial development version, superseded by 1.0.0. Kept for reference: this is
 the version every pre-release commit reported.
 
+[1.8.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.8.0
 [1.7.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.7.0
 [1.6.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.6.0
 [1.5.0]: https://github.com/SophanaSok/json-data-drift-analyzer/releases/tag/v1.5.0
