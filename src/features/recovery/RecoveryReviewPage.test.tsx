@@ -142,3 +142,72 @@ describe("RecoveryReviewPage: the gate verdict states its scope", () => {
     expect(warning).toContain("every matched record");
   });
 });
+
+describe("RecoveryReviewPage: one-file hand-back", () => {
+  function captureDownloads() {
+    const names: string[] = [];
+    const created: Blob[] = [];
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: (blob: Blob) => {
+        created.push(blob);
+        return "blob:test";
+      }
+    });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: () => undefined });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      names.push(this.download);
+    });
+    return {
+      names,
+      created,
+      restore: () => {
+        click.mockRestore();
+        Reflect.deleteProperty(URL, "createObjectURL");
+        Reflect.deleteProperty(URL, "revokeObjectURL");
+      }
+    };
+  }
+
+  it("offers the zip and manifest downloads next to the individual artifacts", () => {
+    renderPage();
+    expect(screen.getByTestId("download-zip").textContent).toContain("Download bundle (.zip)");
+    expect(screen.getByTestId("download-manifest")).toBeTruthy();
+    expect(screen.getByTestId("export-bundle-controls").textContent).toContain("SHA-256");
+  });
+
+  it("downloads one zip named after the profile and run", async () => {
+    const downloads = captureDownloads();
+    try {
+      renderPage();
+      screen.getByTestId("download-zip").click();
+      await vi.waitFor(() => expect(downloads.names).toHaveLength(1));
+      expect(downloads.names[0]).toBe(`bellingham-procureware-bundle-${FIXED_NOW.replace(/[:.]/g, "-")}.zip`);
+      expect(downloads.created[0]?.type).toBe("application/zip");
+    } finally {
+      downloads.restore();
+    }
+  });
+
+  it("downloads a manifest that counts the decisions in force", async () => {
+    mockDb.rows = [{ ...backfillDecision(), analysisKey: review.generatedAt }];
+    const downloads = captureDownloads();
+    try {
+      renderPage();
+      await screen.findByTestId("decisions-applied");
+      screen.getByTestId("download-manifest").click();
+      await vi.waitFor(() => expect(downloads.names).toHaveLength(1));
+      expect(downloads.names[0]).toContain("-manifest-");
+      // jsdom's Blob has no text(); FileReader is the portable way to read it.
+      const text = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(downloads.created[0]!);
+      });
+      expect(JSON.parse(text).decisions).toEqual({ applied: 1, recorded: 1 });
+    } finally {
+      downloads.restore();
+    }
+  });
+});

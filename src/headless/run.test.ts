@@ -45,8 +45,12 @@ describe("headless run", () => {
       "quality-report",
       "recovery-audit",
       "findings",
-      "contractor-ticket"
+      "contractor-ticket",
+      "manifest"
     ]);
+    const manifest = JSON.parse(run.bundle.artifacts.at(-1)!.content);
+    expect(manifest.decisions).toEqual({ applied: 0, recorded: 0 });
+    expect(manifest.files).toHaveLength(5);
     expect(run.review.inputHashes.every((hash) => hash.sha256 !== null)).toBe(true);
   });
 
