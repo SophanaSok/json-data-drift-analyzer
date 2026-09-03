@@ -121,6 +121,23 @@ describe("DataHealthPage", () => {
     expect(link?.getAttribute("href")).toContain("tab=explore&field=");
   });
 
+  it("shows ingestion-share proxies, labelled as proxies rather than an answer", async () => {
+    renderPage();
+    const panel = await screen.findByTestId("ingestion-proxies");
+    expect(panel.textContent).toContain("none of these numbers measures that alert");
+    expect(panel.textContent).toContain("no threshold is applied");
+    // Driven by the profile's own fields: Description (corroboration text),
+    // BidStatus and BidType (search roles), and the configured JSON fields.
+    expect(screen.getByTestId("proxy-proxy:Description:empty")).toBeTruthy();
+    expect(screen.getByTestId("proxy-proxy:BidDocuments:json")).toBeTruthy();
+    expect(screen.getByTestId("proxies-scope").textContent).toContain("2 reference records");
+  });
+
+  it("says there is nothing to compare when no profile governs the run", () => {
+    renderPage(false);
+    expect(screen.getByTestId("proxies-unconfigured")).toBeTruthy();
+  });
+
   it("says QA findings are missing when the run has no review", () => {
     renderPage(false);
     expect(screen.getByTestId("health-no-review")).toBeTruthy();
