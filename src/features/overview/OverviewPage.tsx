@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import { AlertTriagePanel } from "../data-health/AlertTriagePanel";
+import { useTriageVerdict } from "../data-health/use-triage-verdict";
 import { percent } from "../../lib/format";
 import { useUiStore } from "../../stores/ui-store";
 
@@ -18,6 +20,9 @@ function TileLink({ to, label, value, testid }: { to: string; label: string; val
 
 export function OverviewPage() {
   const analysis = useUiStore((state) => state.analysis);
+  // Hooks run before the early return: an analysis-less page still has to obey
+  // the rules of hooks.
+  const triage = useTriageVerdict();
 
   if (!analysis) {
     return <p className="p-6">Run an analysis first.</p>;
@@ -31,6 +36,9 @@ export function OverviewPage() {
   return (
     <div className="space-y-6 p-6">
       <h2 className="text-xl font-semibold">Overview</h2>
+      {/* The alert that put the run on hold is the reason the analyst opened this
+          screen, so its verdict sits above the tiles rather than a tab away. */}
+      {triage ? <AlertTriagePanel verdict={triage.verdict} note={triage.note} /> : null}
       <section className="grid gap-3 md:grid-cols-4">
         {/* The gate verdict is explained on the Recovery tab, so that is where the tile goes. */}
         <TileLink to="/results?tab=recovery" label="Quality gate" value={analysis.summary.qualityGate} testid="tile-quality-gate" />
